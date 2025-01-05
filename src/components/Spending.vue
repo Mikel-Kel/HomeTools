@@ -1,6 +1,6 @@
 <template>
   <div>
-    <Title text="Spending" :icon="spendingIcon" />
+    <Title text="Spending" icon="shopping_cart.png" />  
     <!-- Dynamic tables for each account -->
     <div v-for="(account, index) in accounts" :key="account.AccountID">
       <h2>{{ account.AccountDescription }}</h2>
@@ -36,17 +36,11 @@
   import { defineComponent, ref, onMounted } from 'vue';
   import Title from './Title.vue';
   import axios from 'axios';
-  import spendingIcon from '../assets/shopping_cart.png';
 
   export default defineComponent({
     name: 'Spending',
     components: {
       Title,
-    },
-    data() {
-      return {
-        spendingIcon: spendingIcon, // Use the imported icon here
-      };
     },
     setup() {
       interface SpendingRecord {

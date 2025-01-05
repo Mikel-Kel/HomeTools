@@ -1,6 +1,6 @@
 <template>
   <div>
-    <Title text="Contacts" :icon="contactIcon" />
+    <Title text="Contacts" icon="home.png" />  
 
     <!-- Liste des contacts -->
     <ul>
@@ -35,18 +35,12 @@ import { defineComponent, ref, onMounted } from 'vue';
 import Title from './Title.vue';
 import axios from 'axios';
 import { Contact } from '../Types';
-import contactIcon from '../assets/shopping_cart.png';
 
 export default defineComponent({
   name: 'Contact',
   components: {
       Title
     },
-  data() {
-    return {
-      contactIcon: contactIcon, // Use the imported icon here
-    };
-  },  
   setup() {
     const contacts = ref<Contact[]>([]);
     const newContact = ref({ name: '', email: '' });

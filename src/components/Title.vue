@@ -2,12 +2,12 @@
   <div class="title-box">
     <!-- Home Icon (only shown if not on the homepage) -->
     <router-link v-if="!isHomePage" to="/" class="home-icon-link">
-      <img src="../assets/home.png" alt="Home" class="home-icon" />
+      <img :src="`${assetBasePath}home.png`" alt="Home" class="home-icon" />
     </router-link>
 
     <!-- Title and Icon -->
     <div class="title-container">
-      <img v-if="icon" :src="icon" alt="Title Icon" class="title-icon" />
+      <img v-if="icon" :src="`${assetBasePath}${icon}`" alt="Title Icon" class="title-icon" />
       <h1>{{ text }}</h1>
     </div>
   </div>
@@ -16,6 +16,7 @@
 <script lang="ts">
 import { defineComponent, PropType } from 'vue';
 import { useRoute } from 'vue-router';
+import { ASSET_BASE_PATH } from '../Constants' // Import the asset base path
 
 export default defineComponent({
   name: 'Title',
@@ -28,14 +29,18 @@ export default defineComponent({
       type: String as PropType<string>,
       required: false,
     },
-  },
+    setup() {
+    return {
+      ASSET_BASE_PATH,
+    }
+  },  },
   setup() {
     const route = useRoute();
     
     // Check if the current route is the homepage
     const isHomePage = route.path === '/';
 
-    return { isHomePage };
+    return { isHomePage, assetBasePath: ASSET_BASE_PATH };
   },
 });
 </script>
