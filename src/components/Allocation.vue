@@ -1,12 +1,12 @@
 <template>
   <div>
-    <Title text="Allocation" icon="shopping_cart.png" />
+    <Title text="Allocation" icon="@/assets/shopping_cart.png" />
 
     <!-- Display Spending Record Details -->
-    <div class="record-details">
+    <div class="record-details" :style="{ backgroundColor: recordBackgroundColor }">
       <p><strong>Date:</strong> {{ parsedRecord.date }}</p>
       <p><strong>Party:</strong> {{ parsedRecord.party }}</p>
-      <p><strong>Amount:</strong> {{ formatAmount(parsedRecord.amount) }}</p>
+      <p><strong>Amount:</strong> {{ formatAmount(absoluteAmount) }}</p>
     </div>
 
     <!-- Allocation Table -->
@@ -75,7 +75,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, PropType, ref, onMounted, reactive, computed } from 'vue';
+import { defineComponent, PropType, ref, onMounted, computed } from 'vue';
 import Title from './Title.vue';
 import axios from 'axios';
 
@@ -94,6 +94,12 @@ export default defineComponent({
     parsedRecord(): any {
       return typeof this.record === 'string' ? JSON.parse(this.record) : this.record;
     },
+    recordBackgroundColor(): string {
+      return this.parsedRecord.amount < 0 ? 'lightcoral' : 'lightgreen';
+    },
+    absoluteAmount(): number {
+      return Math.abs(this.parsedRecord.amount);
+    },
   },
 
   setup(props) {
@@ -104,7 +110,7 @@ export default defineComponent({
       payeeID: number | null;
       comment: string;
       amount: number;
-      filteredSubCategories: SubCategory[]; // Added this line
+      filteredSubCategories: SubCategory[];
     }
     interface Category {
       CategoryID: number;
@@ -142,7 +148,6 @@ export default defineComponent({
     // Fetch Sub-categories (mocked or backend)
     const fetchSubCategories = async () => {
       try {
-        // Replace with your actual API call
         const response = await axios.get('http://localhost:3000/api/subcategories');
         subCategories.value = response.data.sort((a: SubCategory, b: SubCategory) => a.SeqNb - b.SeqNb);
       } catch (error) {
@@ -182,7 +187,7 @@ export default defineComponent({
         payeeID: null,
         comment: '',
         amount: 0,
-        filteredSubCategories: [], // Initialize empty array for filtered subcategories
+        filteredSubCategories: [],
       });
     };
 
@@ -236,7 +241,6 @@ export default defineComponent({
 <style scoped>
 .record-details {
   margin-bottom: 20px;
-  background: #f5f5f5;
   padding: 10px;
   border-radius: 5px;
 }
