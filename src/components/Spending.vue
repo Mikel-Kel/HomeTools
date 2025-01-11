@@ -82,14 +82,10 @@ export default defineComponent({
     };
 
     const handleRowClick = (record: SpendingRecord) => {
+      // Navigate to the Allocation page, passing the record as a prop
       router.push({
-        path: '/allocation',
-        query: {
-          date: record.date,
-          party: record.party,
-          amount: record.amount.toString(),
-          id: record.id,
-        },
+        name: 'allocation',
+        params: { record: JSON.stringify(record) }, // Pass the record as part of the route params
       });
     };
 

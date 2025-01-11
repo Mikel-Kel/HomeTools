@@ -27,10 +27,11 @@ import { createRouter, createWebHistory } from 'vue-router';
       meta: { title: 'Contact' },
     },
     {
-      path: '/allocation',
+      path: '/allocation/:record',
+      name: 'allocation',
       component: Allocation,
-      meta: { title: 'Allocation' },
-    },
+      props: true,  // This ensures that the `record` from the route params is passed as a prop to the Allocation component
+      },
   ];
 
 const router = createRouter({
