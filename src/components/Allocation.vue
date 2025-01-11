@@ -3,7 +3,7 @@
     <Title text="Allocation" icon="@/assets/shopping_cart.png" />
 
     <!-- Display Spending Record Details -->
-    <div class="record-details" :style="{ backgroundColor: recordBackgroundColor }">
+    <div class="record-details" :class="recordBackgroundClass">
       <p><strong>Date:</strong> {{ parsedRecord.date }}</p>
       <p><strong>Party:</strong> {{ parsedRecord.party }}</p>
       <p><strong>Amount:</strong> {{ formatAmount(absoluteAmount) }}</p>
@@ -94,8 +94,8 @@ export default defineComponent({
     parsedRecord(): any {
       return typeof this.record === 'string' ? JSON.parse(this.record) : this.record;
     },
-    recordBackgroundColor(): string {
-      return this.parsedRecord.amount < 0 ? 'lightcoral' : 'lightgreen';
+    recordBackgroundClass(): string {
+      return this.parsedRecord.amount < 0 ? 'negative-amount' : 'positive-amount';
     },
     absoluteAmount(): number {
       return Math.abs(this.parsedRecord.amount);
@@ -243,6 +243,14 @@ export default defineComponent({
   margin-bottom: 20px;
   padding: 10px;
   border-radius: 5px;
+}
+
+.negative-amount {
+  background-color: rgb(245, 212, 212);
+}
+
+.positive-amount {
+  background-color: rgb(197, 224, 197);
 }
 
 .allocation-table {
