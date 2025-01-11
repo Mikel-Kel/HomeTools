@@ -1,6 +1,6 @@
 <template>
   <div>
-    <Title text="Allocation" icon="@/assets/shopping_cart.png" />
+    <Title text="Allocation" icon="shopping_cart.png" />
 
     <!-- Display Spending Record Details -->
     <div class="record-details" :class="recordBackgroundClass">
@@ -9,62 +9,69 @@
       <p><strong>Amount:</strong> {{ formatAmount(absoluteAmount) }}</p>
     </div>
 
-    <!-- Allocation Table -->
-    <table class="allocation-table">
-      <thead>
-        <tr>
-          <th>Category</th>
-          <th>Sub-category</th>
-          <th>Payee</th>
-          <th>Comment</th>
-          <th>Amount</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(allocation, index) in allocations" :key="index">
-          <td>
-            <select v-model="allocation.categoryID" @change="allocation.categoryID !== null && updateSubCategories(allocation.categoryID, index)">
-              <option value="" disabled>Select Category</option>
-              <option v-for="category in categories" :key="category.CategoryID" :value="category.CategoryID">
-                {{ category.CategoryDesc }}
-              </option>
-            </select>
-          </td>
-          <td>
-            <select v-model="allocation.subCategoryID" :disabled="!allocation.categoryID">
-              <option value="" disabled>Select Sub-category</option>
-              <option
-                v-for="subCategory in allocation.filteredSubCategories"
-                :key="subCategory.SubCategoryID"
-                :value="subCategory.SubCategoryID"
-              >
-                {{ subCategory.SubCategoryDesc }}
-              </option>
-            </select>
-          </td>
-          <td>
-            <select v-model="allocation.payeeID">
-              <option value="" disabled>Select Payee</option>
-              <option v-for="payee in payees" :key="payee.PartyID" :value="payee.PartyID">
-                {{ payee.PartyName }}
-              </option>
-            </select>
-          </td>
-          <td>
-            <input type="text" v-model="allocation.comment" placeholder="Comment" />
-          </td>
-          <td>
-            <input type="number" v-model="allocation.amount" placeholder="Amount" />
-          </td>
-          <td>
-            <button @click="removeAllocation(index)">Delete</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <!-- Allocation Form -->
+    <div class="allocation-form">
+      <h3>Add Allocation</h3>
+      <div class="form-group">
+        <label for="category">Category</label>
+        <select id="category" v-model="newAllocation.categoryID" @change="newAllocation.categoryID !== null && updateSubCategories(newAllocation.categoryID, -1)">
+          <option value="" disabled>Select Category</option>
+          <option v-for="category in categories" :key="category.CategoryID" :value="category.CategoryID">
+            {{ category.CategoryDesc }}
+          </option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="subCategory">Sub-category</label>
+        <select id="subCategory" v-model="newAllocation.subCategoryID" :disabled="!newAllocation.categoryID">
+          <option value="" disabled>Select Sub-category</option>
+          <option v-for="subCategory in newAllocation.filteredSubCategories" :key="subCategory.SubCategoryID" :value="subCategory.SubCategoryID">
+            {{ subCategory.SubCategoryDesc }}
+          </option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="payee">Payee</label>
+        <select id="payee" v-model="newAllocation.payeeID">
+          <option value="" disabled>Select Payee</option>
+          <option v-for="payee in payees" :key="payee.PartyID" :value="payee.PartyID">
+            {{ payee.PartyName }}
+          </option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="comment">Comment</label>
+        <input type="text" id="comment" v-model="newAllocation.comment" placeholder="Comment" />
+      </div>
+      <div class="form-group">
+        <label for="amount">Amount</label>
+        <input type="number" id="amount" v-model="newAllocation.amount" placeholder="Amount" />
+      </div>
+      <button @click="addAllocation">Add Allocation</button>
+    </div>
 
-    <button @click="addAllocation">Add Allocation</button>
+    <!-- Allocation List -->
+    <div class="allocation-list">
+      <h3>Allocations</h3>
+      <table class="allocation-table">
+        <thead>
+          <tr>
+            <th>Sub-category</th>
+            <th>Comment</th>
+            <th>Amount</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(allocation, index) in allocations" :key="index">
+            <td>{{ getSubCategoryDesc(allocation.subCategoryID) }}</td>
+            <td>{{ allocation.comment }}</td>
+            <td>{{ formatAmount(allocation.amount) }}</td>
+            <td><button @click="removeAllocation(index)">Delete</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- Summary and Save Button -->
     <div class="allocation-summary">
@@ -100,8 +107,10 @@ export default defineComponent({
     absoluteAmount(): number {
       return Math.abs(this.parsedRecord.amount);
     },
+    totalAllocated(): number {
+      return this.allocations.reduce((sum, alloc) => sum + (alloc.amount || 0), 0);
+    },
   },
-
   setup(props) {
     // Allocation Data Structures
     interface Allocation {
@@ -134,6 +143,14 @@ export default defineComponent({
     const categories = ref<Category[]>([]);
     const subCategories = ref<SubCategory[]>([]);
     const payees = ref<Payee[]>([]);
+    const newAllocation = ref<Allocation>({
+      categoryID: null,
+      subCategoryID: null,
+      payeeID: null,
+      comment: '',
+      amount: 0,
+      filteredSubCategories: [],
+    });
 
     // Fetch Data from Backend
     const fetchCategories = async () => {
@@ -167,13 +184,21 @@ export default defineComponent({
     // Update Sub-categories Based on Selected Category
     const updateSubCategories = async (categoryID: number, index: number) => {
       if (!categoryID) {
-        allocations.value[index].filteredSubCategories = [];
+        if (index === -1) {
+          newAllocation.value.filteredSubCategories = [];
+        } else {
+          allocations.value[index].filteredSubCategories = [];
+        }
         return;
       }
 
       try {
         const response = await axios.get(`http://localhost:3000/api/subcategories?categoryID=${categoryID}`);
-        allocations.value[index].filteredSubCategories = response.data;
+        if (index === -1) {
+          newAllocation.value.filteredSubCategories = response.data;
+        } else {
+          allocations.value[index].filteredSubCategories = response.data;
+        }
       } catch (error) {
         console.error("Error fetching filtered subcategories:", error);
       }
@@ -181,24 +206,20 @@ export default defineComponent({
 
     // Add or Remove Allocations
     const addAllocation = () => {
-      allocations.value.push({
+      allocations.value.push({ ...newAllocation.value });
+      newAllocation.value = {
         categoryID: null,
         subCategoryID: null,
         payeeID: null,
         comment: '',
         amount: 0,
         filteredSubCategories: [],
-      });
+      };
     };
 
     const removeAllocation = (index: number) => {
       allocations.value.splice(index, 1);
     };
-
-    // Calculate Total Allocated
-    const totalAllocated = computed(() =>
-      allocations.value.reduce((sum, alloc) => sum + (alloc.amount || 0), 0)
-    );
 
     // Save Allocations
     const saveAllocations = async () => {
@@ -226,13 +247,17 @@ export default defineComponent({
       subCategories,
       payees,
       allocations,
+      newAllocation,
       addAllocation,
       removeAllocation,
       updateSubCategories,
-      totalAllocated,
       saveAllocations,
       formatAmount: (amount: number) =>
         amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      getSubCategoryDesc: (subCategoryID: number | null) => {
+        const subCategory = subCategories.value.find(sub => sub.SubCategoryID === subCategoryID);
+        return subCategory ? subCategory.SubCategoryDesc : '';
+      },
     };
   },
 });
@@ -246,11 +271,19 @@ export default defineComponent({
 }
 
 .negative-amount {
-  background-color: rgb(245, 212, 212);
+  background-color: rgb(243, 214, 214);
 }
 
 .positive-amount {
-  background-color: rgb(197, 224, 197);
+  background-color: rgb(211, 246, 211);
+}
+
+.allocation-form {
+  margin-bottom: 20px;
+}
+
+.form-group {
+  margin-bottom: 10px;
 }
 
 .allocation-table {
