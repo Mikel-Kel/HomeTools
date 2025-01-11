@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
   const Authentication = () => import('../components/Authentication.vue');
   const Spending = () => import('../components/Spending.vue');
   const Contact = () => import('../components/Contact.vue');
+  const Allocation = () => import('../components/Allocation.vue');
 
   const routes = [
     {
@@ -25,7 +26,11 @@ import { createRouter, createWebHistory } from 'vue-router';
       component: () => import('../components/Contact.vue'), // Contact page
       meta: { title: 'Contact' },
     },
-  
+    {
+      path: '/allocation',
+      component: Allocation,
+      meta: { title: 'Allocation' },
+    },
   ];
 
 const router = createRouter({

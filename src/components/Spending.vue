@@ -33,82 +33,93 @@
 </template>
   
 <script lang="ts">
-  import { defineComponent, ref, onMounted } from 'vue';
-  import Title from './Title.vue';
-  import axios from 'axios';
+import { defineComponent, ref, onMounted } from 'vue';
+import Title from './Title.vue';
+import { useRouter } from 'vue-router';
+import axios from 'axios';
 
-  export default defineComponent({
-    name: 'Spending',
-    components: {
-      Title,
-    },
-    setup() {
-      interface SpendingRecord {
-        date: string;
-        party: string;
-        amount: number;
-        id: string;
+export default defineComponent({
+  name: 'Spending',
+  components: {
+    Title,
+  },
+  setup() {
+    const router = useRouter(); // Access the router
+
+    interface SpendingRecord {
+      date: string;
+      party: string;
+      amount: number;
+      id: string;
+    }
+    interface Account {
+      AccountID: string;
+      AccountDescription: string;
+    }
+
+    const accounts = ref<Account[]>([]);
+    const spendingRecords = ref<SpendingRecord[][]>([]);
+
+    const fetchAccounts = async () => {
+      try {
+        const response = await axios.get('http://localhost:3000/api/accounts');
+        accounts.value = response.data;
+        spendingRecords.value = accounts.value.map(() => []);
+      } catch (error) {
+        console.error('Error fetching accounts:', error);
       }
-      interface Account {
-        AccountID: string;
-        AccountDescription: string;
+    };
+
+    const fetchSpendingRecords = async (accountID: string, index: number) => {
+      try {
+        const response = await axios.get('http://localhost:3000/api/spending', {
+          params: { accountID },
+        });
+        spendingRecords.value[index] = response.data;
+      } catch (error) {
+        console.error('Error fetching spending data:', error);
       }
+    };
 
-      const accounts = ref<Account[]>([]);
-      const spendingRecords = ref<SpendingRecord[][]>([]);
-  
-      const fetchAccounts = async () => {
-        try {
-          const response = await axios.get('http://localhost:3000/api/accounts');
-          accounts.value = response.data;
-          // Initialize spending records for each account
-          spendingRecords.value = accounts.value.map(() => []);
-        } catch (error) {
-          console.error('Error fetching accounts:', error);
-        }
-      };
+    const handleRowClick = (record: SpendingRecord) => {
+      router.push({
+        path: '/allocation',
+        query: {
+          date: record.date,
+          party: record.party,
+          amount: record.amount.toString(),
+          id: record.id,
+        },
+      });
+    };
 
-      const fetchSpendingRecords = async (accountID: string, index: number) => {
-        try {
-          const response = await axios.get(`http://localhost:3000/api/spending`, {
-            params: { accountID},
-          });
-          spendingRecords.value[index] = response.data;
-        } catch (error) {
-          console.error("Error fetching spending data:", error);
-        }
-      };
+    const getAmountClass = (amount: number) => {
+      return amount > 0 ? 'positive-amount' : 'negative-amount';
+    };
 
-      const getAmountClass = (amount: number) => {
-        if (amount > 0) {
-          return 'positive-amount';
-        } else {
-          return 'negative-amount';
-        }
-      };
+    const formatAmount = (amount: number) => {
+      return amount.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    };
 
-      const formatAmount = (amount: number) => {
-        return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      };      
-
-      const handleRowClick = (record: SpendingRecord) => {
-        // Logic for business rules based on the clicked row
-        console.log('Selected Record ID:', record.id);
-        // Add your business rule logic here
-      };
-
-      onMounted(async () => {
+    onMounted(async () => {
       await fetchAccounts();
-      // Fetch spending records for each account
       accounts.value.forEach((account, index) => {
         fetchSpendingRecords(account.AccountID, index);
       });
     });
 
- 
-      return { accounts, spendingRecords, getAmountClass, formatAmount, handleRowClick };
-    },
-  });
+    return {
+      accounts,
+      spendingRecords,
+      handleRowClick,
+      getAmountClass,
+      formatAmount,
+    };
+  },
+});
 </script>
 
 <style scoped>
