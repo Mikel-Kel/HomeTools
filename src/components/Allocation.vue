@@ -9,7 +9,6 @@
       <p><strong>Amount:</strong> {{ formatAmount(parsedRecord.amount) }}</p>
     </div>
 
-
     <!-- Allocation Table -->
     <table class="allocation-table">
       <thead>
@@ -33,10 +32,10 @@
             </select>
           </td>
           <td>
-            <select v-model="allocation.subCategoryID">
+            <select v-model="allocation.subCategoryID" :disabled="!allocation.categoryID">
               <option value="" disabled>Select Sub-category</option>
               <option
-                v-for="subCategory in filteredSubCategories[index] || []"
+                v-for="subCategory in allocation.filteredSubCategories"
                 :key="subCategory.SubCategoryID"
                 :value="subCategory.SubCategoryID"
               >
@@ -105,14 +104,13 @@ export default defineComponent({
       payeeID: number | null;
       comment: string;
       amount: number;
+      filteredSubCategories: SubCategory[]; // Added this line
     }
-
     interface Category {
       CategoryID: number;
       CategoryDesc: string;
       SeqNb: number;
     }
-
     interface SubCategory {
       SubCategoryID: number;
       SubCategoryDesc: string;
@@ -120,18 +118,15 @@ export default defineComponent({
       SeqNb: number;
       Status: string;
     }
-
     interface Payee {
       PartyID: number;
       PartyName: string;
       PartySeq: number;
     }
-
     // Reactive States
     const allocations = ref<Allocation[]>([]);
     const categories = ref<Category[]>([]);
     const subCategories = ref<SubCategory[]>([]);
-    const filteredSubCategories = reactive<{ [key: number]: SubCategory[] }>({});
     const payees = ref<Payee[]>([]);
 
     // Fetch Data from Backend
@@ -144,8 +139,10 @@ export default defineComponent({
       }
     };
 
+    // Fetch Sub-categories (mocked or backend)
     const fetchSubCategories = async () => {
       try {
+        // Replace with your actual API call
         const response = await axios.get('http://localhost:3000/api/subcategories');
         subCategories.value = response.data.sort((a: SubCategory, b: SubCategory) => a.SeqNb - b.SeqNb);
       } catch (error) {
@@ -163,10 +160,18 @@ export default defineComponent({
     };
 
     // Update Sub-categories Based on Selected Category
-    const updateSubCategories = (categoryID: number, index: number) => {
-      filteredSubCategories[index] = subCategories.value.filter(
-        (sub) => sub.CategoryID === categoryID && sub.Status === 'A'
-      );
+    const updateSubCategories = async (categoryID: number, index: number) => {
+      if (!categoryID) {
+        allocations.value[index].filteredSubCategories = [];
+        return;
+      }
+
+      try {
+        const response = await axios.get(`http://localhost:3000/api/subcategories?categoryID=${categoryID}`);
+        allocations.value[index].filteredSubCategories = response.data;
+      } catch (error) {
+        console.error("Error fetching filtered subcategories:", error);
+      }
     };
 
     // Add or Remove Allocations
@@ -177,6 +182,7 @@ export default defineComponent({
         payeeID: null,
         comment: '',
         amount: 0,
+        filteredSubCategories: [], // Initialize empty array for filtered subcategories
       });
     };
 
@@ -213,7 +219,6 @@ export default defineComponent({
     return {
       categories,
       subCategories,
-      filteredSubCategories,
       payees,
       allocations,
       addAllocation,
