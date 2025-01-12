@@ -14,7 +14,7 @@
       <h3>Add Allocation</h3>
       <div class="form-group">
         <label for="category">Category</label>
-        <select id="category" v-model="newAllocation.categoryID" @change="newAllocation.categoryID !== null && updateSubCategories(newAllocation.categoryID, -1)">
+        <select id="category" v-model="categoryID">
           <option value="" disabled>Select Category</option>
           <option v-for="category in categories" :key="category.CategoryID" :value="category.CategoryID">
             {{ category.CategoryDesc }}
@@ -23,16 +23,24 @@
       </div>
       <div class="form-group">
         <label for="subCategory">Sub-category</label>
-        <select id="subCategory" v-model="newAllocation.subCategoryID" :disabled="!newAllocation.categoryID">
+        <select
+          id="subCategory"
+          v-model="subCategoryID"
+          :disabled="!categoryID"
+        >
           <option value="" disabled>Select Sub-category</option>
-          <option v-for="subCategory in newAllocation.filteredSubCategories" :key="subCategory.SubCategoryID" :value="subCategory.SubCategoryID">
+          <option
+            v-for="subCategory in filteredSubCategories"
+            :key="subCategory.SubCategoryID"
+            :value="subCategory.SubCategoryID"
+          >
             {{ subCategory.SubCategoryDesc }}
           </option>
         </select>
       </div>
       <div class="form-group">
         <label for="payee">Payee</label>
-        <select id="payee" v-model="newAllocation.payeeID">
+        <select id="payee" v-model="payeeID">
           <option value="" disabled>Select Payee</option>
           <option v-for="payee in payees" :key="payee.PartyID" :value="payee.PartyID">
             {{ payee.PartyName }}
@@ -41,11 +49,11 @@
       </div>
       <div class="form-group">
         <label for="comment">Comment</label>
-        <input type="text" id="comment" v-model="newAllocation.comment" placeholder="Comment" />
+        <input type="text" id="comment" v-model="comment" placeholder="Comment" />
       </div>
       <div class="form-group">
         <label for="amount">Amount</label>
-        <input type="number" id="amount" v-model="newAllocation.amount" placeholder="Amount" />
+        <input type="number" id="amount" v-model="amount" placeholder="Amount" />
       </div>
       <button @click="addAllocation">Add Allocation</button>
     </div>
@@ -119,7 +127,6 @@ export default defineComponent({
       payeeID: number | null;
       comment: string;
       amount: number;
-      filteredSubCategories: SubCategory[];
     }
     interface Category {
       CategoryID: number;
@@ -143,13 +150,19 @@ export default defineComponent({
     const categories = ref<Category[]>([]);
     const subCategories = ref<SubCategory[]>([]);
     const payees = ref<Payee[]>([]);
-    const newAllocation = ref<Allocation>({
-      categoryID: null,
-      subCategoryID: null,
-      payeeID: null,
-      comment: '',
-      amount: 0,
-      filteredSubCategories: [],
+    const categoryID = ref<number | null>(null);
+    const subCategoryID = ref<number | null>(null);
+    const payeeID = ref<number | null>(null);
+    const comment = ref<string>('');
+    const amount = ref<number>(0);
+
+    // Computed Property for Filtered Sub-categories
+    const filteredSubCategories = computed(() => {
+      return categoryID.value
+        ? subCategories.value.filter(
+            (subCategory) => subCategory.CategoryID === categoryID.value
+          )
+        : [];
     });
 
     // Fetch Data from Backend
@@ -181,40 +194,27 @@ export default defineComponent({
       }
     };
 
-    // Update Sub-categories Based on Selected Category
-    const updateSubCategories = async (categoryID: number, index: number) => {
-      if (!categoryID) {
-        if (index === -1) {
-          newAllocation.value.filteredSubCategories = [];
-        } else {
-          allocations.value[index].filteredSubCategories = [];
-        }
-        return;
-      }
-
-      try {
-        const response = await axios.get(`http://localhost:3000/api/subcategories?categoryID=${categoryID}`);
-        if (index === -1) {
-          newAllocation.value.filteredSubCategories = response.data;
-        } else {
-          allocations.value[index].filteredSubCategories = response.data;
-        }
-      } catch (error) {
-        console.error("Error fetching filtered subcategories:", error);
-      }
-    };
-
     // Add or Remove Allocations
     const addAllocation = () => {
-      allocations.value.push({ ...newAllocation.value });
-      newAllocation.value = {
-        categoryID: null,
-        subCategoryID: null,
-        payeeID: null,
-        comment: '',
-        amount: 0,
-        filteredSubCategories: [],
-      };
+      console.log('Adding Allocation:', {
+        categoryID: categoryID.value,
+        subCategoryID: subCategoryID.value,
+        payeeID: payeeID.value,
+        comment: comment.value,
+        amount: amount.value,
+      });
+      allocations.value.push({
+        categoryID: categoryID.value,
+        subCategoryID: subCategoryID.value,
+        payeeID: payeeID.value,
+        comment: comment.value,
+        amount: amount.value,
+      });
+      categoryID.value = null;
+      subCategoryID.value = null;
+      payeeID.value = null;
+      comment.value = '';
+      amount.value = 0;
     };
 
     const removeAllocation = (index: number) => {
@@ -247,10 +247,14 @@ export default defineComponent({
       subCategories,
       payees,
       allocations,
-      newAllocation,
+      categoryID,
+      subCategoryID,
+      payeeID,
+      comment,
+      amount,
+      filteredSubCategories,
       addAllocation,
       removeAllocation,
-      updateSubCategories,
       saveAllocations,
       formatAmount: (amount: number) =>
         amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
@@ -271,11 +275,11 @@ export default defineComponent({
 }
 
 .negative-amount {
-  background-color: rgb(243, 214, 214);
+  background-color: rgb(245, 203, 203);
 }
 
 .positive-amount {
-  background-color: rgb(211, 246, 211);
+  background-color: rgb(201, 244, 201);
 }
 
 .allocation-form {
