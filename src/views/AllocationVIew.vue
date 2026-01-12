@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <AppTitle text="Allocation" icon="shopping_cart.png" />
+  <div class="allocation-view">
+    <AppTitle text="Allocation" icon="shopping_cart" />
 
     <!-- Record summary -->
     <section class="record">
@@ -73,15 +73,39 @@
 </template>
 
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
-import AppTitle from '@/components/AppTitle.vue'
-import { useAllocation } from '@/composables/useAllocation'
+import { computed } from "vue";
+import { useRoute } from "vue-router";
+import AppTitle from "@/components/AppTitle.vue";
+import { useAllocation } from "@/composables/useAllocation";
 
 /* =========================
-   Route data
+   Types
 ========================= */
-const route = useRoute()
-const record = JSON.parse(route.params.record as string)
+type SpendingRecord = {
+  id: number;
+  date: string;
+  party: string;
+  amount: number;
+};
+
+/* =========================
+   Route data (safe)
+========================= */
+const route = useRoute();
+
+const record = computed<SpendingRecord>(() => {
+  try {
+    return JSON.parse(route.params.record as string);
+  } catch {
+    console.error("Invalid record in route params");
+    return {
+      id: 0,
+      date: "",
+      party: "",
+      amount: 0,
+    };
+  }
+});
 
 /* =========================
    Allocation logic
@@ -105,7 +129,7 @@ const {
   addAllocation,
   removeAllocation,
   save,
-} = useAllocation(record.id, record.amount)
+} = useAllocation(String(record.value.id), record.value.amount);
 
 /* =========================
    Utils
@@ -114,11 +138,15 @@ function formatAmount(amount: number): string {
   return amount.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  });
 }
 </script>
 
 <style scoped>
+.allocation-view {
+  padding: 1rem;
+}
+
 .record {
   background: #f2f2f2;
   padding: 12px;

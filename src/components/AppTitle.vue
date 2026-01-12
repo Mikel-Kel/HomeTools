@@ -1,21 +1,23 @@
+<script setup lang="ts">
+import AppIcon from "@/components/AppIcon.vue";
+
+defineProps<{
+  text: string;
+  icon?: string;
+}>();
+</script>
+
 <template>
   <header class="app-title">
-    <img
+    <AppIcon
       v-if="icon"
-      :src="`/icons/${icon}`"
+      :name="icon"
+      :size="28"
       class="icon"
-      alt=""
     />
     <h1>{{ text }}</h1>
   </header>
 </template>
-
-<script setup lang="ts">
-defineProps<{
-  text: string
-  icon?: string
-}>()
-</script>
 
 <style scoped>
 .app-title {
@@ -25,13 +27,9 @@ defineProps<{
   margin: 16px 0;
 }
 
-.icon {
-  width: 32px;
-  height: 32px;
-}
-
 h1 {
   font-size: 1.4rem;
   margin: 0;
+  line-height: 1.2;
 }
 </style>

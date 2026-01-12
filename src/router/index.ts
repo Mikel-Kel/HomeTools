@@ -1,53 +1,57 @@
-import { createRouter, createWebHistory } from 'vue-router';
-import EventLogView from '@/devtools/EventLogView.vue';
+import { createRouter, createWebHistory } from "vue-router";
 
-  const Authentication = () => import('../components/Authentication.vue');
-  const Spending = () => import('../views/SpendingView.vue');
-  const Contact = () => import('../components/Contact.vue');
-  const Allocation = () => import('../views/AllocationVIew.vue');
-
-  const routes = [
-    {
-      path: '/',
-      component: () => import('../components/Homepage.vue'), // Home page
-      meta: { title: 'Home' },
-    },
-    {
-      path: '/authentication',
-      component: () => import('../components/Authentication.vue'), // Contact page
-      meta: { title: 'Authentication' },
-    },
-    {
-      path: '/spending',
-      component: () => import('../views/SpendingView.vue'), // Contact page
-      meta: { title: 'Spending' },
-    },
-    {
-      path: '/contact',
-      component: () => import('../components/Contact.vue'), // Contact page
-      meta: { title: 'Contact' },
-    },
-    {
-      path: '/allocation/:record',
-      name: 'allocation',
-      component: Allocation,
-      props: true,  // This ensures that the `record` from the route params is passed as a prop to the Allocation component
-      },
-      {
-        path: '/events',
-        name: 'events',
-        component: EventLogView,
-      }
-  ];
+import HomeView from "../views/HomeView.vue";
+import AuthenticationView from "../views/AuthenticationView.vue";
+import SpendingView from "../views/SpendingView.vue";
+import ContactView from "../views/ContactView.vue";
+import AllocationView from "../views/AllocationView.vue";
+import EventLogView from "../views/devtools/EventLogView.vue";
 
 const router = createRouter({
   history: createWebHistory(),
-  routes,
+  routes: [
+    {
+      path: "/",
+      name: "home",
+      component: HomeView,
+      meta: { title: "Home" },
+    },
+    {
+      path: "/authentication",
+      name: "authentication",
+      component: AuthenticationView,
+      meta: { title: "Authentication" },
+    },
+    {
+      path: "/spending",
+      name: "spending",
+      component: SpendingView,
+      meta: { title: "Spending" },
+    },
+    {
+      path: "/contact",
+      name: "contact",
+      component: ContactView,
+      meta: { title: "Contact" },
+    },
+    {
+      path: "/allocation/:record",
+      name: "allocation",
+      component: AllocationView,
+      props: true,
+      meta: { title: "Allocation" },
+    },
+    {
+      path: "/events",
+      name: "events",
+      component: EventLogView,
+      meta: { title: "Events" },
+    },
+  ],
 });
 
-// Update the document title dynamically
-router.beforeEach((to: any, from: any, next: any) => {
-  document.title = (to.meta && to.meta.title) ? to.meta.title : 'HomeTools';
+router.beforeEach((to, _from, next) => {
+  document.title = (to.meta?.title as string) ?? "HomeTools";
   next();
 });
 

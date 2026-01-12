@@ -36,7 +36,7 @@ function saveToStorage(list: AppEvent[]) {
 }
 
 /* =========================
-   State (SINGLETON)
+   State (singleton)
 ========================= */
 const events = ref<AppEvent[]>(loadFromStorage())
 
@@ -60,9 +60,44 @@ export function useEvents() {
     saveToStorage([])
   }
 
+  /* =========================
+     Export / Import
+  ========================= */
+
+  function exportJSON(): string {
+    return JSON.stringify(
+      {
+        version: 1,
+        exportedAt: now(),
+        events: events.value,
+      },
+      null,
+      2
+    )
+  }
+
+  function importJSON(json: string) {
+    try {
+      const parsed = JSON.parse(json)
+
+      if (!parsed || !Array.isArray(parsed.events)) {
+        throw new Error('Invalid events.json format')
+      }
+
+      events.value = parsed.events
+      saveToStorage(events.value)
+    } catch (err) {
+      alert('Import failed: invalid file')
+      console.error(err)
+    }
+  }
+
   return {
-    events,   // ✅ ON EXPOSE LA REF
+    events,
     emit,
     clear,
+
+    exportJSON,
+    importJSON,
   }
 }

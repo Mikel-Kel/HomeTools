@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <AppTitle text="Spending" icon="shopping_cart.png" />
+  <div class="spending-view">
+    <AppTitle text="Spending" icon="shopping_cart" />
 
     <section
       v-for="(account, index) in accounts"
@@ -41,32 +41,28 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted } from "vue";
+import { useRouter } from "vue-router";
 
-import AppTitle from '@/components/AppTitle.vue'
-import { useSpending, type SpendingRecord } from '@/composables/useSpending'
+import AppTitle from "@/components/AppTitle.vue";
+import { useSpending, type SpendingRecord } from "@/composables/useSpending";
 
 /* =========================
    State
 ========================= */
-const router = useRouter()
-const {
-  accounts,
-  getRecordsForAccount,
-  load,
-} = useSpending()
+const router = useRouter();
+const { accounts, getRecordsForAccount, load } = useSpending();
 
 /* =========================
    Navigation
 ========================= */
 function openAllocation(record: SpendingRecord) {
   router.push({
-    name: 'allocation',
+    name: "allocation",
     params: {
       record: JSON.stringify(record),
     },
-  })
+  });
 }
 
 /* =========================
@@ -76,13 +72,17 @@ function formatAmount(amount: number): string {
   return amount.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  });
 }
 
-onMounted(load)
+onMounted(load);
 </script>
 
 <style scoped>
+.spending-view {
+  padding: 1rem;
+}
+
 .account {
   margin-bottom: 32px;
 }
