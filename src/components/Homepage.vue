@@ -11,7 +11,7 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue';
-import Title from './Title.vue'; // Import the Title component
+import Title from './AppTitle.vue'; // Import the Title component
 
 export default defineComponent({
   name: 'Homepage',

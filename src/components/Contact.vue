@@ -32,7 +32,7 @@
 
 <script lang="ts">
 import { defineComponent, ref, onMounted } from 'vue';
-import Title from './Title.vue';
+import Title from './AppTitle.vue';
 import axios from 'axios';
 import { Contact } from '../Types';
 

@@ -1,9 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import EventLogView from '@/devtools/EventLogView.vue';
 
   const Authentication = () => import('../components/Authentication.vue');
-  const Spending = () => import('../components/Spending.vue');
+  const Spending = () => import('../views/SpendingView.vue');
   const Contact = () => import('../components/Contact.vue');
-  const Allocation = () => import('../components/Allocation.vue');
+  const Allocation = () => import('../views/AllocationVIew.vue');
 
   const routes = [
     {
@@ -18,7 +19,7 @@ import { createRouter, createWebHistory } from 'vue-router';
     },
     {
       path: '/spending',
-      component: () => import('../components/Spending.vue'), // Contact page
+      component: () => import('../views/SpendingView.vue'), // Contact page
       meta: { title: 'Spending' },
     },
     {
@@ -32,6 +33,11 @@ import { createRouter, createWebHistory } from 'vue-router';
       component: Allocation,
       props: true,  // This ensures that the `record` from the route params is passed as a prop to the Allocation component
       },
+      {
+        path: '/events',
+        name: 'events',
+        component: EventLogView,
+      }
   ];
 
 const router = createRouter({
