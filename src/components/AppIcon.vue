@@ -1,25 +1,30 @@
 <script setup lang="ts">
-import { computed } from "vue";
-
-const props = defineProps<{ name: string }>();
-
-const icons = import.meta.glob("../assets/icons/*.svg", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-}) as Record<string, string>;
-
-const svg = computed(() => {
-  const key = `../assets/icons/${props.name}.svg`;
-  console.log("ICON KEY:", key);
-  console.log("SVG CONTENT:", icons[key]?.slice(0, 200));
-  return icons[key] ?? "<!-- NO SVG -->";
-});
+const props = withDefaults(
+  defineProps<{
+    name: string;
+    size?: 24 | 32 | 64 | 128;
+  }>(),
+  {
+    size: 32,
+  }
+);
 </script>
 
 <template>
-  <span
-    style="border:1px solid blue; width:48px; height:48px; display:inline-block"
-    v-html="svg"
+  <img
+    :src="`/src/assets/icons/png/${size}/${name}.png`"
+    :width="size"
+    :height="size"
+    class="png-icon"
+    draggable="false"
+    alt=""
   />
 </template>
+
+<style scoped>
+.png-icon {
+  display: block;
+  user-select: none;
+  image-rendering: auto;
+}
+</style>

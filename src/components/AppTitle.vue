@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import AppIcon from "@/components/AppIcon.vue";
 
-defineProps<{
-  text: string;
-  icon?: string;
-}>();
+withDefaults(
+  defineProps<{
+    text: string;
+    icon?: string;
+    iconSize?: 24 | 32 | 64 | 128;
+  }>(),
+  {
+    iconSize: 24,
+  }
+);
 </script>
 
 <template>
@@ -12,7 +18,7 @@ defineProps<{
     <AppIcon
       v-if="icon"
       :name="icon"
-      :size="28"
+      :size="iconSize"
       class="icon"
     />
     <h1>{{ text }}</h1>
@@ -28,7 +34,7 @@ defineProps<{
 }
 
 h1 {
-  font-size: 1.4rem;
+  font-size: 2rem;
   margin: 0;
   line-height: 1.2;
 }
