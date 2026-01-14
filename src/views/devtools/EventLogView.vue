@@ -1,6 +1,15 @@
 <script setup lang="ts">
+import { ref } from 'vue'  
 import PageHeader from '@/components/PageHeader.vue'  
 import { useEvents } from '@/composables/useEvents'
+import {
+  connectToDrive,
+  saveJSON,
+  loadJSON,
+} from "@/services/googleDrive"
+
+const driveConnected = ref(false)
+const driveBusy = ref(false)
 
 const {
   events,
@@ -43,6 +52,42 @@ function upload(e: Event) {
   }
   reader.readAsText(file)
 }
+async function connectDrive() {
+  try {
+    driveBusy.value = true
+    await connectToDrive()
+    driveConnected.value = true
+    console.log("Drive connected")
+  } catch (e) {
+    console.error("Drive connection failed:", e)
+  } finally {
+    driveBusy.value = false
+  }
+}
+
+async function saveToDrive() {
+  try {
+    driveBusy.value = true
+    await saveJSON("events.json", exportJSON())
+    console.log("Saved to Drive")
+  } catch (e) {
+    console.error("Save failed:", e)
+  } finally {
+    driveBusy.value = false
+  }
+}
+
+async function loadFromDrive() {
+  try {
+    driveBusy.value = true
+    const json = await loadJSON("events.json")
+    if (json) importJSON(json)
+  } catch (e) {
+    console.error("Load failed:", e)
+  } finally {
+    driveBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -60,6 +105,25 @@ function upload(e: Event) {
         </label>
 
         <button @click="clear">Clear</button>
+
+        <button @click="connectDrive" :disabled="driveBusy">
+          {{ driveConnected ? "Drive Connected" : "Connect Drive" }}
+        </button>
+
+        <button
+          @click="saveToDrive"
+          :disabled="!driveConnected || driveBusy"
+        >
+          Save to Drive
+        </button>
+
+        <button
+          @click="loadFromDrive"
+          :disabled="!driveConnected || driveBusy"
+        >
+          Load from Drive
+        </button>
+
       </div>
     </header>
     <table v-if="events.length">
