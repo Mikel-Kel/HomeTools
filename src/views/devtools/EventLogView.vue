@@ -93,8 +93,11 @@ function upload(e: Event) {
 <style scoped>
 .event-log {
   padding: 16px;
+  background: var(--bg);
+  color: var(--text);
 }
 
+/* Header */
 header {
   display: flex;
   justify-content: space-between;
@@ -102,6 +105,29 @@ header {
   margin-bottom: 16px;
 }
 
+/* Actions */
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button,
+.import {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+
+  background: var(--primary);
+  color: white;
+}
+
+.import {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Table */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -109,44 +135,38 @@ table {
 
 th,
 td {
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   padding: 6px;
   vertical-align: top;
 }
 
 th {
-  background: #f0f0f0;
+  background: var(--primary-soft);
+  color: var(--text);
 }
 
-.actions {
-  display: flex;
-  gap: 8px;
-}
-
-.import {
-  background: #eee;
-  padding: 4px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
+/* Cells */
 .mono {
   font-family: monospace;
   font-size: 0.85em;
+  color: var(--text-muted);
 }
 
 .type {
   font-weight: bold;
   white-space: nowrap;
+  color: var(--primary);
 }
 
 pre {
   margin: 0;
   font-size: 0.85em;
+  color: var(--text);
 }
 
+/* Empty state */
 .empty {
   font-style: italic;
-  color: #666;
-}
+  color: var(--text-muted);
+}  
 </style>

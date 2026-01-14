@@ -66,8 +66,11 @@ onMounted(fetchContacts);
 <style scoped>
 .contact-view {
   padding: 1rem;
+  background: var(--bg);
+  color: var(--text);
 }
 
+/* Liste */
 ul {
   list-style: none;
   padding: 0;
@@ -75,23 +78,46 @@ ul {
 
 li {
   margin-bottom: 0.5rem;
+  padding: 6px 8px;
+  border-radius: 6px;
 }
 
+li:hover {
+  background: var(--primary-soft);
+}
+
+/* Formulaire */
 form {
   margin-top: 1rem;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
+/* Champs */
 input {
-  margin-right: 0.5rem;
-  padding: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
 }
 
+input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Bouton */
 button {
   padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  border: none;
+  background: var(--primary);
+  color: var(--on-primary);
+  cursor: pointer;
 }
 
 button:hover {
-  background-color: #0056b3;
-  color: white;
-}
+  background: var(--primary-hover);
+}  
 </style>

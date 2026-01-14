@@ -12,10 +12,11 @@ import PageHeader from "@/components/PageHeader.vue";
 <style scoped>
 .authentication-view {
   padding: 1rem;
+  background: var(--bg);
+  color: var(--text);
 }
 
 p {
   margin-top: 0.5rem;
-  color: #1e3a8a;
-}
-</style>
+  color: var(--primary);
+}</style>

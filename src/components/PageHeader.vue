@@ -24,10 +24,19 @@ defineProps<{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
+
+  margin-bottom: 0rem;
+  padding: 0.75rem 1rem;
+
+  background: var(--bg);
+  color: var(--text);
+
+  border-bottom: 1px solid var(--border);
 }
 
+/* AppTitle hérite correctement */
 .page-header :deep(.app-title) {
   margin: 0;
+  color: var(--text);
 }
 </style>

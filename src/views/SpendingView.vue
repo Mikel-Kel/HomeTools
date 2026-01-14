@@ -78,25 +78,30 @@ onMounted(load);
 </template>
 
 <style scoped>
-.spending-view {
+  .spending-view {
   padding: 1rem;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .account {
   margin-bottom: 32px;
 }
 
+/* Table */
 .spending-table {
   width: 100%;
   border-collapse: collapse;
+  background: var(--surface);
 }
 
 .spending-table th,
 .spending-table td {
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   padding: 8px;
 }
 
+/* Alignment */
 .center {
   text-align: center;
 }
@@ -105,15 +110,21 @@ onMounted(load);
   text-align: right;
 }
 
+/* Interaction */
 .clickable {
   cursor: pointer;
 }
 
+.clickable:hover {
+  background: var(--primary-soft);
+}
+
+/* Amounts */
 .positive {
-  color: green;
+  color: var(--positive);
 }
 
 .negative {
-  color: red;
+  color: var(--negative);
 }
 </style>

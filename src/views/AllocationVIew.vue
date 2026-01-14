@@ -142,29 +142,73 @@ function formatAmount(amount: number): string {
   </div>
 </template>
 
+
 <style scoped>
 .allocation-view {
   padding: 1rem;
+  background: var(--bg);
+  color: var(--text);
 }
 
+/* Résumé de l'opération */
 .record {
-  background: #f2f2f2;
+  background: var(--primary-soft);
   padding: 12px;
   margin-bottom: 16px;
+  border-radius: 8px;
 }
 
+/* Formulaire */
 .form {
   display: grid;
   gap: 8px;
   margin-bottom: 16px;
 }
 
+/* Inputs / selects */
+input,
+select {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Boutons */
+button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: var(--primary);
+  color: white;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Table */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+td {
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
 .right {
   text-align: right;
 }
 
+/* Footer */
 footer {
   margin-top: 16px;
   text-align: right;
-}
+  color: var(--text-muted);
+}  
 </style>

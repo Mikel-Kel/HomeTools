@@ -1,0 +1,31 @@
+/* =========================
+   Theme: Light (default)
+========================= */
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f2f2f2;
+  --text: #0f172a;
+
+  --primary: #1e40af;
+  --primary-soft: #eef2ff;
+
+  --border: #e5e7eb;
+  --positive: #15803d;
+  --negative: #b91c1c;
+}
+
+/* =========================
+   Theme: Dark
+========================= */
+[data-theme="dark"] {
+  --bg: #020617;
+  --bg-soft: #0f172a;
+  --text: #e5e7eb;
+
+  --primary: #93c5fd;
+  --primary-soft: #1e293b;
+
+  --border: #334155;
+  --positive: #22c55e;
+  --negative: #f87171;
+}
