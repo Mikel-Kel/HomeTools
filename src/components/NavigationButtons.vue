@@ -1,0 +1,64 @@
+<script setup lang="ts">
+import { useRouter, useRoute } from "vue-router";
+import AppIcon from "@/components/AppIcon.vue";
+
+const router = useRouter();
+const route = useRoute();
+
+function goBack() {
+  router.back();
+}
+
+function goHome() {
+  router.push("/");
+}
+
+const level = (route.meta.level as number) ?? 0;
+const showBack = level >= 2;
+</script>
+
+<template>
+  <div class="nav-buttons">
+    <button
+      v-if="showBack"
+      class="nav-btn"
+      @click="goBack"
+      title="Back"
+    >
+      <AppIcon name="back" :size="32" />
+    </button>
+
+    <button
+      class="nav-btn"
+      @click="goHome"
+      title="Home"
+    >
+      <AppIcon name="home" :size="32" />
+    </button>
+  </div>
+</template>
+
+<style scoped>
+.nav-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 6px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+
+  cursor: pointer;
+}
+
+.nav-btn:hover {
+  background: #eef2ff;
+}
+</style>

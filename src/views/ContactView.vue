@@ -1,38 +1,8 @@
-<template>
-  <div class="contact-view">
-    <AppTitle text="Contacts" icon="home" />
-
-    <!-- Liste des contacts -->
-    <ul>
-      <li v-for="contact in contacts" :key="contact.id">
-        {{ contact.name }} – {{ contact.email }}
-      </li>
-    </ul>
-
-    <!-- Formulaire d'ajout -->
-    <form @submit.prevent="addContact">
-      <input
-        v-model="newContact.name"
-        type="text"
-        placeholder="Name"
-        required
-      />
-      <input
-        v-model="newContact.email"
-        type="email"
-        placeholder="Email"
-        required
-      />
-      <button type="submit">Add Contact</button>
-    </form>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import PageHeader from "@/components/PageHeader.vue";
 import axios from "axios";
-import AppTitle from "@/components/AppTitle.vue";
 import type { Contact } from "@/Types";
+import { ref, onMounted } from "vue";
 
 const contacts = ref<Contact[]>([]);
 const newContact = ref({ name: "", email: "" });
@@ -63,6 +33,35 @@ const addContact = async () => {
 
 onMounted(fetchContacts);
 </script>
+
+<template>
+  <PageHeader title="Contact" icon="users" />
+  <div class="contact-view">
+    <!-- Liste des contacts -->
+    <ul>
+      <li v-for="contact in contacts" :key="contact.id">
+        {{ contact.name }} – {{ contact.email }}
+      </li>
+    </ul>
+
+    <!-- Formulaire d'ajout -->
+    <form @submit.prevent="addContact">
+      <input
+        v-model="newContact.name"
+        type="text"
+        placeholder="Name"
+        required
+      />
+      <input
+        v-model="newContact.email"
+        type="email"
+        placeholder="Email"
+        required
+      />
+      <button type="submit">Add Contact</button>
+    </form>
+  </div>
+</template>
 
 <style scoped>
 .contact-view {

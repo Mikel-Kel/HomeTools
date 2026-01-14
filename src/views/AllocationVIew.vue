@@ -1,7 +1,77 @@
-<template>
-  <div class="allocation-view">
-    <AppTitle text="Allocation" icon="shopping_cart" />
+<script setup lang="ts">
+import { computed } from "vue";
+import { useRoute } from "vue-router";
 
+import PageHeader from "@/components/PageHeader.vue";
+import { useAllocation } from "@/composables/useAllocation";
+
+/* =========================
+   Types
+========================= */
+type SpendingRecord = {
+  id: number;
+  date: string;
+  party: string;
+  amount: number;
+};
+
+/* =========================
+   Route data (safe)
+========================= */
+const route = useRoute();
+
+const record = computed<SpendingRecord>(() => {
+  try {
+    return JSON.parse(route.params.record as string);
+  } catch {
+    console.error("Invalid record in route params");
+    return {
+      id: 0,
+      date: "",
+      party: "",
+      amount: 0,
+    };
+  }
+});
+
+/* =========================
+   Allocation logic
+========================= */
+const {
+  allocations,
+  categories,
+  subCategories,
+  payees,
+
+  categoryID,
+  subCategoryID,
+  payeeID,
+  comment,
+  amount,
+
+  filteredSubCategories,
+  totalAllocated,
+  isBalanced,
+
+  addAllocation,
+  removeAllocation,
+  save,
+} = useAllocation(String(record.value.id), record.value.amount);
+
+/* =========================
+   Utils
+========================= */
+function formatAmount(amount: number): string {
+  return amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+</script>
+
+<template>
+  <PageHeader title="Allocation" icon="shopping_cart" />
+  <div class="allocation-view">
     <!-- Record summary -->
     <section class="record">
       <p><strong>Date:</strong> {{ record.date }}</p>
@@ -71,76 +141,6 @@
     </footer>
   </div>
 </template>
-
-<script setup lang="ts">
-import { computed } from "vue";
-import { useRoute } from "vue-router";
-import AppTitle from "@/components/AppTitle.vue";
-import { useAllocation } from "@/composables/useAllocation";
-
-/* =========================
-   Types
-========================= */
-type SpendingRecord = {
-  id: number;
-  date: string;
-  party: string;
-  amount: number;
-};
-
-/* =========================
-   Route data (safe)
-========================= */
-const route = useRoute();
-
-const record = computed<SpendingRecord>(() => {
-  try {
-    return JSON.parse(route.params.record as string);
-  } catch {
-    console.error("Invalid record in route params");
-    return {
-      id: 0,
-      date: "",
-      party: "",
-      amount: 0,
-    };
-  }
-});
-
-/* =========================
-   Allocation logic
-========================= */
-const {
-  allocations,
-  categories,
-  subCategories,
-  payees,
-
-  categoryID,
-  subCategoryID,
-  payeeID,
-  comment,
-  amount,
-
-  filteredSubCategories,
-  totalAllocated,
-  isBalanced,
-
-  addAllocation,
-  removeAllocation,
-  save,
-} = useAllocation(String(record.value.id), record.value.amount);
-
-/* =========================
-   Utils
-========================= */
-function formatAmount(amount: number): string {
-  return amount.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-</script>
 
 <style scoped>
 .allocation-view {

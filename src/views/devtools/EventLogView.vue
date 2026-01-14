@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'  
 import { useEvents } from '@/composables/useEvents'
 
 const {
@@ -46,8 +47,9 @@ function upload(e: Event) {
 
 <template>
   <div class="event-log">
+    <PageHeader title="Event Log" icon="rss" />
+
     <header>
-      <h1>Event log</h1>
 
       <div class="actions">
         <button @click="download">Export</button>

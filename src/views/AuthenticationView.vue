@@ -1,13 +1,13 @@
+<script setup lang="ts">
+import PageHeader from "@/components/PageHeader.vue";
+</script>
+
 <template>
+  <PageHeader title="Authentication" icon="lock" />
   <div class="authentication-view">
-    <AppTitle text="Authentication" icon="loop" />
     <p>Please log in or sign up.</p>
   </div>
 </template>
-
-<script setup lang="ts">
-import AppTitle from "@/components/AppTitle.vue";
-</script>
 
 <style scoped>
 .authentication-view {

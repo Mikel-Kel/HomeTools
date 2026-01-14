@@ -1,7 +1,44 @@
-<template>
-  <div class="spending-view">
-    <AppTitle text="Spending" icon="shopping_cart" />
+<script setup lang="ts">
+import { onMounted } from "vue";
+import { useRouter } from "vue-router";
 
+import PageHeader from "@/components/PageHeader.vue";
+import { useSpending, type SpendingRecord } from "@/composables/useSpending";
+
+/* =========================
+   State
+========================= */
+const router = useRouter();
+const { accounts, getRecordsForAccount, load } = useSpending();
+
+/* =========================
+   Navigation
+========================= */
+function openAllocation(record: SpendingRecord) {
+  router.push({
+    name: "allocation",
+    params: {
+      record: JSON.stringify(record),
+    },
+  });
+}
+
+/* =========================
+   Utils
+========================= */
+function formatAmount(amount: number): string {
+  return amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+onMounted(load);
+</script>
+
+<template>
+  <PageHeader title="Spending" icon="shopping_cart" />
+  <div class="spending-view">
     <section
       v-for="(account, index) in accounts"
       :key="account.id"
@@ -39,44 +76,6 @@
     </section>
   </div>
 </template>
-
-<script setup lang="ts">
-import { onMounted } from "vue";
-import { useRouter } from "vue-router";
-
-import AppTitle from "@/components/AppTitle.vue";
-import { useSpending, type SpendingRecord } from "@/composables/useSpending";
-
-/* =========================
-   State
-========================= */
-const router = useRouter();
-const { accounts, getRecordsForAccount, load } = useSpending();
-
-/* =========================
-   Navigation
-========================= */
-function openAllocation(record: SpendingRecord) {
-  router.push({
-    name: "allocation",
-    params: {
-      record: JSON.stringify(record),
-    },
-  });
-}
-
-/* =========================
-   Utils
-========================= */
-function formatAmount(amount: number): string {
-  return amount.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-onMounted(load);
-</script>
 
 <style scoped>
 .spending-view {
