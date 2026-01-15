@@ -102,15 +102,29 @@ export async function saveJSON(filename: string, content: string) {
    Read file (first match)
 ========================= */
 export async function loadJSON(filename: string): Promise<string | null> {
+  if (!accessToken) throw new Error("Not connected to Drive")
+
+  console.log("Searching file:", filename)
+
   const search = await driveFetch(
     `https://www.googleapis.com/drive/v3/files?q=name='${filename}'&fields=files(id,name)`
   ).then((r) => r.json())
 
-  if (!search.files?.length) return null
+  console.log("Search result:", search)
+
+  if (!search.files?.length) {
+    console.warn("File not found in Drive")
+    return null
+  }
 
   const fileId = search.files[0].id
+  console.log("Loading file id:", fileId)
 
-  return driveFetch(
+  const content = await driveFetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
   ).then((r) => r.text())
+
+  console.log("File content loaded")
+
+  return content
 }
