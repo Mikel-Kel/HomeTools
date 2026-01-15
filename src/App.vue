@@ -1,7 +1,23 @@
-<template>
-  <div>
-    <router-view />
-  </div>
-</template>
+<script setup lang="ts">
+import { connectGoogle, isGoogleAuthenticated } from "@/services/google/googleInit";
 
-<script setup lang="ts"></script>
+async function login() {
+  try {
+    await connectGoogle();
+  } catch (e) {
+    console.error("[Google] auth failed", e);
+  }
+}
+</script>
+
+<template>
+  <div style="padding: 1rem">
+    <button @click="login">
+      Se connecter à Google
+    </button>
+
+    <p v-if="isGoogleAuthenticated()">✅ Connecté</p>
+  </div>
+
+  <router-view />
+</template>
