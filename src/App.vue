@@ -1,22 +1,30 @@
 <script setup lang="ts">
-import { connectGoogle, isGoogleAuthenticated } from "@/services/google/googleInit";
+import {
+  connectGoogle,
+  googleAuthenticated,
+  listDriveFiles
+} from "@/services/google/googleInit";
 
 async function login() {
+  await connectGoogle();
+}
+
+async function listFiles() {
   try {
-    await connectGoogle();
+    await listDriveFiles();
   } catch (e) {
-    console.error("[Google] auth failed", e);
+    console.error(e);
   }
 }
 </script>
 
 <template>
   <div style="padding: 1rem">
-    <button @click="login">
-      Se connecter à Google
+    <button @click="login">Se connecter à Google</button>
+    <button @click="listFiles" :disabled="!googleAuthenticated"> Lister Drive
     </button>
 
-    <p v-if="isGoogleAuthenticated()">✅ Connecté</p>
+    <p v-if="googleAuthenticated">✅ Connecté</p>
   </div>
 
   <router-view />
