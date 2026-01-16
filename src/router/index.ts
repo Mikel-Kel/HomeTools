@@ -36,7 +36,7 @@ const router = createRouter({
     },
     {
       path: "/allocation/:record",
-      name: "alalocation",
+      name: "allocation",
       component: AllocationView,
       props: true,
       meta: { level: 2, title: "Allocation" },

@@ -1,19 +1,16 @@
 <script setup lang="ts">
-import { watch , computed} from "vue";
+import { watch, computed } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
-
-import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
 
 import {
   useSpending,
   type SpendingRecord,
 } from "@/composables/spending/useSpending";
 
-const accounts = computed(() => spending.accounts.value);
-
 import { useDrive } from "@/composables/useDrive";
+import { useDriveSpending } from "@/composables/spending/useDriveSpending";
 
 /* =========================
    State
@@ -22,6 +19,9 @@ const router = useRouter();
 const spending = useSpending();
 
 const { driveReady, driveState } = useDrive();
+
+// ✅ computed explicite pour le template
+const accounts = computed(() => spending.accounts.value);
 
 /* =========================
    Navigation
@@ -51,28 +51,16 @@ function formatAmount(amount: number): string {
 async function loadFromDrive() {
   if (!driveState.value) return;
 
-  const folderId = driveState.value.folders.spending;
-  console.info("[Spending] folderId =", folderId);
-
-  const files = await listFilesInFolder(folderId);
-  console.info("[Spending] files in folder =", files);
-
-  const file = files.find(
-    (f) => f.name === "spending.json"
+  const driveSpending = useDriveSpending(
+    driveState.value.folders.spending
   );
 
-  if (!file) {
-    console.warn("[Spending] spending.json not found");
-    return;
-  }
-
-  const data = await readJSON(file.id);
+  const data = await driveSpending.load();
   if (!data) return;
 
-  // ✅ API officielle du composable
   spending.replaceAll(
-    data.accounts ?? [],
-    data.recordsByAccount ?? []
+    data.accounts,
+    data.recordsByAccount
   );
 
   console.info("[Spending] spending.json loaded");
@@ -135,7 +123,7 @@ watch(
 </template>
 
 <style scoped>
-  .spending-view {
+.spending-view {
   padding: 1rem;
   background: var(--bg);
   color: var(--text);

@@ -11,7 +11,8 @@ const driveState = ref<HomeToolsDriveState | null>(null);
 
 export function useDrive() {
   async function connect() {
-    if (driveReady.value || driveBusy.value) return;
+    if (driveReady.value) return
+    if (driveBusy.value) return;
 
     driveBusy.value = true;
     driveError.value = null;
@@ -24,8 +25,9 @@ export function useDrive() {
       driveState.value = await ensureHomeToolsStructure();
 
       driveReady.value = true;
-    } catch (e: any) {
-      driveError.value = e?.message ?? String(e);
+    } catch (e: unknown) {
+      driveError.value =
+        e instanceof Error ? e.message : String(e);
       driveReady.value = false;
     } finally {
       driveBusy.value = false;
