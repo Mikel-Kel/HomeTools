@@ -1,15 +1,27 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { watch , computed} from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
-import { useSpending, type SpendingRecord } from "@/composables/useSpending";
+
+import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
+
+import {
+  useSpending,
+  type SpendingRecord,
+} from "@/composables/spending/useSpending";
+
+const accounts = computed(() => spending.accounts.value);
+
+import { useDrive } from "@/composables/useDrive";
 
 /* =========================
    State
 ========================= */
 const router = useRouter();
-const { accounts, getRecordsForAccount, load } = useSpending();
+const spending = useSpending();
+
+const { driveReady, driveState } = useDrive();
 
 /* =========================
    Navigation
@@ -33,11 +45,56 @@ function formatAmount(amount: number): string {
   });
 }
 
-onMounted(load);
+/* =========================
+   Drive loader (source unique)
+========================= */
+async function loadFromDrive() {
+  if (!driveState.value) return;
+
+  const folderId = driveState.value.folders.spending;
+  console.info("[Spending] folderId =", folderId);
+
+  const files = await listFilesInFolder(folderId);
+  console.info("[Spending] files in folder =", files);
+
+  const file = files.find(
+    (f) => f.name === "spending.json"
+  );
+
+  if (!file) {
+    console.warn("[Spending] spending.json not found");
+    return;
+  }
+
+  const data = await readJSON(file.id);
+  if (!data) return;
+
+  // ✅ API officielle du composable
+  spending.replaceAll(
+    data.accounts ?? [],
+    data.recordsByAccount ?? []
+  );
+
+  console.info("[Spending] spending.json loaded");
+}
+
+/* =========================
+   React to Drive readiness
+========================= */
+watch(
+  driveReady,
+  (ready) => {
+    if (ready) {
+      loadFromDrive();
+    }
+  },
+  { immediate: true }
+);
 </script>
 
 <template>
   <PageHeader title="Spending" icon="shopping_cart" />
+
   <div class="spending-view">
     <section
       v-for="(account, index) in accounts"
@@ -57,7 +114,7 @@ onMounted(load);
 
         <tbody>
           <tr
-            v-for="record in getRecordsForAccount(index)"
+            v-for="record in spending.getRecordsForAccount(index)"
             :key="record.id"
             class="clickable"
             @click="openAllocation(record)"

@@ -37,7 +37,12 @@ async function driveFetch(
 ========================= */
 export async function listMyDriveRoot(): Promise<DriveItem[]> {
   const res = await driveFetch(
-    `${DRIVE_BASE}/files?pageSize=20&fields=files(id,name,mimeType)`
+    `${DRIVE_BASE}/files` +
+      `?spaces=drive` +
+      `&includeItemsFromAllDrives=true` +
+      `&supportsAllDrives=true` +
+      `&pageSize=20` +
+      `&fields=files(id,name,mimeType)`
   );
 
   if (!res.ok) {
@@ -55,8 +60,13 @@ export async function listFilesInFolder(
   folderId: string
 ): Promise<DriveItem[]> {
   const q = `'${folderId}' in parents and trashed=false`;
+
   const url =
-    `${DRIVE_BASE}/files?q=${encodeURIComponent(q)}` +
+    `${DRIVE_BASE}/files` +
+    `?q=${encodeURIComponent(q)}` +
+    `&spaces=drive` +
+    `&includeItemsFromAllDrives=true` +
+    `&supportsAllDrives=true` +
     `&fields=files(id,name,mimeType,modifiedTime)`;
 
   const res = await driveFetch(url);
@@ -81,7 +91,11 @@ export async function findFolderByName(
     `name='${folderName}' and trashed=false`;
 
   const url =
-    `${DRIVE_BASE}/files?q=${encodeURIComponent(q)}` +
+    `${DRIVE_BASE}/files` +
+    `?q=${encodeURIComponent(q)}` +
+    `&spaces=drive` +
+    `&includeItemsFromAllDrives=true` +
+    `&supportsAllDrives=true` +
     `&fields=files(id,name,mimeType)`;
 
   const res = await driveFetch(url);
@@ -142,12 +156,14 @@ export async function writeJSON(
   if (!token) throw new Error("[Drive] Not authenticated");
 
   const url = existingFileId
-    ? `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart`
-    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+    ? `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart&supportsAllDrives=true`
+    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
 
   const res = await fetch(url, {
     method: existingFileId ? "PATCH" : "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
     body: form,
   });
 
@@ -159,6 +175,9 @@ export async function writeJSON(
   return result.id;
 }
 
+/* =========================
+   Debug
+========================= */
 console.log("googleDrive exports loaded", {
   listMyDriveRoot,
 });

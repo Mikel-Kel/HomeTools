@@ -4,35 +4,20 @@ import { useRoute } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
 import { useAllocation } from "@/composables/useAllocation";
+import type { SpendingRecord } from "@/composables/spending/useSpending";
 
-/* =========================
-   Types
-========================= */
-type SpendingRecord = {
-  id: number;
-  date: string;
-  party: string;
-  amount: number;
-};
 
 /* =========================
    Route data (safe)
 ========================= */
 const route = useRoute();
 
-const record = computed<SpendingRecord>(() => {
-  try {
-    return JSON.parse(route.params.record as string);
-  } catch {
-    console.error("Invalid record in route params");
-    return {
-      id: 0,
-      date: "",
-      party: "",
-      amount: 0,
-    };
-  }
-});
+const props = defineProps<{
+  record: string;
+}>();
+
+const record: SpendingRecord = JSON.parse(props.record);
+
 
 /* =========================
    Allocation logic
@@ -56,7 +41,7 @@ const {
   addAllocation,
   removeAllocation,
   save,
-} = useAllocation(String(record.value.id), record.value.amount);
+} = useAllocation(String(record.id), record.amount);
 
 /* =========================
    Utils
@@ -141,7 +126,6 @@ function formatAmount(amount: number): string {
     </footer>
   </div>
 </template>
-
 
 <style scoped>
 .allocation-view {

@@ -2,7 +2,7 @@
 import { ref } from "vue";
 
 /* ============================
-   État réactif
+   État réactif (UI)
 ============================ */
 export const googleAuthenticated = ref(false);
 
@@ -43,7 +43,6 @@ export async function initGoogleAPI(): Promise<void> {
         await window.gapi.client.init({
           apiKey: import.meta.env.VITE_GOOGLE_API_KEY,
         });
-
         console.info("[Google] gapi client initialized");
         resolve();
       } catch (err) {
@@ -88,10 +87,3 @@ export async function connectGoogle(): Promise<void> {
     tokenClient.requestAccessToken({ prompt: "consent" });
   });
 }
-
-
-async function testRoot() {
-  const data = await listMyDriveRoot();
-  console.log("[Drive root]", data.files);
-}
-
