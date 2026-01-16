@@ -1,12 +1,20 @@
-// src/services/drive/drivePaths.ts
-
+/* =========================
+   Drive root
+========================= */
 export const HOMETOOLS_ROOT_NAME = "HomeTools";
 
+/* =========================
+   Drive folders structure
+========================= */
 export const DRIVE_FOLDERS = {
+  spending: "spending",
   events: "events",
   logs: "logs",
   settings: "settings",
-  spending: "spending",
-} as const;
 
-export type DriveFolderKey = keyof typeof DRIVE_FOLDERS;
+  allocations: {
+    root: "allocations",
+    drafts: "drafts",
+    released: "released",
+  },
+} as const;

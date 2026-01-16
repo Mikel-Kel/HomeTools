@@ -1,33 +1,34 @@
 import { ref } from "vue";
 import { connectGoogle } from "@/services/google/googleInit";
-import { ensureHomeToolsStructure } from "@/services/google/driveBootstrap";
-import type { HomeToolsDriveState } from "@/services/google/driveBootstrap";
-
+import { DRIVE_STATE } from "@/config/driveState";
+import type { HomeToolsDriveState } 
+  from "@/config/driveState";
+  
+/* =========================
+   Shared state
+========================= */
 const driveReady = ref(false);
 const driveBusy = ref(false);
 const driveError = ref<string | null>(null);
-
 const driveState = ref<HomeToolsDriveState | null>(null);
 
 export function useDrive() {
   async function connect() {
-    if (driveReady.value) return
-    if (driveBusy.value) return;
+    if (driveReady.value || driveBusy.value) return;
 
     driveBusy.value = true;
     driveError.value = null;
 
     try {
-      // 1️⃣ Auth Google
+      // 1️⃣ Auth Google uniquement
       await connectGoogle();
 
-      // 2️⃣ Bootstrap HomeTools Drive
-      driveState.value = await ensureHomeToolsStructure();
+      // 2️⃣ Charger la config Drive (déjà existante)
+      driveState.value = DRIVE_STATE;
 
       driveReady.value = true;
-    } catch (e: unknown) {
-      driveError.value =
-        e instanceof Error ? e.message : String(e);
+    } catch (e: any) {
+      driveError.value = e?.message ?? String(e);
       driveReady.value = false;
     } finally {
       driveBusy.value = false;

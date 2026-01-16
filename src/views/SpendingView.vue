@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { watch, computed } from "vue";
+import { watch, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
+import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
 
 import {
   useSpending,
@@ -10,17 +11,15 @@ import {
 } from "@/composables/spending/useSpending";
 
 import { useDrive } from "@/composables/useDrive";
-import { useDriveSpending } from "@/composables/spending/useDriveSpending";
 
 /* =========================
    State
 ========================= */
 const router = useRouter();
 const spending = useSpending();
+const { driveState } = useDrive();
 
-const { driveReady, driveState } = useDrive();
-
-// ✅ computed explicite pour le template
+/* Exposer les comptes proprement au template */
 const accounts = computed(() => spending.accounts.value);
 
 /* =========================
@@ -51,32 +50,48 @@ function formatAmount(amount: number): string {
 async function loadFromDrive() {
   if (!driveState.value) return;
 
-  const driveSpending = useDriveSpending(
-    driveState.value.folders.spending
+  const folderId = driveState.value.folders.spending;
+  console.info("[Spending] loading from folder", folderId);
+
+  const files = await listFilesInFolder(folderId);
+  const file = files.find(
+    (f) => f.name === "spending.json"
   );
 
-  const data = await driveSpending.load();
+  if (!file) {
+    console.warn("[Spending] spending.json not found");
+    return;
+  }
+
+  const data = await readJSON(file.id);
   if (!data) return;
 
   spending.replaceAll(
-    data.accounts,
-    data.recordsByAccount
+    data.accounts ?? [],
+    data.recordsByAccount ?? []
   );
 
-  console.info("[Spending] spending.json loaded");
+  console.info("[Spending] spending.json injected");
 }
 
 /* =========================
-   React to Drive readiness
+   Lifecycle glue
 ========================= */
+/* Cas 1 : Drive déjà prêt au montage */
+onMounted(() => {
+  if (driveState.value) {
+    loadFromDrive();
+  }
+});
+
+/* Cas 2 : Drive devient prêt après */
 watch(
-  driveReady,
-  (ready) => {
-    if (ready) {
+  () => driveState.value,
+  (state) => {
+    if (state) {
       loadFromDrive();
     }
-  },
-  { immediate: true }
+  }
 );
 </script>
 
