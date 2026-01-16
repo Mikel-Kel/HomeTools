@@ -1,31 +1,24 @@
 <script setup lang="ts">
-import {
-  connectGoogle,
-  googleAuthenticated,
-  listDriveFiles
-} from "@/services/google/googleInit";
+import { onMounted } from "vue";
+import { initGoogleAPI, connectGoogle } from "@/services/google/googleInit";
 
 async function login() {
-  await connectGoogle();
-}
-
-async function listFiles() {
   try {
-    await listDriveFiles();
+    await connectGoogle();
   } catch (e) {
-    console.error(e);
+    console.error("[Google login failed]", e);
   }
 }
+
+onMounted(async () => {
+  try {
+    await initGoogleAPI();
+  } catch (e) {
+    console.error("[Google API init failed]", e);
+  }
+});
 </script>
 
 <template>
-  <div style="padding: 1rem">
-    <button @click="login">Se connecter à Google</button>
-    <button @click="listFiles" :disabled="!googleAuthenticated"> Lister Drive
-    </button>
-
-    <p v-if="googleAuthenticated">✅ Connecté</p>
-  </div>
-
   <router-view />
 </template>

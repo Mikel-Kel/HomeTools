@@ -4,6 +4,8 @@ import { useTheme } from "@/composables/useTheme";
 import AppTitle from "@/components/AppTitle.vue";
 import AppIcon from "@/components/AppIcon.vue";
 
+import DriveDevView from "@/views/devtools/DriveDevView.vue";
+
 const { toggle, theme} = useTheme();
  
 </script>
@@ -57,6 +59,14 @@ const { toggle, theme} = useTheme();
         </router-link>
       </li>
     </ul>
+    <!-- =========================
+         DEVTOOLS – GOOGLE DRIVE
+    ========================= -->
+    <section class="devtools">
+      <h2>🔧 Drive DevTools</h2>
+      <DriveDevView />
+    </section>
+
   </div>
 </template>
 

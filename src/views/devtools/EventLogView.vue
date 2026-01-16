@@ -1,92 +1,63 @@
 <script setup lang="ts">
-import { ref } from 'vue'  
-import PageHeader from '@/components/PageHeader.vue'  
-import { useEvents } from '@/composables/useEvents'
-import {
-  connectToDrive,
-  saveJSON,
-  loadJSON,
-} from "@/services/googleDrive"
+import { ref, computed } from "vue";
+import PageHeader from "@/components/PageHeader.vue";
+import { useEvents } from "@/composables/useEvents";
 
-const driveConnected = ref(false)
-const driveBusy = ref(false)
+import { connectGoogle } from "@/services/google/googleInit";
+import { useDriveJsonFile } from "@/composables/useDriveJsonFile";
 
+/* =========================
+   CONFIG
+========================= */
+// 👉 ID réel du dossier /HomeTools/events
+const EVENTS_FOLDER_ID = "PUT_EVENTS_FOLDER_ID_HERE";
+
+/* =========================
+   Events métier
+========================= */
 const {
   events,
-  clear,
-  exportJSON,
   importJSON,
-} = useEvents()
-
-function pretty(value: unknown): string {
-  return JSON.stringify(value, null, 2)
-}
+  exportJSON,
+  clear,
+} = useEvents();
 
 /* =========================
-   Export
+   Drive JSON binding
 ========================= */
-function download() {
-  const blob = new Blob([exportJSON()], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
+const driveFile = useDriveJsonFile(
+  EVENTS_FOLDER_ID,
+  "events.json"
+);
 
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'events.json'
-  a.click()
-
-  URL.revokeObjectURL(url)
-}
+const driveConnected = ref(false);
 
 /* =========================
-   Import
+   UI state (APLATI)
 ========================= */
-function upload(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
-  if (!file) return
+const isBusy = computed<boolean>(() => {
+  return driveFile.busy.value;
+});
 
-  const reader = new FileReader()
-  reader.onload = () => {
-    if (typeof reader.result === 'string') {
-      importJSON(reader.result)
-    }
-  }
-  reader.readAsText(file)
-}
+const canUseDrive = computed<boolean>(() => {
+  return driveConnected.value && !isBusy.value;
+});
+
+/* =========================
+   Actions
+========================= */
 async function connectDrive() {
-  try {
-    driveBusy.value = true
-    await connectToDrive()
-    driveConnected.value = true
-    console.log("Drive connected")
-  } catch (e) {
-    console.error("Drive connection failed:", e)
-  } finally {
-    driveBusy.value = false
-  }
-}
-
-async function saveToDrive() {
-  try {
-    driveBusy.value = true
-    await saveJSON("events.json", exportJSON())
-    console.log("Saved to Drive")
-  } catch (e) {
-    console.error("Save failed:", e)
-  } finally {
-    driveBusy.value = false
-  }
+  await connectGoogle();
+  driveConnected.value = true;
 }
 
 async function loadFromDrive() {
-  try {
-    driveBusy.value = true
-    const json = await loadJSON("events.json")
-    if (json) importJSON(json)
-  } catch (e) {
-    console.error("Load failed:", e)
-  } finally {
-    driveBusy.value = false
-  }
+  const json = await driveFile.load();
+  if (json) importJSON(JSON.stringify(json));
+}
+
+async function saveToDrive() {
+  await driveFile.save(JSON.parse(exportJSON()));
 }
 </script>
 
@@ -94,143 +65,34 @@ async function loadFromDrive() {
   <div class="event-log">
     <PageHeader title="Event Log" icon="rss" />
 
-    <header>
+    <div class="actions">
+      <button @click="connectDrive">
+        Connect Drive
+      </button>
 
-      <div class="actions">
-        <button @click="download">Export</button>
+      <button
+        @click="loadFromDrive"
+        :disabled="!canUseDrive"
+      >
+        Load from Drive
+      </button>
 
-        <label class="import">
-          Import
-          <input type="file" accept="application/json" @change="upload" hidden />
-        </label>
+      <button
+        @click="saveToDrive"
+        :disabled="!canUseDrive"
+      >
+        Save to Drive
+      </button>
 
-        <button @click="clear">Clear</button>
+      <button @click="clear">
+        Clear
+      </button>
+    </div>
 
-        <button @click="connectDrive" :disabled="driveBusy">
-          {{ driveConnected ? "Drive Connected" : "Connect Drive" }}
-        </button>
+    <pre>{{ events }}</pre>
 
-        <button
-          @click="saveToDrive"
-          :disabled="!driveConnected || driveBusy"
-        >
-          Save to Drive
-        </button>
-
-        <button
-          @click="loadFromDrive"
-          :disabled="!driveConnected || driveBusy"
-        >
-          Load from Drive
-        </button>
-
-      </div>
-    </header>
-    <table v-if="events.length">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Time</th>
-          <th>Type</th>
-          <th>Payload</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        <tr v-for="(event, index) in events" :key="event.id">
-          <td>{{ index + 1 }}</td>
-          <td class="mono">{{ event.timestamp }}</td>
-          <td class="type">{{ event.type }}</td>
-          <td>
-            <pre>{{ pretty(event.payload) }}</pre>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-
-    <p v-else class="empty">
-      No events yet.
+    <p v-if="driveFile.error" class="error">
+      {{ driveFile.error }}
     </p>
   </div>
 </template>
-
-<style scoped>
-.event-log {
-  padding: 16px;
-  background: var(--bg);
-  color: var(--text);
-}
-
-/* Header */
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-/* Actions */
-.actions {
-  display: flex;
-  gap: 8px;
-}
-
-button,
-.import {
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-
-  background: var(--primary);
-  color: white;
-}
-
-.import {
-  display: inline-flex;
-  align-items: center;
-}
-
-/* Table */
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  border: 1px solid var(--border);
-  padding: 6px;
-  vertical-align: top;
-}
-
-th {
-  background: var(--primary-soft);
-  color: var(--text);
-}
-
-/* Cells */
-.mono {
-  font-family: monospace;
-  font-size: 0.85em;
-  color: var(--text-muted);
-}
-
-.type {
-  font-weight: bold;
-  white-space: nowrap;
-  color: var(--primary);
-}
-
-pre {
-  margin: 0;
-  font-size: 0.85em;
-  color: var(--text);
-}
-
-/* Empty state */
-.empty {
-  font-style: italic;
-  color: var(--text-muted);
-}  
-</style>

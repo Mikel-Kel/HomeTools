@@ -6,8 +6,21 @@ import { ref } from "vue";
 ============================ */
 export const googleAuthenticated = ref(false);
 
+/* ============================
+   Token interne
+============================ */
 let accessToken: string | null = null;
 
+/* ============================
+   Expose access token (pour googleDrive)
+============================ */
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
+/* ============================
+   Typage global minimal
+============================ */
 declare global {
   interface Window {
     gapi: any;
@@ -59,7 +72,7 @@ export async function connectGoogle(): Promise<void> {
     const tokenClient =
       window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
-        scope: "https://www.googleapis.com/auth/drive.readonly",
+        scope: "https://www.googleapis.com/auth/drive",
         callback: (resp: any) => {
           if (resp.error) {
             reject(resp);
@@ -76,32 +89,9 @@ export async function connectGoogle(): Promise<void> {
   });
 }
 
-/* ============================
-   Étape 3 — Drive read-only (REST)
-============================ */
-export async function listDriveFiles(): Promise<void> {
-  if (!accessToken) {
-    throw new Error("[Drive] No access token");
-  }
 
-  const res = await fetch(
-    "https://www.googleapis.com/drive/v3/files?pageSize=10&fields=files(id,name,mimeType)",
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error(`[Drive] HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-
-  console.group("[Drive] files.list");
-  data.files?.forEach((f: any) => {
-    console.log(`${f.name} (${f.mimeType})`);
-  });
-  console.groupEnd();
+async function testRoot() {
+  const data = await listMyDriveRoot();
+  console.log("[Drive root]", data.files);
 }
+
