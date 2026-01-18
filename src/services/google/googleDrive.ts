@@ -1,4 +1,5 @@
 // src/services/google/googleDrive.ts
+import { log } from "@/utils/logger"; 
 import { getAccessToken } from "./googleInit";
 
 const DRIVE_BASE = "https://www.googleapis.com/drive/v3";
@@ -178,6 +179,6 @@ export async function writeJSON(
 /* =========================
    Debug
 ========================= */
-console.log("googleDrive exports loaded", {
+log.info("googleDrive exports loaded", {
   listMyDriveRoot,
 });

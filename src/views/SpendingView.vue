@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { log } from "@/utils/logger";
 import { watch, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
 
@@ -52,13 +53,13 @@ async function loadFromDrive() {
   if (!driveState.value) return;
 
   const folderId = driveState.value.folders.spending;
-  console.info("[Spending] loading from folder", folderId);
+  log.info("[Spending] loading from folder", folderId);
 
   const files = await listFilesInFolder(folderId);
   const file = files.find(f => f.name === "spending.json");
 
   if (!file) {
-    console.error("[Spending] spending.json not found");
+    log.error("[Spending] spending.json not found");
     return;
   }
 
@@ -66,7 +67,7 @@ async function loadFromDrive() {
 
   // 🔒 CONTRAT STRICT BACKEND
   if (!Array.isArray(payload)) {
-    console.error(
+    log.error(
       "[Spending] INVALID backend spending format (expected array)",
       payload
     );
@@ -79,7 +80,7 @@ async function loadFromDrive() {
 
   spending.replaceAll(accounts, records);
 
-  console.info(
+    log.info(
     `[Spending] ${records.length} records imported`
   );
 }
