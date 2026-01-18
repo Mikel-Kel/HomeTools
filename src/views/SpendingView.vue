@@ -11,6 +11,7 @@ import {
 } from "@/composables/spending/useSpending";
 
 import { useDrive } from "@/composables/useDrive";
+import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
 
 /* =========================
    State
@@ -19,7 +20,7 @@ const router = useRouter();
 const spending = useSpending();
 const { driveState } = useDrive();
 
-/* Exposer les comptes proprement au template */
+/* Comptes exposés proprement au template */
 const accounts = computed(() => spending.accounts.value);
 
 /* =========================
@@ -54,30 +55,39 @@ async function loadFromDrive() {
   console.info("[Spending] loading from folder", folderId);
 
   const files = await listFilesInFolder(folderId);
-  const file = files.find(
-    (f) => f.name === "spending.json"
-  );
+  const file = files.find(f => f.name === "spending.json");
 
   if (!file) {
-    console.warn("[Spending] spending.json not found");
+    console.error("[Spending] spending.json not found");
     return;
   }
 
-  const data = await readJSON(file.id);
-  if (!data) return;
+  const payload = await readJSON(file.id);
 
-  spending.replaceAll(
-    data.accounts ?? [],
-    data.recordsByAccount ?? []
+  // 🔒 CONTRAT STRICT BACKEND
+  if (!Array.isArray(payload)) {
+    console.error(
+      "[Spending] INVALID backend spending format (expected array)",
+      payload
+    );
+    return;
+  }
+
+  // ✅ ICI est le chaînon manquant auparavant
+  const { accounts, records } =
+    transformSpendingRaw(payload);
+
+  spending.replaceAll(accounts, records);
+
+  console.info(
+    `[Spending] ${records.length} records imported`
   );
-
-  console.info("[Spending] spending.json injected");
 }
 
 /* =========================
    Lifecycle glue
 ========================= */
-/* Cas 1 : Drive déjà prêt au montage */
+/* Cas 1 : Drive déjà prêt */
 onMounted(() => {
   if (driveState.value) {
     loadFromDrive();
@@ -100,7 +110,7 @@ watch(
 
   <div class="spending-view">
     <section
-      v-for="(account, index) in accounts"
+      v-for="account in accounts"
       :key="account.id"
       class="account"
     >
@@ -117,7 +127,7 @@ watch(
 
         <tbody>
           <tr
-            v-for="record in spending.getRecordsForAccount(index)"
+            v-for="record in spending.getRecordsForAccount(account.id)"
             :key="record.id"
             class="clickable"
             @click="openAllocation(record)"

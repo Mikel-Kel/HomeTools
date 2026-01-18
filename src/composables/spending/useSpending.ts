@@ -1,5 +1,4 @@
-// src/composables/useSpending.ts
-import { ref } from "vue";
+import { ref, computed } from "vue";
 
 /* =========================
    Types
@@ -11,43 +10,43 @@ export interface Account {
 
 export interface SpendingRecord {
   id: string;
+  accountId: string;
   date: string;
   party: string;
   amount: number;
+  owner: string;
 }
 
 /* =========================
    State (singleton)
 ========================= */
 const accounts = ref<Account[]>([]);
-const recordsByAccount = ref<SpendingRecord[][]>([]);
+const records = ref<SpendingRecord[]>([]);
 
 /* =========================
    Composable
 ========================= */
 export function useSpending() {
-  /* =========================
-     Replace all data (Drive source)
-  ========================= */
   function replaceAll(
     newAccounts: Account[],
-    newRecordsByAccount: SpendingRecord[][]
+    newRecords: SpendingRecord[]
   ) {
     accounts.value = newAccounts;
-    recordsByAccount.value = newRecordsByAccount;
+    records.value = newRecords;
   }
 
-  /* =========================
-     API publique
-  ========================= */
-  function getRecordsForAccount(index: number): SpendingRecord[] {
-    return recordsByAccount.value[index] ?? [];
+  function getRecordsForAccount(
+    accountId: string
+  ): SpendingRecord[] {
+    return records.value
+      .filter(r => r.accountId === accountId)
+      .sort((a, b) => b.date.localeCompare(a.date));
   }
 
   return {
     // state
     accounts,
-    recordsByAccount,
+    records,
 
     // actions
     replaceAll,
