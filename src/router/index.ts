@@ -8,7 +8,7 @@ import AllocationView from "../views/AllocationView.vue";
 import EventLogView from "../views/devtools/EventLogView.vue";
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: "/",
@@ -45,7 +45,7 @@ const router = createRouter({
       path: "/events",
       name: "events",
       component: EventLogView,
-      meta: { level: 1,title: "Events" },
+      meta: { level: 1, title: "Events" },
     },
   ],
 });
