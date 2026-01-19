@@ -1,7 +1,6 @@
 import { useTheme } from "@/composables/useTheme";
 import AppTitle from "@/components/AppTitle.vue";
 import AppIcon from "@/components/AppIcon.vue";
-import DriveDevView from "@/views/devtools/DriveDevView.vue";
 const { toggle, theme } = useTheme();
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
@@ -150,14 +149,6 @@ const __VLS_32 = __VLS_31({
 }, ...__VLS_functionalComponentArgsRest(__VLS_31));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
 var __VLS_30;
-__VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
-    ...{ class: "devtools" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.h2, __VLS_intrinsicElements.h2)({});
-/** @type {[typeof DriveDevView, ]} */ ;
-// @ts-ignore
-const __VLS_34 = __VLS_asFunctionalComponent(DriveDevView, new DriveDevView({}));
-const __VLS_35 = __VLS_34({}, ...__VLS_functionalComponentArgsRest(__VLS_34));
 /** @type {__VLS_StyleScopedClasses['homepage']} */ ;
 /** @type {__VLS_StyleScopedClasses['home-header']} */ ;
 /** @type {__VLS_StyleScopedClasses['theme-toggle']} */ ;
@@ -167,14 +158,12 @@ const __VLS_35 = __VLS_34({}, ...__VLS_functionalComponentArgsRest(__VLS_34));
 /** @type {__VLS_StyleScopedClasses['menu-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['menu-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['dev']} */ ;
-/** @type {__VLS_StyleScopedClasses['devtools']} */ ;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
             AppTitle: AppTitle,
             AppIcon: AppIcon,
-            DriveDevView: DriveDevView,
             toggle: toggle,
             theme: theme,
         };

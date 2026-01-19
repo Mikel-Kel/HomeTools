@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from "vue-router";
+import { createRouter, createWebHashHistory } from "vue-router";
 import HomeView from "../views/HomeView.vue";
 import AuthenticationView from "../views/AuthenticationView.vue";
 import SpendingView from "../views/SpendingView.vue";
@@ -6,7 +6,7 @@ import ContactView from "../views/ContactView.vue";
 import AllocationView from "../views/AllocationView.vue";
 import EventLogView from "../views/devtools/EventLogView.vue";
 const router = createRouter({
-    history: createWebHistory(),
+    history: createWebHashHistory(import.meta.env.BASE_URL),
     routes: [
         {
             path: "/",

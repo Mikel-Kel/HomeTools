@@ -1,4 +1,3 @@
-import { computed } from "vue";
 import { useRoute } from "vue-router";
 import PageHeader from "@/components/PageHeader.vue";
 import { useAllocation } from "@/composables/useAllocation";
@@ -6,24 +5,12 @@ import { useAllocation } from "@/composables/useAllocation";
    Route data (safe)
 ========================= */
 const route = useRoute();
-const record = computed(() => {
-    try {
-        return JSON.parse(route.params.record);
-    }
-    catch {
-        console.error("Invalid record in route params");
-        return {
-            id: 0,
-            date: "",
-            party: "",
-            amount: 0,
-        };
-    }
-});
+const props = defineProps();
+const record = JSON.parse(props.record);
 /* =========================
    Allocation logic
 ========================= */
-const { allocations, categories, subCategories, payees, categoryID, subCategoryID, payeeID, comment, amount, filteredSubCategories, totalAllocated, isBalanced, addAllocation, removeAllocation, save, } = useAllocation(String(record.value.id), record.value.amount);
+const { allocations, categories, subCategories, payees, categoryID, subCategoryID, payeeID, comment, amount, filteredSubCategories, totalAllocated, isBalanced, addAllocation, removeAllocation, save, } = useAllocation(String(record.id), record.amount);
 /* =========================
    Utils
 ========================= */
@@ -175,10 +162,12 @@ const __VLS_self = (await import('vue')).defineComponent({
             formatAmount: formatAmount,
         };
     },
+    __typeProps: {},
 });
 export default (await import('vue')).defineComponent({
     setup() {
         return {};
     },
+    __typeProps: {},
 });
 ; /* PartiallyEnd: #4569/main.vue */

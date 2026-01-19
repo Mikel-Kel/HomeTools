@@ -1,4 +1,5 @@
 // src/services/google/googleInit.ts
+import { log } from "@/utils/logger";
 import { ref } from "vue";
 
 /* ============================
@@ -29,6 +30,19 @@ declare global {
 }
 
 /* ============================
+   Utils
+============================ */
+function isIOS(): boolean {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+}
+
+function getRedirectUri(): string {
+  // GitHub Pages → https://mikel-kel.github.io/HomeTools/
+  // Local dev      → http://localhost:5173/
+  return window.location.origin + import.meta.env.BASE_URL;
+}
+
+/* ============================
    Étape 1 — Init gapi (technique)
 ============================ */
 export async function initGoogleAPI(): Promise<void> {
@@ -43,7 +57,7 @@ export async function initGoogleAPI(): Promise<void> {
         await window.gapi.client.init({
           apiKey: import.meta.env.VITE_GOOGLE_API_KEY,
         });
-        console.info("[Google] gapi client initialized");
+        log.info("[Google] gapi client initialized");
         resolve();
       } catch (err) {
         reject(err);
@@ -53,7 +67,7 @@ export async function initGoogleAPI(): Promise<void> {
 }
 
 /* ============================
-   Étape 2 — Auth Google (popup)
+   Étape 2 — Auth Google (popup / redirect auto)
 ============================ */
 export async function connectGoogle(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -68,17 +82,28 @@ export async function connectGoogle(): Promise<void> {
       return;
     }
 
+    const useRedirect = isIOS();
+
+    log.info(
+      `[Google] Auth mode: ${useRedirect ? "redirect (iOS)" : "popup (desktop)"}`
+    );
+
     const tokenClient =
       window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: "https://www.googleapis.com/auth/drive",
+
+        // 🔑 POINT CRITIQUE POUR iOS
+        ux_mode: useRedirect ? "redirect" : "popup",
+        redirect_uri: useRedirect ? getRedirectUri() : undefined,
+
         callback: (resp: any) => {
-          if (resp.error) {
+          if (resp?.error) {
             reject(resp);
-          } else {
+          } else if (resp?.access_token) {
             accessToken = resp.access_token;
             googleAuthenticated.value = true;
-            console.info("[Google] Auth success");
+            log.info("[Google] Auth success");
             resolve();
           }
         },

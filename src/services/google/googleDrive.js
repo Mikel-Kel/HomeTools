@@ -1,4 +1,5 @@
 // src/services/google/googleDrive.ts
+import { log } from "@/utils/logger";
 import { getAccessToken } from "./googleInit";
 const DRIVE_BASE = "https://www.googleapis.com/drive/v3";
 /* =========================
@@ -20,7 +21,12 @@ async function driveFetch(url, options = {}) {
    TEST — List My Drive root
 ========================= */
 export async function listMyDriveRoot() {
-    const res = await driveFetch(`${DRIVE_BASE}/files?pageSize=20&fields=files(id,name,mimeType)`);
+    const res = await driveFetch(`${DRIVE_BASE}/files` +
+        `?spaces=drive` +
+        `&includeItemsFromAllDrives=true` +
+        `&supportsAllDrives=true` +
+        `&pageSize=20` +
+        `&fields=files(id,name,mimeType)`);
     if (!res.ok) {
         throw new Error(`[Drive] root list HTTP ${res.status}`);
     }
@@ -32,7 +38,11 @@ export async function listMyDriveRoot() {
 ========================= */
 export async function listFilesInFolder(folderId) {
     const q = `'${folderId}' in parents and trashed=false`;
-    const url = `${DRIVE_BASE}/files?q=${encodeURIComponent(q)}` +
+    const url = `${DRIVE_BASE}/files` +
+        `?q=${encodeURIComponent(q)}` +
+        `&spaces=drive` +
+        `&includeItemsFromAllDrives=true` +
+        `&supportsAllDrives=true` +
         `&fields=files(id,name,mimeType,modifiedTime)`;
     const res = await driveFetch(url);
     if (!res.ok) {
@@ -48,7 +58,11 @@ export async function findFolderByName(parentId, folderName) {
     const q = `'${parentId}' in parents and ` +
         `mimeType='application/vnd.google-apps.folder' and ` +
         `name='${folderName}' and trashed=false`;
-    const url = `${DRIVE_BASE}/files?q=${encodeURIComponent(q)}` +
+    const url = `${DRIVE_BASE}/files` +
+        `?q=${encodeURIComponent(q)}` +
+        `&spaces=drive` +
+        `&includeItemsFromAllDrives=true` +
+        `&supportsAllDrives=true` +
         `&fields=files(id,name,mimeType)`;
     const res = await driveFetch(url);
     if (!res.ok) {
@@ -86,11 +100,13 @@ export async function writeJSON(folderId, filename, data, existingFileId) {
     if (!token)
         throw new Error("[Drive] Not authenticated");
     const url = existingFileId
-        ? `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart`
-        : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+        ? `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart&supportsAllDrives=true`
+        : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
     const res = await fetch(url, {
         method: existingFileId ? "PATCH" : "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
         body: form,
     });
     if (!res.ok) {
@@ -99,6 +115,9 @@ export async function writeJSON(folderId, filename, data, existingFileId) {
     const result = await res.json();
     return result.id;
 }
-console.log("googleDrive exports loaded", {
+/* =========================
+   Debug
+========================= */
+log.info("googleDrive exports loaded", {
     listMyDriveRoot,
 });
