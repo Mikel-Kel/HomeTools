@@ -4,6 +4,7 @@ import router from "./router";
 import "@/assets/theme.css";
 
 import { initGoogleAPI } from "@/services/google/googleInit"; // ⬅️ ajout
+import { log } from "./utils/logger";
 
 async function bootstrap() {
   const app = createApp(App);
@@ -12,17 +13,17 @@ async function bootstrap() {
      Gestion globale des erreurs
   ============================ */
   app.config.errorHandler = (err, instance, info) => {
-    console.error("[Vue errorHandler]", err);
-    console.error("[Vue errorHandler info]", info);
-    console.error("[Vue errorHandler instance]", instance);
+    log.error("[Vue errorHandler]", err);
+    log.error("[Vue errorHandler info]", info);
+    log.error("[Vue errorHandler instance]", instance);
   };
 
   window.addEventListener("error", (e) => {
-    console.error("[window error]", e.error || e.message, e);
+    log.error("[window error]", e.error || e.message, e);
   });
 
   window.addEventListener("unhandledrejection", (e) => {
-    console.error("[unhandledrejection]", e.reason, e);
+    log.error("[unhandledrejection]", e.reason, e);
   });
 
   /* ============================
@@ -32,7 +33,7 @@ async function bootstrap() {
   try {
     await initGoogleAPI();
   } catch (e) {
-    console.warn("[Google] init failed", e);
+    log.warn("[Google] init failed", e);
   }
 
   /* ============================

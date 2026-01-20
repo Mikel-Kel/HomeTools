@@ -3,6 +3,7 @@ import PageHeader from "@/components/PageHeader.vue";
 import axios from "axios";
 import type { Contact } from "@/Types";
 import { ref, onMounted } from "vue";
+import { log } from "@/utils/logger";
 
 const contacts = ref<Contact[]>([]);
 const newContact = ref({ name: "", email: "" });
@@ -14,7 +15,7 @@ const fetchContacts = async () => {
     );
     contacts.value = data;
   } catch (error) {
-    console.error("Error fetching contacts:", error);
+    log.error("Error fetching contacts:", error);
   }
 };
 
@@ -27,7 +28,7 @@ const addContact = async () => {
     contacts.value.push(data);
     newContact.value = { name: "", email: "" };
   } catch (error) {
-    console.error("Error adding contact:", error);
+    log.error("Error adding contact:", error);
   }
 };
 

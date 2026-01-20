@@ -1,11 +1,28 @@
+import { computed } from "vue";
 import { useTheme } from "@/composables/useTheme";
+import { googleAuthenticated } from "@/services/google/googleInit";
 import AppTitle from "@/components/AppTitle.vue";
 import AppIcon from "@/components/AppIcon.vue";
+/* =========================
+   Theme
+========================= */
 const { toggle, theme } = useTheme();
+/* =========================
+   Drive status
+========================= */
+const driveStatus = computed(() => googleAuthenticated.value ? "connected" : "disconnected");
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;
+/** @type {__VLS_StyleScopedClasses['drive-status']} */ ;
+/** @type {__VLS_StyleScopedClasses['drive-status']} */ ;
+/** @type {__VLS_StyleScopedClasses['dot']} */ ;
+/** @type {__VLS_StyleScopedClasses['drive-status']} */ ;
+/** @type {__VLS_StyleScopedClasses['dot']} */ ;
+/** @type {__VLS_StyleScopedClasses['drive-status']} */ ;
+/** @type {__VLS_StyleScopedClasses['disconnected']} */ ;
+/** @type {__VLS_StyleScopedClasses['app-title']} */ ;
 /** @type {__VLS_StyleScopedClasses['theme-toggle']} */ ;
 /** @type {__VLS_StyleScopedClasses['menu']} */ ;
 /** @type {__VLS_StyleScopedClasses['menu-item']} */ ;
@@ -19,6 +36,9 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "home-header" },
 });
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "title-block" },
+});
 /** @type {[typeof AppTitle, ]} */ ;
 // @ts-ignore
 const __VLS_0 = __VLS_asFunctionalComponent(AppTitle, new AppTitle({
@@ -31,6 +51,19 @@ const __VLS_1 = __VLS_0({
     icon: "home",
     iconSize: (64),
 }, ...__VLS_functionalComponentArgsRest(__VLS_0));
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "drive-status" },
+    ...{ class: (__VLS_ctx.driveStatus) },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+    ...{ class: "dot" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+    ...{ class: "status-text" },
+});
+(__VLS_ctx.driveStatus === "connected"
+    ? "Home tools ready"
+    : "Home tools not available, please login");
 __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
     ...{ onClick: (__VLS_ctx.toggle) },
     ...{ class: "theme-toggle" },
@@ -151,6 +184,10 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.
 var __VLS_30;
 /** @type {__VLS_StyleScopedClasses['homepage']} */ ;
 /** @type {__VLS_StyleScopedClasses['home-header']} */ ;
+/** @type {__VLS_StyleScopedClasses['title-block']} */ ;
+/** @type {__VLS_StyleScopedClasses['drive-status']} */ ;
+/** @type {__VLS_StyleScopedClasses['dot']} */ ;
+/** @type {__VLS_StyleScopedClasses['status-text']} */ ;
 /** @type {__VLS_StyleScopedClasses['theme-toggle']} */ ;
 /** @type {__VLS_StyleScopedClasses['menu']} */ ;
 /** @type {__VLS_StyleScopedClasses['menu-item']} */ ;
@@ -166,6 +203,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             AppIcon: AppIcon,
             toggle: toggle,
             theme: theme,
+            driveStatus: driveStatus,
         };
     },
 });
