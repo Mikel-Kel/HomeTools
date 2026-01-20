@@ -1,5 +1,6 @@
 // src/composables/useEvents.ts
 import { ref } from 'vue';
+import { log } from '@/utils/logger';
 /* =========================
    Storage config
 ========================= */
@@ -22,7 +23,7 @@ function loadFromStorage() {
         return Array.isArray(parsed) ? parsed : [];
     }
     catch {
-        console.warn('[events] corrupted localStorage, reset');
+        log.warn('[events] corrupted localStorage, reset');
         return [];
     }
 }
@@ -71,7 +72,7 @@ export function useEvents() {
         }
         catch (err) {
             alert('Import failed: invalid file');
-            console.error(err);
+            log.error(err);
         }
     }
     return {
