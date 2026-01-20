@@ -1,47 +1,86 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { useRoute } from "vue-router";
+import { computed, onMounted, watch } from "vue";
 
 import PageHeader from "@/components/PageHeader.vue";
 import { useAllocation } from "@/composables/useAllocation";
+import { useCategories } from "@/composables/useCategories";
+
 import type { SpendingRecord } from "@/composables/spending/useSpending";
 
-
 /* =========================
-   Route data (safe)
+   Props (route-safe)
 ========================= */
-const route = useRoute();
-
 const props = defineProps<{
   record: string;
 }>();
 
 const record: SpendingRecord = JSON.parse(props.record);
 
+/* =========================
+   Categories (settings)
+========================= */
+const categoriesStore = useCategories();
+
+onMounted(async () => {
+  await categoriesStore.load();
+});
 
 /* =========================
    Allocation logic
 ========================= */
 const {
   allocations,
-  categories,
-  subCategories,
-  payees,
-
   categoryID,
   subCategoryID,
-  payeeID,
   comment,
   amount,
 
-  filteredSubCategories,
   totalAllocated,
   isBalanced,
 
   addAllocation,
   removeAllocation,
-  save,
+  saveDraft,
+  release,
 } = useAllocation(String(record.id), record.amount);
+
+/* =========================
+   Category nature (I / E)
+========================= */
+const expectedNature = computed<"I" | "E">(() =>
+  record.amount >= 0 ? "I" : "E"
+);
+
+/* =========================
+   Remaining amount
+========================= */
+const remainingAmount = computed(() =>
+  record.amount - totalAllocated.value
+);
+
+/* =========================
+   Auto-fill amount
+========================= */
+watch(categoryID, (newVal) => {
+  if (newVal !== null) {
+    amount.value = Math.abs(remainingAmount.value);
+  }
+});
+
+/* =========================
+   Computed bindings
+========================= */
+const categories = computed(() => {
+  const cats = categoriesStore.categories.value;
+  if (!Array.isArray(cats)) return [];
+  return cats.filter(c => c.nature === expectedNature.value);
+});
+
+const subCategories = computed(() =>
+  typeof categoryID.value === "number"
+    ? categoriesStore.getSubcategories(categoryID.value)
+    : []
+);
 
 /* =========================
    Utils
@@ -56,8 +95,11 @@ function formatAmount(amount: number): string {
 
 <template>
   <PageHeader title="Allocation" icon="shopping_cart" />
+
   <div class="allocation-view">
-    <!-- Record summary -->
+    <!-- =========================
+         Record summary
+    ========================== -->
     <section class="record">
       <p><strong>Date:</strong> {{ record.date }}</p>
       <p><strong>Party:</strong> {{ record.party }}</p>
@@ -67,19 +109,30 @@ function formatAmount(amount: number): string {
       </p>
     </section>
 
-    <!-- Form -->
+    <!-- =========================
+         Form
+    ========================== -->
     <section class="form">
-      <select v-model="categoryID">
-        <option disabled value="">Category</option>
-        <option v-for="c in categories" :key="c.id" :value="c.id">
+      <!-- Category -->
+      <select v-model.number="categoryID">
+        <option :value="null" disabled>Category</option>
+        <option
+          v-for="c in categories"
+          :key="c.id"
+          :value="c.id"
+        >
           {{ c.label }}
         </option>
       </select>
 
-      <select v-model="subCategoryID" :disabled="!categoryID">
-        <option disabled value="">Sub-category</option>
+      <!-- Sub-category -->
+      <select
+        v-model.number="subCategoryID"
+        :disabled="categoryID === null"
+      >
+        <option :value="null" disabled>Sub-category</option>
         <option
-          v-for="sc in filteredSubCategories"
+          v-for="sc in subCategories"
           :key="sc.id"
           :value="sc.id"
         >
@@ -87,15 +140,10 @@ function formatAmount(amount: number): string {
         </option>
       </select>
 
-      <select v-model="payeeID">
-        <option disabled value="">Payee</option>
-        <option v-for="p in payees" :key="p.id" :value="p.id">
-          {{ p.label }}
-        </option>
-      </select>
-
+      <!-- Comment -->
       <input v-model="comment" placeholder="Comment" />
 
+      <!-- Amount (auto-filled) -->
       <input
         v-model.number="amount"
         type="number"
@@ -103,10 +151,14 @@ function formatAmount(amount: number): string {
         placeholder="Amount"
       />
 
-      <button @click="addAllocation">Add</button>
+      <button @click="addAllocation">
+        Add
+      </button>
     </section>
 
-    <!-- List -->
+    <!-- =========================
+         Allocations list
+    ========================== -->
     <table>
       <tr v-for="(a, i) in allocations" :key="i">
         <td>{{ a.comment }}</td>
@@ -117,82 +169,27 @@ function formatAmount(amount: number): string {
       </tr>
     </table>
 
-    <!-- Footer -->
+    <!-- =========================
+         Footer
+    ========================== -->
     <footer>
-      <p>Total: {{ formatAmount(totalAllocated) }}</p>
-      <button :disabled="!isBalanced" @click="save">
-        Save
+      <p>
+        Total: {{ formatAmount(totalAllocated) }}
+        <span v-if="!isBalanced">
+          (remaining {{ formatAmount(Math.abs(remainingAmount)) }})
+        </span>
+      </p>
+
+      <button @click="saveDraft">
+        Save draft
+      </button>
+
+      <button
+        :disabled="!isBalanced"
+        @click="release"
+      >
+        Release
       </button>
     </footer>
   </div>
 </template>
-
-<style scoped>
-.allocation-view {
-  padding: 1rem;
-  background: var(--bg);
-  color: var(--text);
-}
-
-/* Résumé de l'opération */
-.record {
-  background: var(--primary-soft);
-  padding: 12px;
-  margin-bottom: 16px;
-  border-radius: 8px;
-}
-
-/* Formulaire */
-.form {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-/* Inputs / selects */
-input,
-select {
-  padding: 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-}
-
-/* Boutons */
-button {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  background: var(--primary);
-  color: white;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Table */
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-td {
-  padding: 6px;
-  border-bottom: 1px solid var(--border);
-}
-
-.right {
-  text-align: right;
-}
-
-/* Footer */
-footer {
-  margin-top: 16px;
-  text-align: right;
-  color: var(--text-muted);
-}  
-</style>
