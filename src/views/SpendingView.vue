@@ -87,6 +87,13 @@ function totalFor(accountId: string) {
   return recordsFor(accountId).reduce((s, r) => s + r.amount, 0);
 }
 
+const remainingAmount = computed(() =>
+  accounts.value.reduce((sum, account) => sum + totalFor(account.id), 0)
+);
+
+const absRemainingAmount = computed(() =>
+  Math.abs(remainingAmount.value)
+);
 /* =========================
    Formatting
 ========================= */

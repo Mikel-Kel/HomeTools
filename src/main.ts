@@ -5,11 +5,14 @@ import "@/assets/theme.css";
 
 import { initGoogleAPI } from "@/services/google/googleInit"; // ⬅️ ajout
 import { log } from "./utils/logger";
+import PageHeader from "@/components/PageHeader.vue";
 
 async function bootstrap() {
-  const app = createApp(App);
+const app = createApp(App);
 
-  /* ============================
+app.component("PageHeader", PageHeader);
+
+  /* ============================ 
      Gestion globale des erreurs
   ============================ */
   app.config.errorHandler = (err, instance, info) => {

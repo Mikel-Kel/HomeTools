@@ -1,4 +1,3 @@
-// src/composables/useAllocation.ts
 import { ref, computed } from "vue";
 import { useDrive } from "@/composables/useDrive";
 import { writeJSON } from "@/services/google/googleDrive";
@@ -7,6 +6,7 @@ import { writeJSON } from "@/services/google/googleDrive";
    Types
 ========================= */
 export interface Allocation {
+  id: string;
   categoryID: number | null;
   subCategoryID: number | null;
   comment: string;
@@ -18,7 +18,7 @@ export interface Allocation {
 ========================= */
 export function useAllocation(
   spendingId: string,
-  expectedAmount: number
+  spendingAmount: number
 ) {
   /* =========================
      State
@@ -27,8 +27,10 @@ export function useAllocation(
 
   const categoryID = ref<number | null>(null);
   const subCategoryID = ref<number | null>(null);
-  const comment = ref("");
-  const amount = ref(0);
+  const comment = ref<string>("");
+
+  // champ saisi par l’utilisateur
+  const amount = ref<number>(Math.abs(spendingAmount));
 
   /* =========================
      Computed
@@ -37,23 +39,36 @@ export function useAllocation(
     allocations.value.reduce((sum, a) => sum + a.amount, 0)
   );
 
+  const remainingAmount = computed(() =>
+    spendingAmount - totalAllocated.value
+  );
+
   const isBalanced = computed(() =>
-    totalAllocated.value === expectedAmount
+    remainingAmount.value === 0
   );
 
   /* =========================
      Actions
   ========================= */
   function addAllocation() {
+    if (!categoryID.value || !subCategoryID.value) return;
+    if (!Number.isFinite(amount.value) || amount.value === 0) return;
+
     const signedAmount =
-      expectedAmount < 0
+      spendingAmount < 0
         ? -Math.abs(amount.value)
         : Math.abs(amount.value);
 
+    const finalComment =
+      comment.value.trim().length > 0
+        ? comment.value.trim()
+        : "No comment typed by user";
+
     allocations.value.push({
+      id: crypto.randomUUID(),
       categoryID: categoryID.value,
       subCategoryID: subCategoryID.value,
-      comment: comment.value,
+      comment: finalComment,
       amount: signedAmount,
     });
 
@@ -62,8 +77,26 @@ export function useAllocation(
 
   function removeAllocation(index: number) {
     allocations.value.splice(index, 1);
+    presetAmount();
   }
 
+  /* =========================
+     Helpers
+  ========================= */
+  function presetAmount() {
+    amount.value = Math.abs(remainingAmount.value);
+  }
+
+  function resetForm() {
+    categoryID.value = null;
+    subCategoryID.value = null;
+    comment.value = "";
+    presetAmount();
+  }
+
+  /* =========================
+     Drive persistence
+  ========================= */
   async function saveDraft() {
     const { driveState } = useDrive();
     if (!driveState.value) return;
@@ -88,26 +121,16 @@ export function useAllocation(
     );
   }
 
-  /* =========================
-     Helpers
-  ========================= */
   function buildPayload(status: "draft" | "released") {
     return {
       version: 1,
       status,
       spendingId,
-      spendingAmount: expectedAmount,
+      spendingAmount,
       currency: "CHF",
       updatedAt: new Date().toISOString(),
       allocations: allocations.value,
     };
-  }
-
-  function resetForm() {
-    categoryID.value = null;
-    subCategoryID.value = null;
-    comment.value = "";
-    amount.value = 0;
   }
 
   /* =========================
@@ -115,13 +138,13 @@ export function useAllocation(
   ========================= */
   return {
     allocations,
-
     categoryID,
     subCategoryID,
     comment,
     amount,
 
     totalAllocated,
+    remainingAmount,
     isBalanced,
 
     addAllocation,
