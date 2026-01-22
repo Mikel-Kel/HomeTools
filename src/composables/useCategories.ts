@@ -17,11 +17,16 @@ export interface Category {
   subcategories: SubCategory[];
 }
 
+interface CategoriesFile {
+  version: number;
+  updatedAt?: string;
+  categories: Category[];
+}
+
 /* =========================
    State (singleton)
 ========================= */
 const categories = ref<Category[]>([]);
-const loaded = ref(false);
 
 /* =========================
    Composable
@@ -33,7 +38,6 @@ export function useCategories() {
      Load from Drive
   ========================= */
   async function load(): Promise<void> {
-    if (loaded.value) return;
     if (!driveState.value) return;
 
     const folderId = driveState.value.folders.settings;
@@ -44,7 +48,7 @@ export function useCategories() {
       throw new Error("categories.json not found in settings");
     }
 
-    const raw = await readJSON(file.id);
+    const raw = await readJSON<CategoriesFile>(file.id);
 
     if (
       !raw ||
@@ -54,8 +58,8 @@ export function useCategories() {
       throw new Error("Invalid categories.json format");
     }
 
+    // remplacement explicite
     categories.value = raw.categories;
-    loaded.value = true;
   }
 
   /* =========================
@@ -66,9 +70,7 @@ export function useCategories() {
   }
 
   function getSubcategories(categoryId: number): SubCategory[] {
-    return (
-      getCategory(categoryId)?.subcategories ?? []
-    );
+    return getCategory(categoryId)?.subcategories ?? [];
   }
 
   const allSubcategories = computed(() =>
@@ -76,14 +78,8 @@ export function useCategories() {
   );
 
   return {
-    // state
     categories,
-    loaded,
-
-    // actions
     load,
-
-    // helpers
     getCategory,
     getSubcategories,
     allSubcategories,

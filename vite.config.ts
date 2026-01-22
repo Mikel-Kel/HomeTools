@@ -12,7 +12,7 @@ export default defineConfig({
   },
   server: {
     allowedHosts: [
-      "mrna-environmental-branches-hunter.trycloudflare.com",
+      "horn-arch-chapel-archived.trycloudflare.com",
     ],
   },
 });
