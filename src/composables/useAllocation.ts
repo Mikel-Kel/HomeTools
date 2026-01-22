@@ -1,6 +1,10 @@
 import { ref, computed } from "vue";
 import { useDrive } from "@/composables/useDrive";
-import { writeJSON } from "@/services/google/googleDrive";
+import {
+  writeJSON,
+  listFilesInFolder,
+  type DriveItem,
+} from "@/services/google/googleDrive";
 
 /* =========================
    Types
@@ -20,6 +24,8 @@ export function useAllocation(
   spendingId: string,
   spendingAmount: number
 ) {
+  const { driveState } = useDrive();
+
   /* =========================
      State
   ========================= */
@@ -29,7 +35,7 @@ export function useAllocation(
   const subCategoryID = ref<number | null>(null);
   const comment = ref<string>("");
 
-  // champ saisi par l’utilisateur
+  // montant saisi (toujours positif côté UI)
   const amount = ref<number>(Math.abs(spendingAmount));
 
   /* =========================
@@ -44,7 +50,7 @@ export function useAllocation(
   );
 
   const isBalanced = computed(() =>
-    remainingAmount.value === 0
+    Number(remainingAmount.value.toFixed(2)) === 0
   );
 
   /* =========================
@@ -59,17 +65,13 @@ export function useAllocation(
         ? -Math.abs(amount.value)
         : Math.abs(amount.value);
 
-    const finalComment =
-      comment.value.trim().length > 0
-        ? comment.value.trim()
-        : "No comment typed by user";
-
     allocations.value.push({
       id: crypto.randomUUID(),
       categoryID: categoryID.value,
       subCategoryID: subCategoryID.value,
-      comment: finalComment,
-      amount: signedAmount,
+      comment:
+        comment.value.trim() || "No comment typed by user",
+      amount: Number(signedAmount.toFixed(2)),
     });
 
     resetForm();
@@ -84,7 +86,9 @@ export function useAllocation(
      Helpers
   ========================= */
   function presetAmount() {
-    amount.value = Math.abs(remainingAmount.value);
+    amount.value = Number(
+      Math.abs(remainingAmount.value).toFixed(2)
+    );
   }
 
   function resetForm() {
@@ -97,40 +101,66 @@ export function useAllocation(
   /* =========================
      Drive persistence
   ========================= */
-  async function saveDraft() {
-    const { driveState } = useDrive();
+  async function saveDraft(): Promise<void> {
     if (!driveState.value) return;
 
-    await writeJSON(
-      driveState.value.folders.allocations.drafts,
-      `${spendingId}.json`,
-      buildPayload("draft")
+    const folderId =
+      driveState.value.folders.allocations.drafts;
+    if (!folderId) {
+      throw new Error("allocations/drafts folder not found");
+    }
+
+    // 🔍 vérifier si le fichier existe déjà
+    const files = await listFilesInFolder(folderId);
+    const existing = files.find(
+      (f: DriveItem) =>
+        f.name === `${spendingId}.json`
     );
-  }
 
-  async function release() {
-    if (!isBalanced.value) return;
-
-    const { driveState } = useDrive();
-    if (!driveState.value) return;
-
-    await writeJSON(
-      driveState.value.folders.allocations.released,
-      `${spendingId}.json`,
-      buildPayload("released")
-    );
-  }
-
-  function buildPayload(status: "draft" | "released") {
-    return {
+    const payload = {
       version: 1,
-      status,
       spendingId,
-      spendingAmount,
+      savedAt: new Date().toISOString(),
+      allocations: allocations.value.map(a => ({
+        categoryID: a.categoryID,
+        subCategoryID: a.subCategoryID,
+        amount: Number(a.amount.toFixed(2)),
+        comment: a.comment,
+      })),
+    };
+
+    await writeJSON(
+      folderId,
+      `${spendingId}.json`,
+      payload,
+      existing?.id
+    );
+  }
+
+  async function release(): Promise<void> {
+    if (!isBalanced.value) return;
+    if (!driveState.value) return;
+
+    const folderId =
+      driveState.value.folders.allocations.released;
+    if (!folderId) {
+      throw new Error("allocations/released folder not found");
+    }
+
+    const payload = {
+      version: 1,
+      spendingId,
+      spendingAmount: Number(spendingAmount.toFixed(2)),
       currency: "CHF",
-      updatedAt: new Date().toISOString(),
+      releasedAt: new Date().toISOString(),
       allocations: allocations.value,
     };
+
+    await writeJSON(
+      folderId,
+      `${spendingId}.json`,
+      payload
+    );
   }
 
   /* =========================
