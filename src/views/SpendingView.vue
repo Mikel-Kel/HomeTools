@@ -4,7 +4,7 @@ import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
 import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
-import { useSpending, type SpendingRecord } from "@/composables/spending/useSpending";
+import { useSpending, type SpendingWithStatus } from "@/composables/spending/useSpending";
 import { useDrive } from "@/composables/useDrive";
 import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
 
@@ -65,7 +65,7 @@ function resetFilters() {
   maxAmount.value = null;
 }
 
-function applyFilters(records: SpendingRecord[]) {
+function applyFilters(records: SpendingWithStatus[]) {
   return records.filter(r => {
     if (ownerFilter.value.size && !ownerFilter.value.has(r.owner)) return false;
     if (dateFrom.value && r.date < dateFrom.value) return false;
@@ -112,7 +112,7 @@ const formatDate = (d: string) => new Date(d).toLocaleDateString();
 /* =========================
    Navigation
 ========================= */
-function openAllocation(record: SpendingRecord) {
+function openAllocation(record: SpendingWithStatus) {
   router.push({
     name: "allocation",
     params: { record: JSON.stringify(record) },
@@ -124,6 +124,8 @@ function openAllocation(record: SpendingRecord) {
 ========================= */
 async function loadFromDrive() {
   if (!driveState.value) return;
+
+  // 1️⃣ backend = vérité
   const folderId = driveState.value.folders.spending;
   const files = await listFilesInFolder(folderId);
   const file = files.find(f => f.name === "spending.json");
@@ -131,8 +133,40 @@ async function loadFromDrive() {
 
   const raw = await readJSON(file.id);
   const { accounts, records } = transformSpendingRaw(raw);
+
+  // purge totale
   spending.replaceAll(accounts, records);
+
+  // 2️⃣ statuts depuis Drive
+  await loadAllocationStatusFromDrive();
 }
+
+async function loadAllocationStatusFromDrive() {
+  if (!driveState.value) return;
+
+  const draftsFolder =
+    driveState.value.folders.allocations.drafts;
+  const releasedFolder =
+    driveState.value.folders.allocations.released;
+
+  const [draftFiles, releasedFiles] = await Promise.all([
+    listFilesInFolder(draftsFolder),
+    listFilesInFolder(releasedFolder),
+  ]);
+
+  const draftIds = new Set(
+    draftFiles
+      .map(f => f.name.replace(".json", ""))
+  );
+
+  const releasedIds = new Set(
+    releasedFiles
+      .map(f => f.name.replace(".json", ""))
+  );
+
+  spending.applyAllocationStatus(draftIds, releasedIds);
+}
+
 
 /* =========================
    Lifecycle
@@ -140,8 +174,6 @@ async function loadFromDrive() {
 onMounted(() => driveState.value && loadFromDrive());
 watch(() => driveState.value, s => s && loadFromDrive());
 </script>
-
-
 
 <template>
   <PageHeader title="Spending" icon="shopping_cart" />
@@ -213,6 +245,7 @@ watch(() => driveState.value, s => s && loadFromDrive());
             <th>Date</th>
             <th>Party</th>
             <th>Owner</th>
+            <th>Status</th>
             <th class="right">Amount</th>
           </tr>
         </thead>
@@ -227,6 +260,15 @@ watch(() => driveState.value, s => s && loadFromDrive());
             <td>{{ formatDate(record.date) }}</td>
             <td>{{ record.party }}</td>
             <td>{{ record.owner }}</td>
+             <td>
+                <span
+                v-if="record.allocationStatus !== 'none'"
+                class="status"
+                :class="record.allocationStatus"
+                >
+                {{ record.allocationStatus }}
+                </span>
+             </td>
             <td class="right" :class="record.amount >= 0 ? 'positive' : 'negative'">
               {{ formatAmount(record.amount) }}
             </td>
@@ -236,8 +278,6 @@ watch(() => driveState.value, s => s && loadFromDrive());
     </section>
   </div>
 </template>
-
-
 
 <style scoped>
 /* =========================
@@ -326,7 +366,29 @@ watch(() => driveState.value, s => s && loadFromDrive());
 .spending-table tbody tr:nth-child(even) {
   background: var(--surface-soft);
 }
+/* =========================
+   Allocation status badge
+========================= */
+.status {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
 
+.status.draft {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.status.released {
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+}
 /* =========================
    Misc
 ========================= */
