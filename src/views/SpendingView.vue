@@ -7,6 +7,7 @@ import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
 import { useSpending, type SpendingWithStatus, type AllocationStatus } from "@/composables/spending/useSpending";
 import { useDrive } from "@/composables/useDrive";
 import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
+import { useAllocationDrive } from "@/composables/allocations/useDriveAllocation";
 
 /* =========================
    State
@@ -15,6 +16,7 @@ const router = useRouter();
 const spending = useSpending();
 const statusFilter = ref<Set<AllocationStatus>>(new Set());
 const { driveState } = useDrive();
+const { moveReleasedToDraft } = useAllocationDrive();
 
 /* =========================
    Filters
@@ -131,7 +133,16 @@ const formatDate = (d: string) => new Date(d).toLocaleDateString();
 /* =========================
    Navigation
 ========================= */
-function openAllocation(record: SpendingWithStatus) {
+async function openAllocation(record: SpendingWithStatus) {
+  if (record.allocationStatus === "released") {
+    const ok = confirm(
+      "This allocation is released.\nReopen it for editing?"
+    );
+    if (!ok) return;
+
+    await moveReleasedToDraft(record.id);
+  }
+
   router.push({
     name: "allocation",
     params: { record: JSON.stringify(record) },

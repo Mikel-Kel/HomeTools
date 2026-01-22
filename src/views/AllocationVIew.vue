@@ -3,7 +3,7 @@ import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
-import { useAllocation } from "@/composables/useAllocation";
+import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
 
 import type { SpendingRecord } from "@/composables/spending/useSpending";
