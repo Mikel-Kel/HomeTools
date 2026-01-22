@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import PageHeader from "@/components/PageHeader.vue";
 import { useAllocation } from "@/composables/useAllocation";
 import { useCategories } from "@/composables/useCategories";
 
 import type { SpendingRecord } from "@/composables/spending/useSpending";
+
+/* =========================
+   Router
+========================= */
+const router = useRouter();
 
 /* =========================
    Props
@@ -34,6 +40,8 @@ const {
   totalAllocated,
   remainingAmount,
   isBalanced,
+  canSaveDraft,
+  canRelease,
 
   addAllocation,
   removeAllocation,
@@ -65,6 +73,23 @@ const subCategories = computed(() =>
 );
 
 /* =========================
+   Actions
+========================= */
+async function onSaveDraft() {
+  await saveDraft();
+  // ❌ on reste sur la page
+}
+
+async function onRelease() {
+  await release();
+  router.push("SpendingView");
+}
+
+function onClose() {
+  router.push({ name: "spending" });
+}
+
+/* =========================
    Utils
 ========================= */
 function formatAmount(a: number) {
@@ -72,6 +97,11 @@ function formatAmount(a: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+async function saveDraftAndBack() {
+  await saveDraft();
+  router.push({ name: "spending" }); // ⚠️ adapte le name si besoin
 }
 </script>
 
@@ -102,16 +132,14 @@ function formatAmount(a: number) {
           <strong>{{ formatAmount(absRemainingAmount) }}</strong>
         </div>
       </div>
-
     </section>
 
     <!-- =========================
          Form
     ========================== -->
     <section class="form">
-      <!-- Category / Sub-category -->
       <div class="form-row">
-        <select v-model.number="categoryID">
+        <select v-model="categoryID">
           <option :value="null" disabled>Category</option>
           <option
             v-for="c in categories"
@@ -123,7 +151,7 @@ function formatAmount(a: number) {
         </select>
 
         <select
-          v-model.number="subCategoryID"
+          v-model="subCategoryID"
           :disabled="categoryID === null"
         >
           <option :value="null" disabled>Sub-category</option>
@@ -137,7 +165,6 @@ function formatAmount(a: number) {
         </select>
       </div>
 
-      <!-- Amount FIRST -->
       <div class="form-row">
         <input
           v-model.number="amount"
@@ -153,7 +180,6 @@ function formatAmount(a: number) {
         </button>
       </div>
 
-      <!-- Comment AFTER -->
       <input
         v-model="comment"
         placeholder="(optional comment)"
@@ -181,13 +207,19 @@ function formatAmount(a: number) {
     <footer>
       <p>Total allocated: {{ formatAmount(totalAllocated) }}</p>
 
-      <button @click="saveDraft">Save draft</button>
+      <button @click="onSaveDraft" :disabled="!canSaveDraft">
+        Save draft
+      </button>
 
       <button
-        :disabled="!isBalanced"
-        @click="release"
+        @click="onRelease"
+        :disabled="!canRelease"
       >
         Release
+      </button>
+
+      <button @click="onClose">
+        Close
       </button>
     </footer>
   </div>
@@ -289,10 +321,12 @@ button {
   background: var(--primary);
   color: white;
   font-size: 0.95rem;
+  transition: opacity 0.15s ease, background 0.15s ease;
 }
 
 button:disabled {
-  opacity: 0.5;
+  background: var(--primary);
+  opacity: 0.45;
   cursor: not-allowed;
 }
 

@@ -1,10 +1,6 @@
 import { ref, computed } from "vue";
+import { listFilesInFolder, writeJSON } from "@/services/google/googleDrive";
 import { useDrive } from "@/composables/useDrive";
-import {
-  writeJSON,
-  listFilesInFolder,
-  type DriveItem,
-} from "@/services/google/googleDrive";
 
 /* =========================
    Types
@@ -26,33 +22,40 @@ export function useAllocation(
 ) {
   const { driveState } = useDrive();
 
-  /* =========================
-     State
-  ========================= */
-  const allocations = ref<Allocation[]>([]);
+/* =========================
+    State
+========================= */
+const allocations = ref<Allocation[]>([]);
 
-  const categoryID = ref<number | null>(null);
-  const subCategoryID = ref<number | null>(null);
-  const comment = ref<string>("");
+const categoryID = ref<number | null>(null);
+const subCategoryID = ref<number | null>(null);
+const comment = ref<string>("");
 
-  // montant saisi (toujours positif côté UI)
-  const amount = ref<number>(Math.abs(spendingAmount));
+// montant saisi (toujours positif côté UI)
+const amount = ref<number>(Math.abs(spendingAmount));
+const draftSaved = ref(false);
+const canRelease = computed(() =>
+  isBalanced.value && draftSaved.value
+);
 
-  /* =========================
-     Computed
-  ========================= */
-  const totalAllocated = computed(() =>
-    allocations.value.reduce((sum, a) => sum + a.amount, 0)
-  );
+/* =========================
+    Computed
+========================= */
+const totalAllocated = computed(() =>
+  allocations.value.reduce((sum, a) => sum + a.amount, 0)
+);
 
-  const remainingAmount = computed(() =>
-    spendingAmount - totalAllocated.value
-  );
+const remainingAmount = computed(() =>
+  spendingAmount - totalAllocated.value
+);
 
-  const isBalanced = computed(() =>
-    Number(remainingAmount.value.toFixed(2)) === 0
-  );
+const isBalanced = computed(() =>
+  Number(remainingAmount.value.toFixed(2)) === 0
+);
 
+const canSaveDraft = computed(() =>
+  allocations.value.length > 0 && isBalanced.value
+);
   /* =========================
      Actions
   ========================= */
@@ -102,20 +105,23 @@ export function useAllocation(
      Drive persistence
   ========================= */
   async function saveDraft(): Promise<void> {
-    if (!driveState.value) return;
+    const { driveState } = useDrive();
 
-    const folderId =
-      driveState.value.folders.allocations.drafts;
+    if (!driveState.value) {
+      console.warn("⚠️ saveDraft skipped: drive not ready");
+      return;
+    }
+
+    const folderId = driveState.value.folders.allocations.drafts;
     if (!folderId) {
       throw new Error("allocations/drafts folder not found");
     }
 
-    // 🔍 vérifier si le fichier existe déjà
+    const filename = `${spendingId}.json`;
+
+    // 🔍 chercher un éventuel fichier existant
     const files = await listFilesInFolder(folderId);
-    const existing = files.find(
-      (f: DriveItem) =>
-        f.name === `${spendingId}.json`
-    );
+    const existing = files.find(f => f.name === filename);
 
     const payload = {
       version: 1,
@@ -124,21 +130,30 @@ export function useAllocation(
       allocations: allocations.value.map(a => ({
         categoryID: a.categoryID,
         subCategoryID: a.subCategoryID,
-        amount: Number(a.amount.toFixed(2)),
-        comment: a.comment,
+        amount: Number(a.amount.toFixed(2)), // 👈 EXACTEMENT 2 décimales
+        comment: a.comment ?? "",
       })),
     };
 
+    console.log("💾 Saving allocation draft", {
+      filename,
+      overwrite: !!existing,
+      count: payload.allocations.length,
+    });
+
     await writeJSON(
       folderId,
-      `${spendingId}.json`,
+      filename,
       payload,
-      existing?.id
+      existing?.id // 🔑 clé anti-(1)(2)
     );
+    draftSaved.value = true;
+    console.log("✅ Allocation draft saved");
   }
 
   async function release(): Promise<void> {
     if (!isBalanced.value) return;
+    if (!draftSaved.value) return;
     if (!driveState.value) return;
 
     const folderId =
@@ -176,6 +191,8 @@ export function useAllocation(
     totalAllocated,
     remainingAmount,
     isBalanced,
+    canSaveDraft,
+    canRelease,
 
     addAllocation,
     removeAllocation,
