@@ -58,6 +58,12 @@ const showBack = level >= 2;
   cursor: pointer;
 }
 
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .nav-btn:hover {
   background: #eef2ff;
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
+
 import PageHeader from "@/components/PageHeader.vue";
 import { useAllocation } from "@/composables/useAllocation";
 import { useCategories } from "@/composables/useCategories";
@@ -25,6 +26,7 @@ const categoriesStore = useCategories();
 
 onMounted(async () => {
   await categoriesStore.load();
+  await loadDraft();
 });
 
 /* =========================
@@ -42,16 +44,24 @@ const {
   isBalanced,
   canSaveDraft,
   canRelease,
+  busy,
+  busyAction,
 
+  loadDraft,
   addAllocation,
   removeAllocation,
   saveDraft,
   release,
 } = useAllocation(String(record.id), record.amount);
 
+onMounted(async () => {
+  await categoriesStore.load();
+  await loadDraft();
+});
+
 const absRemainingAmount = computed(() =>
   Math.abs(remainingAmount?.value ?? 0)
-);
+);  
 
 /* =========================
    Category filtering by sign
@@ -81,11 +91,17 @@ async function onSaveDraft() {
 }
 
 async function onRelease() {
-  await release();
-  router.push("SpendingView");
+  try {
+    await release();              // ⬅️ attend vraiment la fin
+    router.push({ name: "spending" }); // ⬅️ retour explicite
+  } catch (err) {
+    console.error("Release failed", err);
+    // plus tard : toast / alert utilisateur
+  }
 }
 
 function onClose() {
+  if (busy.value) return; // prevent closing while busy 
   router.push({ name: "spending" });
 }
 
@@ -103,12 +119,27 @@ async function saveDraftAndBack() {
   await saveDraft();
   router.push({ name: "spending" }); // ⚠️ adapte le name si besoin
 }
+
+function closeView() {
+  if (busy.value) return;
+  router.push({ name: "spending" });
+}
 </script>
 
 <template>
   <PageHeader title="Allocation" icon="shopping_cart" />
 
   <div class="allocation-view">
+    <div v-if="busy" class="busy-overlay">
+      <div class="busy-box">
+        <div class="spinner"></div>
+        <div class="busy-text">
+          {{ busyAction === "release"
+            ? "Releasing… please wait"
+            : "Saving… please wait" }}
+        </div>
+      </div>
+    </div>
     <!-- =========================
          Record summary
     ========================== -->
@@ -207,18 +238,19 @@ async function saveDraftAndBack() {
     <footer>
       <p>Total allocated: {{ formatAmount(totalAllocated) }}</p>
 
-      <button @click="onSaveDraft" :disabled="!canSaveDraft">
-        Save draft
+      <button @click="onSaveDraft" :disabled="busy || !canSaveDraft">
+        {{ busy ? "Saving…" : "Save draft" }}
       </button>
 
       <button
-        @click="onRelease"
-        :disabled="!canRelease"
-      >
-        Release
+        @click="onRelease" :disabled="busy || !canRelease">
+        {{ busy ? "Releasing…" : "Release" }}
       </button>
-
-      <button @click="onClose">
+      <button
+        class="secondary"
+        @click="closeView"
+        :disabled="busy"
+      >
         Close
       </button>
     </footer>
@@ -226,6 +258,48 @@ async function saveDraftAndBack() {
 </template>
 
 <style scoped>
+/* =========================
+   Busy overlay
+========================= */
+.busy-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.busy-box {
+  background: var(--bg);
+  padding: 20px 24px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.busy-text {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .allocation-view {
   padding: 1rem;
   background: var(--bg);

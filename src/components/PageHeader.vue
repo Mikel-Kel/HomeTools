@@ -5,6 +5,7 @@ import NavigationButtons from "@/components/NavigationButtons.vue";
 defineProps<{
   title: string;
   icon: string;
+  disabled?: boolean; 
 }>();
 </script>
 
@@ -15,7 +16,7 @@ defineProps<{
       :icon="icon"
     />
 
-    <NavigationButtons />
+    <NavigationButtons :disabled="disabled" />
   </header>
 </template>
 

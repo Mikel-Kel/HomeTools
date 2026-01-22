@@ -176,9 +176,39 @@ export async function writeJSON(
   return result.id;
 }
 
+export async function deleteFile(fileId: string): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error("[Drive] Not authenticated");
+  }
+
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      `[Drive] deleteFile HTTP ${res.status}`
+    );
+  }
+}
+
 /* =========================
    Debug
 ========================= */
+console.log("googleDrive exports", {
+  listFilesInFolder,
+  readJSON,
+  writeJSON,
+  deleteFile,
+});
+
 log.info("googleDrive exports loaded", {
   listMyDriveRoot,
 });
