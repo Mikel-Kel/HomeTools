@@ -32,10 +32,8 @@ const records = ref<SpendingWithStatus[]>([]);
 /* =========================
    Composable
 ========================= */
+// useSpending.ts
 export function useSpending() {
-  /* =========================
-     Replace backend data
-  ========================= */
   function replaceAll(
     newAccounts: Account[],
     newRecords: SpendingRecord[]
@@ -47,10 +45,6 @@ export function useSpending() {
     }));
   }
 
-  /* =========================
-     Apply allocation status
-     (from Drive)
-  ========================= */
   function applyAllocationStatus(
     draftIds: Set<string>,
     releasedIds: Set<string>
@@ -65,30 +59,17 @@ export function useSpending() {
     }));
   }
 
-  /* =========================
-     Get records per account
-  ========================= */
-  function getRecordsForAccount(
-    accountId: string,
-    options?: { includeReleased?: boolean }
-  ): SpendingWithStatus[] {
+  function getRecordsForAccount(accountId: string) {
     return records.value
-      .filter(r =>
-        r.accountId === accountId &&
-        (options?.includeReleased ||
-          r.allocationStatus !== "released")
-      )
+      .filter(r => r.accountId === accountId)
       .sort((a, b) => b.date.localeCompare(a.date));
   }
 
-return {
-  // state
-  accounts,
-  records,
-
-  // actions
-  replaceAll,
-  applyAllocationStatus, // ✅ MANQUAIT ICI
-  getRecordsForAccount,
-};
+  return {
+    accounts,
+    records,
+    replaceAll,
+    applyAllocationStatus,
+    getRecordsForAccount,
+  };
 }

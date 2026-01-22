@@ -4,7 +4,7 @@ import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
 import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
-import { useSpending, type SpendingWithStatus } from "@/composables/spending/useSpending";
+import { useSpending, type SpendingWithStatus, type AllocationStatus } from "@/composables/spending/useSpending";
 import { useDrive } from "@/composables/useDrive";
 import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
 
@@ -13,6 +13,7 @@ import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
 ========================= */
 const router = useRouter();
 const spending = useSpending();
+const statusFilter = ref<Set<AllocationStatus>>(new Set());
 const { driveState } = useDrive();
 
 /* =========================
@@ -50,6 +51,16 @@ const availableOwners = computed(() => {
   return Array.from(set).sort();
 });
 
+const allStatuses: AllocationStatus[] = ["none", "draft", "released"];
+
+function toggleStatus(status: AllocationStatus) {
+  statusFilter.value.has(status)
+    ? statusFilter.value.delete(status)
+    : statusFilter.value.add(status);
+}
+
+const isStatusActive = (s: AllocationStatus) =>
+  statusFilter.value.has(s);
 function toggleOwner(owner: string) {
   ownerFilter.value.has(owner)
     ? ownerFilter.value.delete(owner)
@@ -67,7 +78,15 @@ function resetFilters() {
 
 function applyFilters(records: SpendingWithStatus[]) {
   return records.filter(r => {
-    if (ownerFilter.value.size && !ownerFilter.value.has(r.owner)) return false;
+    if (
+      statusFilter.value.size &&
+      !statusFilter.value.has(r.allocationStatus)
+    )
+      return false;
+
+    if (ownerFilter.value.size && !ownerFilter.value.has(r.owner))
+      return false;
+
     if (dateFrom.value && r.date < dateFrom.value) return false;
     if (dateTo.value && r.date > dateTo.value) return false;
 
@@ -206,6 +225,20 @@ watch(() => driveState.value, s => s && loadFromDrive());
       </div>
 
       <div class="filter-row">
+        <span class="label">Status</span>
+
+        <button
+          v-for="s in allStatuses"
+          :key="s"
+          class="chip"
+          :class="['status', s, { active: isStatusActive(s) }]"
+          @click="toggleStatus(s)"
+        >
+          {{ s }}
+        </button>
+      </div>
+
+      <div class="filter-row">
         <span class="label">Period</span>
         <input type="date" v-model="dateFrom" />
         <input type="date" v-model="dateTo" />
@@ -260,15 +293,14 @@ watch(() => driveState.value, s => s && loadFromDrive());
             <td>{{ formatDate(record.date) }}</td>
             <td>{{ record.party }}</td>
             <td>{{ record.owner }}</td>
-             <td>
-                <span
-                v-if="record.allocationStatus !== 'none'"
-                class="status"
+            <td>
+              <span
+                class="status-pill"
                 :class="record.allocationStatus"
-                >
+              >
                 {{ record.allocationStatus }}
-                </span>
-             </td>
+              </span>
+            </td>
             <td class="right" :class="record.amount >= 0 ? 'positive' : 'negative'">
               {{ formatAmount(record.amount) }}
             </td>
@@ -314,6 +346,24 @@ watch(() => driveState.value, s => s && loadFromDrive());
   border-color: var(--primary);
 }
 .reset { margin-left: auto; }
+
+.chip.status.none {
+  border-color: #bbb;
+}
+.chip.status.draft {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.chip.status.released {
+  border-color: var(--positive);
+  color: var(--positive);
+}
+.status-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
 
 /* =========================
    Accounts
@@ -369,26 +419,22 @@ watch(() => driveState.value, s => s && loadFromDrive());
 /* =========================
    Allocation status badge
 ========================= */
-.status {
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 0.75rem;
-  border-radius: 999px;
-  font-weight: 600;
-  text-transform: capitalize;
+
+.status-pill.none {
+  background: #eee;
+  color: #666;
 }
 
-.status.draft {
-  background: var(--primary-soft);
-  color: var(--primary);
-  border: 1px solid var(--primary);
+.status-pill.draft {
+  background: #fff4cc;
+  color: #a37b00;
 }
 
-.status.released {
-  background: var(--surface-soft);
-  color: var(--text-soft);
-  border: 1px solid var(--border);
+.status-pill.released {
+  background: #e6f7ed;
+  color: var(--positive);
 }
+
 /* =========================
    Misc
 ========================= */
