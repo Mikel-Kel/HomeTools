@@ -19,6 +19,47 @@ export interface Allocation {
 }
 
 /* =========================
+   Helpers
+========================= */
+async function findFileByName(
+  folderId: string,
+  filename: string
+) {
+  const files = await listFilesInFolder(folderId);
+  return files.find(f => f.name === filename) ?? null;
+}
+async function reopenReleasedIfNeeded(
+  spendingId: string,
+  draftsFolder: string,
+  releasedFolder: string
+): Promise<void> {
+  const filename = `${spendingId}.json`;
+
+  // 1️⃣ draft existe déjà → rien à faire
+  const draft = await findFileByName(draftsFolder, filename);
+  if (draft) return;
+
+  // 2️⃣ released existe ?
+  const released = await findFileByName(releasedFolder, filename);
+  if (!released) return;
+
+  // 3️⃣ déplacer released → drafts
+  const data = await readJSON<any>(released.id);
+
+  await writeJSON(
+    draftsFolder,
+    filename,
+    data
+  );
+
+  await deleteFile(released.id);
+
+  console.info(
+    `🔁 Allocation ${spendingId} moved from released → drafts`
+  );
+}
+
+/* =========================
    Composable
 ========================= */
 export function useAllocation(
@@ -27,6 +68,7 @@ export function useAllocation(
 ) {
   const { driveState } = useDrive();
 
+  
   /* =========================
      State
   ========================= */
@@ -111,36 +153,81 @@ export function useAllocation(
   /* =========================
      Load draft
   ========================= */
-  async function loadDraft(): Promise<void> {
-    if (draftLoaded.value || !driveState.value) return;
+async function loadDraft(): Promise<void> {
+  if (draftLoaded.value || !driveState.value) return;
 
-    busy.value = true;
-    try {
-      const folder = driveState.value.folders.allocations.drafts;
-      const filename = `${spendingId}.json`;
+  busy.value = true;
 
-      const files = await listFilesInFolder(folder);
-      const file = files.find(f => f.name === filename);
-      if (!file) return;
+  try {
+    const draftsFolder =
+      driveState.value.folders.allocations.drafts;
+    const releasedFolder =
+      driveState.value.folders.allocations.released;
 
-      const raw = await readJSON<any>(file.id);
-      if (!Array.isArray(raw?.allocations)) return;
+    const filename = `${spendingId}.json`;
 
-      allocations.value = raw.allocations.map((a: any) => ({
-        id: crypto.randomUUID(),
-        categoryID: a.categoryID ?? null,
-        subCategoryID: a.subCategoryID ?? null,
-        comment: a.comment ?? "",
-        amount: Number(Number(a.amount).toFixed(2)),
-      }));
+    /* ─────────────────────────────
+       1️⃣ Cherche un draft
+    ───────────────────────────── */
+    const draftFiles = await listFilesInFolder(draftsFolder);
+    let file = draftFiles.find(f => f.name === filename);
 
-      hasDraft.value = true;
-      presetAmount();
-    } finally {
-      draftLoaded.value = true;
-      busy.value = false;
+    /* ─────────────────────────────
+       2️⃣ Sinon → released → draft
+    ───────────────────────────── */
+    if (!file) {
+      const releasedFiles =
+        await listFilesInFolder(releasedFolder);
+      const releasedFile = releasedFiles.find(
+        f => f.name === filename
+      );
+
+      if (releasedFile) {
+        const raw = await readJSON<any>(releasedFile.id);
+
+        // écrire en drafts
+        await writeJSON(
+          draftsFolder,
+          filename,
+          raw
+        );
+
+        // supprimer released
+        await deleteFile(releasedFile.id);
+
+        // relister drafts
+        const updatedDrafts =
+          await listFilesInFolder(draftsFolder);
+        file = updatedDrafts.find(f => f.name === filename);
+      }
     }
+
+    /* ─────────────────────────────
+       3️⃣ Rien trouvé → stop
+    ───────────────────────────── */
+    if (!file) return;
+
+    /* ─────────────────────────────
+       4️⃣ Charger le draft
+    ───────────────────────────── */
+    const raw = await readJSON<any>(file.id);
+    if (!Array.isArray(raw?.allocations)) return;
+
+    allocations.value = raw.allocations.map((a: any) => ({
+      id: crypto.randomUUID(),
+      categoryID: a.categoryID ?? null,
+      subCategoryID: a.subCategoryID ?? null,
+      comment: a.comment ?? "",
+      amount: Number(Number(a.amount).toFixed(2)),
+    }));
+
+    hasDraft.value = true;
+    presetAmount();
+  } finally {
+    draftLoaded.value = true;
+    busy.value = false;
   }
+}
 
   /* =========================
      Save draft

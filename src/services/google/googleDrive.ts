@@ -24,13 +24,21 @@ async function driveFetch(
   const token = getAccessToken();
   if (!token) throw new Error("[Drive] Not authenticated");
 
-  return fetch(url, {
+  const res = await fetch(url, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
       ...(options.headers || {}),
     },
   });
+
+  // 🔴 TOKEN EXPIRED / INVALID
+  if (res.status === 401) {
+    console.warn("[Drive] 401 Unauthorized – token expired?");
+    throw new Error("DRIVE_UNAUTHORIZED");
+  }
+
+  return res;
 }
 
 /* =========================

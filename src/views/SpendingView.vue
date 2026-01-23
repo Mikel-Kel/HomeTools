@@ -3,7 +3,8 @@ import { watch, onMounted, computed, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
-import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
+import { listFilesInFolder } from "@/services/google/googleDrive";
+import { loadJSONFromFolder } from "@/services/google/driveRepository";
 import { useSpending, type SpendingWithStatus, type AllocationStatus } from "@/composables/spending/useSpending";
 import { useDrive } from "@/composables/useDrive";
 import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
@@ -155,48 +156,59 @@ async function openAllocation(record: SpendingWithStatus) {
 async function loadFromDrive() {
   if (!driveState.value) return;
 
-  // 1️⃣ backend = vérité
-  const folderId = driveState.value.folders.spending;
-  const files = await listFilesInFolder(folderId);
-  const file = files.find(f => f.name === "spending.json");
-  if (!file) return;
+  try {
+    const folderId = driveState.value.folders.spending;
 
-  const raw = await readJSON(file.id);
-  const { accounts, records } = transformSpendingRaw(raw);
+    const raw = await loadJSONFromFolder<any>(
+      folderId,
+      "spending.json"
+    );
+    if (!raw) return;
 
-  // purge totale
-  spending.replaceAll(accounts, records);
+    const { accounts, records } = transformSpendingRaw(raw);
 
-  // 2️⃣ statuts depuis Drive
-  await loadAllocationStatusFromDrive();
+    // backend = vérité
+    spending.replaceAll(accounts, records);
+
+    // statuts depuis Drive
+    await loadAllocationStatusFromDrive();
+  } catch (err: any) {
+    if (err.message === "DRIVE_SESSION_EXPIRED") {
+      console.warn("🔐 Google Drive disconnected (handled in view)");
+      // 👉 ici plus tard : toast / banner / bouton reconnect
+      return;
+    }
+    throw err;
+  }
 }
 
 async function loadAllocationStatusFromDrive() {
   if (!driveState.value) return;
 
-  const draftsFolder =
-    driveState.value.folders.allocations.drafts;
-  const releasedFolder =
-    driveState.value.folders.allocations.released;
+  try {
+    const draftsFolder =
+      driveState.value.folders.allocations.drafts;
+    const releasedFolder =
+      driveState.value.folders.allocations.released;
 
-  const [draftFiles, releasedFiles] = await Promise.all([
-    listFilesInFolder(draftsFolder),
-    listFilesInFolder(releasedFolder),
-  ]);
+    const [draftFiles, releasedFiles] = await Promise.all([
+      listFilesInFolder(draftsFolder),
+      listFilesInFolder(releasedFolder),
+    ]);
 
-  const draftIds = new Set(
-    draftFiles
-      .map(f => f.name.replace(".json", ""))
-  );
+    const draftIds = new Set(
+      draftFiles.map(f => f.name.replace(".json", ""))
+    );
+    const releasedIds = new Set(
+      releasedFiles.map(f => f.name.replace(".json", ""))
+    );
 
-  const releasedIds = new Set(
-    releasedFiles
-      .map(f => f.name.replace(".json", ""))
-  );
-
-  spending.applyAllocationStatus(draftIds, releasedIds);
+    spending.applyAllocationStatus(draftIds, releasedIds);
+  } catch (err: any) {
+    if (err.message === "DRIVE_SESSION_EXPIRED") return;
+    throw err;
+  }
 }
-
 
 /* =========================
    Lifecycle
