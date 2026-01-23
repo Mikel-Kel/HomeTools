@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, nextTick, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
@@ -50,11 +50,28 @@ const {
 } = useAllocation(String(record.id), record.amount);
 
 /* =========================
+   Focus management
+========================= */
+const amountInput = ref<HTMLInputElement | null>(null);
+
+/* =========================
+   Helper — set Amount = Remaining (INTENTIONNEL)
+========================= */
+async function resetAmountToRemaining(focus = true) {
+  await nextTick();
+  amount.value = Math.abs(remainingAmount.value);
+  if (focus) amountInput.value?.focus();
+}
+
+/* =========================
    Lifecycle
 ========================= */
 onMounted(async () => {
   await categoriesStore.load();
   await loadDraft();
+
+  // ✅ 1️⃣ premier affichage → Remaining par défaut
+  await resetAmountToRemaining(true);
 });
 
 /* =========================
@@ -86,18 +103,23 @@ const subCategories = computed(() =>
 /* =========================
    Actions
 ========================= */
+async function onAddAllocation() {
+  addAllocation();
+
+  // ✅ 2️⃣ après chaque ajout → nouveau Remaining
+  await resetAmountToRemaining(true);
+}
+
 async function onSaveDraft() {
   await saveDraft();
-  // on reste sur la page
 }
 
 async function onRelease() {
   try {
-    await release();                     // attend la fin réelle
-    router.push({ name: "spending" });   // retour explicite
+    await release();
+    router.push({ name: "spending" });
   } catch (err) {
     console.error("Release failed", err);
-    // plus tard : toast utilisateur
   }
 }
 
@@ -121,6 +143,7 @@ function formatAmount(a: number) {
   <PageHeader title="Allocation" icon="shopping_cart" />
 
   <div class="allocation-view">
+    <!-- Busy overlay -->
     <div v-if="busy" class="busy-overlay">
       <div class="busy-box">
         <div class="spinner"></div>
@@ -131,71 +154,64 @@ function formatAmount(a: number) {
         </div>
       </div>
     </div>
+
     <!-- =========================
-         Record summary
+         1. Record summary
     ========================== -->
-    <section class="record">
+    <section class="allocation-record">
       <div class="record-main">
         <div class="record-party">{{ record.party }}</div>
         <div class="record-meta">{{ record.date }}</div>
       </div>
-
       <div class="record-amounts">
-        <div class="amount-line">
-          <span>Total</span>
-          <strong>{{ formatAmount(Math.abs(record.amount)) }}</strong>
+        <div class="amount-box total">
+          <div class="amount-label">Total</div>
+          <div class="amount-value">
+            {{ formatAmount(Math.abs(record.amount)) }}
+          </div>
         </div>
 
         <div
-          class="amount-line remaining"
+          class="amount-box remaining"
           :class="{ balanced: isBalanced, unbalanced: !isBalanced }"
         >
-          <span>Remaining</span>
-          <strong>{{ formatAmount(absRemainingAmount) }}</strong>
+          <div class="amount-label">Remaining</div>
+          <div class="amount-value">
+            {{ formatAmount(absRemainingAmount) }}
+          </div>
         </div>
       </div>
     </section>
 
     <!-- =========================
-         Form
+         2. Allocation form
     ========================== -->
-    <section class="form">
+    <section class="allocation-form">
       <div class="form-row">
         <select v-model="categoryID">
           <option :value="null" disabled>Category</option>
-          <option
-            v-for="c in categories"
-            :key="c.id"
-            :value="c.id"
-          >
+          <option v-for="c in categories" :key="c.id" :value="c.id">
             {{ c.label }}
           </option>
         </select>
 
-        <select
-          v-model="subCategoryID"
-          :disabled="categoryID === null"
-        >
+        <select v-model="subCategoryID" :disabled="categoryID === null">
           <option :value="null" disabled>Sub-category</option>
-          <option
-            v-for="sc in subCategories"
-            :key="sc.id"
-            :value="sc.id"
-          >
+          <option v-for="sc in subCategories" :key="sc.id" :value="sc.id">
             {{ sc.label }}
           </option>
         </select>
       </div>
-
       <div class="form-row">
         <input
+          ref="amountInput"
           v-model.number="amount"
           type="number"
           step="0.01"
         />
-
         <button
-          @click="addAllocation"
+          class="primary"
+          @click="onAddAllocation"
           :disabled="!categoryID || !subCategoryID || amount === 0"
         >
           Add
@@ -204,94 +220,74 @@ function formatAmount(a: number) {
 
       <input
         v-model="comment"
+        class="comment"
         placeholder="(optional comment)"
       />
     </section>
 
     <!-- =========================
-         Allocations list
+         3. Allocations list
     ========================== -->
-    <table class="alloc-table">
-      <tbody>
-        <tr v-for="(a, idx) in allocations" :key="a.id">
-          <td class="comment">{{ a.comment }}</td>
-          <td class="amount right">{{ formatAmount(a.amount) }}</td>
-          <td class="actions">
-            <button @click="removeAllocation(idx)">✕</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <section class="allocation-list">
+      <table>
+        <tbody>
+          <tr v-for="a in allocations" :key="a.id">
+            <td>{{ a.comment }}</td>
+            <td class="right">{{ formatAmount(a.amount) }}</td>
+            <td>
+              <button @click="removeAllocation(allocations.indexOf(a))">
+                ✕
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <!-- =========================
-         Footer
+         4. Footer actions
     ========================== -->
-    <footer>
-      <p>Total allocated: {{ formatAmount(totalAllocated) }}</p>
+    <footer class="allocation-footer">
+      <div class="footer-total">
+        Total allocated: {{ formatAmount(totalAllocated) }}
+      </div>
 
-      <button @click="onSaveDraft" :disabled="busy || !canSaveDraft">
-        {{ busy ? "Saving…" : "Save draft" }}
-      </button>
+      <div class="footer-actions">
+        <button
+          @click="onSaveDraft"
+          :disabled="busy || !canSaveDraft"
+        >
+          {{ busy && busyAction === "save"
+              ? "Saving…"
+              : "Save draft" }}
+        </button>
 
-      <button
-        @click="onRelease" :disabled="busy || !canRelease">
-        {{ busy ? "Releasing…" : "Release" }}
-      </button>
-      <button
-        class="secondary"
-        @click="closeView"
-        :disabled="busy"
-      >
-        Close
-      </button>
+        <button
+          @click="onRelease"
+          :disabled="busy || !canRelease"
+        >
+          {{ busy && busyAction === "release"
+              ? "Releasing…"
+              : "Release" }}
+        </button>
+        <button class="secondary" @click="closeView" :disabled="busy">
+          Close
+        </button>
+      </div>
     </footer>
   </div>
 </template>
 
 <style scoped>
-/* =========================
-   Busy overlay
-========================= */
-.busy-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  z-index: 999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.busy-box {
-  background: var(--bg);
-  padding: 20px 24px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-}
-
-.busy-text {
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-.spinner {
-  width: 22px;
-  height: 22px;
-  border: 3px solid var(--border);
-  border-top-color: var(--primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
+/* =========================================================
+   Base container
+========================================================= */
 .allocation-view {
+  position: relative;
   padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
   background: var(--bg);
   color: var(--text);
 }
@@ -299,7 +295,7 @@ function formatAmount(a: number) {
 /* =========================
    Record summary
 ========================= */
-.record {
+.allocation-record {
   background: var(--primary-soft);
   padding: 14px;
   margin-bottom: 16px;
@@ -307,7 +303,7 @@ function formatAmount(a: number) {
 }
 
 .record-main {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .record-party {
@@ -320,43 +316,67 @@ function formatAmount(a: number) {
   opacity: 0.7;
 }
 
+/* =========================
+   Amount boxes (Total / Remaining)
+========================= */
 .record-amounts {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 24px;
 }
 
-.amount-line {
+.amount-box {
   display: flex;
   flex-direction: column;
+  gap: 4px;
+}
+
+/* libellé au-dessus */
+.amount-label {
   font-size: 0.85rem;
+  opacity: 0.7;
 }
 
-.amount-line strong {
+/* valeur principale */
+.amount-value {
   font-size: 1.2rem;
+  font-weight: 600;
 }
 
-.amount-line.remaining {
-  color: var(--negative); /* rouge par défaut */
+/* couleurs */
+.amount-box.total {
+  color: var(--text);
 }
 
-.amount-line.remaining.balanced {
-  color: var(--positive); /* vert quand équilibré */
+.amount-box.remaining.unbalanced {
+  color: var(--negative);
 }
 
-/* =========================
-   Form
-========================= */
-.form {
+.amount-box.remaining.balanced {
+  color: var(--positive);
+}
+
+/* =========================================================
+   2. Allocation form
+========================================================= */
+.allocation-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 0.6rem;
 }
 
+.allocation-form select,
+.allocation-form input {
+  font-size: 0.9rem;
+}
+
+.form-row button {
+  min-width: 70px;
+  font-weight: 600;
+}
 .form-row {
   display: flex;
-  gap: 8px;
+  gap: 0.6rem;
 }
 
 .form-row select,
@@ -364,78 +384,88 @@ function formatAmount(a: number) {
   flex: 1;
 }
 
-input,
-select {
-  padding: 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 0.95rem;
+.allocation-form .comment {
+  width: 100%;
 }
 
-/* =========================
-   Buttons
-========================= */
-button {
-  padding: 8px 14px;
-  border-radius: 8px;
+/* =========================================================
+   3. Allocations list
+========================================================= */
+.allocation-list table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.allocation-list td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+
+.allocation-list td:first-child {
+  opacity: 0.85;
+}
+
+.allocation-list button {
+  background: none;
   border: none;
+  color: var(--negative);
+  font-size: 1rem;
   cursor: pointer;
-  background: var(--primary);
-  color: white;
-  font-size: 0.95rem;
-  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.allocation-list td.right {
+  text-align: right;
+}
+
+/* =========================================================
+   4. Footer actions
+========================================================= */
+.allocation-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.footer-total {
+  text-align: right;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.footer-actions button {
+  font-weight: 600;
+}
+
+/* action secondaire */
+.footer-actions .secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 button:disabled {
-  background: var(--primary);
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-/* =========================
-   Table
-========================= */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 8px;
-}
-
-td {
-  padding: 6px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.9rem;
-}
-
-.right {
-  text-align: right;
-}
-
-/* =========================
-   Footer
-========================= */
-footer {
-  margin-top: 16px;
-  color: var(--text-muted);
+/* =========================================================
+   Busy overlay (inchangé mais positionné)
+========================================================= */
+.busy-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 999;
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* =========================
-   Responsive
-========================= */
-@media (max-width: 600px) {
-  .form-row {
-    flex-direction: column;
-  }
-
-  footer {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-</style>
+  align-items: center;
+  justify-content: center;
+}</style>
