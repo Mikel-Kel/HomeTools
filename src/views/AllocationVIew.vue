@@ -55,12 +55,29 @@ const {
 const amountInput = ref<HTMLInputElement | null>(null);
 
 /* =========================
-   Helper — set Amount = Remaining (INTENTIONNEL)
+   Helpers
 ========================= */
 async function resetAmountToRemaining(focus = true) {
   await nextTick();
   amount.value = Math.abs(remainingAmount.value);
   if (focus) amountInput.value?.focus();
+}
+/* =========================
+   Allocation display helpers (2.2) ✅ FIX
+========================= */
+function categoryLabel(categoryID: number | null) {
+  if (categoryID == null) return "";
+  return categoriesStore.getCategory(categoryID)?.label ?? "";
+}
+
+function subCategoryLabel(
+  categoryID: number | null,
+  subCategoryID: number | null
+) {
+  if (categoryID == null || subCategoryID == null) return "";
+
+  const subs = categoriesStore.getSubcategories(categoryID);
+  return subs.find(sc => sc.id === subCategoryID)?.label ?? "";
 }
 
 /* =========================
@@ -232,14 +249,33 @@ function formatAmount(a: number) {
       <table>
         <tbody>
           <tr v-for="a in allocations" :key="a.id">
-            <td>{{ a.comment }}</td>
-            <td class="right">{{ formatAmount(a.amount) }}</td>
-            <td>
+            <!-- Texte -->
+            <td class="alloc-text">
+              <div class="alloc-comment">
+                {{ a.comment || "(no comment)" }}
+              </div>
+
+              <div class="alloc-category">
+                {{ categoryLabel(a.categoryID) }}
+                <span v-if="a.subCategoryID">
+                  › {{ subCategoryLabel(a.categoryID, a.subCategoryID) }}
+                </span>
+              </div>
+            </td>
+
+            <!-- Montant -->
+            <td class="right alloc-amount">
+              {{ formatAmount(a.amount) }}
+            </td>
+
+            <!-- Suppression -->
+            <td class="alloc-action">
               <button @click="removeAllocation(allocations.indexOf(a))">
                 ✕
               </button>
             </td>
           </tr>
+
         </tbody>
       </table>
     </section>
@@ -455,6 +491,91 @@ function formatAmount(a: number) {
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* =========================================================
+   Allocation list – readability (2.2)
+========================================================= */
+.allocation-row {
+  transition: background 0.15s ease;
+}
+
+.allocation-row:hover {
+  background: var(--primary-soft);
+}
+
+.allocation-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Catégorie / sous-catégorie = info principale */
+.allocation-category {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+/* Commentaire = secondaire */
+.allocation-comment {
+  font-size: 0.95rem;
+  opacity: 0.7;
+}
+
+/* Montant */
+.allocation-amount {
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* =========================================================
+   Allocation list — text hierarchy
+========================================================= */
+.alloc-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* commentaire = élément principal */
+.alloc-comment {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+/* catégorie / sous-catégorie = secondaire */
+.alloc-category {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+/* montant bien aligné */
+.alloc-amount {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* bouton delete discret mais clair */
+.alloc-action button {
+  background: none;
+  border: none;
+  color: var(--negative);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+/* Suppression rassurante */
+.allocation-action .remove {
+  background: none;
+  border: none;
+  color: var(--negative);
+  opacity: 0.5;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.allocation-action .remove:hover {
+  opacity: 1;
 }
 
 /* =========================================================
