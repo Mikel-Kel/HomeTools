@@ -349,11 +349,11 @@ onBeforeUnmount(() => {
         <!-- ✅ TABLE ALIGNÉE -->
         <table v-if="!isCollapsed(account.id)" class="spending-table">
           <colgroup>
-            <col class="col-date" />
-            <col class="col-party" />
-            <col class="col-owner" />
-            <col class="col-status" />
-            <col class="col-amount" />
+            <col class="col-date">
+            <col class="col-party">
+            <col class="col-owner">
+            <col class="col-status">
+            <col class="col-amount">
           </colgroup>
 
           <thead>
@@ -378,12 +378,10 @@ onBeforeUnmount(() => {
               <td>{{ record.owner }}</td>
               <td>
                 <span
-                  class="status-pill"
-                  :class="record.allocationStatus"
+                  :class="['status-pill', record.allocationStatus]"
                 >
                   {{ record.allocationStatus }}
-                </span>
-              </td>
+                </span>              </td>
               <td
                 class="right"
                 :class="record.amount >= 0 ? 'positive' : 'negative'"

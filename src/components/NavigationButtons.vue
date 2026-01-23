@@ -38,7 +38,7 @@ const showBack = level >= 2;
     <button
       class="nav-btn"
       @click="goHome"
-      title="Home",
+      title="Home"
       :disabled="disabled"
     >
       <AppIcon name="home" :size="32" />

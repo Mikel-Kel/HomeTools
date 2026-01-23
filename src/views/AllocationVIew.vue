@@ -211,18 +211,17 @@ function formatAmount(a: number) {
     <!-- =========================
          Allocations list
     ========================== -->
-    <table>
-      <tr v-for="a in allocations" :key="a.id">
-        <td>{{ a.comment }}</td>
-        <td class="right">{{ formatAmount(a.amount) }}</td>
-        <td>
-          <button @click="removeAllocation(allocations.indexOf(a))">
-            ✕
-          </button>
-        </td>
-      </tr>
+    <table class="alloc-table">
+      <tbody>
+        <tr v-for="(a, idx) in allocations" :key="a.id">
+          <td class="comment">{{ a.comment }}</td>
+          <td class="amount right">{{ formatAmount(a.amount) }}</td>
+          <td class="actions">
+            <button @click="removeAllocation(idx)">✕</button>
+          </td>
+        </tr>
+      </tbody>
     </table>
-
     <!-- =========================
          Footer
     ========================== -->
