@@ -24,11 +24,6 @@ const record: SpendingRecord = JSON.parse(props.record);
 ========================= */
 const categoriesStore = useCategories();
 
-onMounted(async () => {
-  await categoriesStore.load();
-  await loadDraft();
-});
-
 /* =========================
    Allocation logic
 ========================= */
@@ -54,14 +49,20 @@ const {
   release,
 } = useAllocation(String(record.id), record.amount);
 
+/* =========================
+   Lifecycle
+========================= */
 onMounted(async () => {
   await categoriesStore.load();
   await loadDraft();
 });
 
+/* =========================
+   Computed
+========================= */
 const absRemainingAmount = computed(() =>
   Math.abs(remainingAmount?.value ?? 0)
-);  
+);
 
 /* =========================
    Category filtering by sign
@@ -87,21 +88,21 @@ const subCategories = computed(() =>
 ========================= */
 async function onSaveDraft() {
   await saveDraft();
-  // ❌ on reste sur la page
+  // on reste sur la page
 }
 
 async function onRelease() {
   try {
-    await release();              // ⬅️ attend vraiment la fin
-    router.push({ name: "spending" }); // ⬅️ retour explicite
+    await release();                     // attend la fin réelle
+    router.push({ name: "spending" });   // retour explicite
   } catch (err) {
     console.error("Release failed", err);
-    // plus tard : toast / alert utilisateur
+    // plus tard : toast utilisateur
   }
 }
 
-function onClose() {
-  if (busy.value) return; // prevent closing while busy 
+function closeView() {
+  if (busy.value) return;
   router.push({ name: "spending" });
 }
 
@@ -113,16 +114,6 @@ function formatAmount(a: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-async function saveDraftAndBack() {
-  await saveDraft();
-  router.push({ name: "spending" }); // ⚠️ adapte le name si besoin
-}
-
-function closeView() {
-  if (busy.value) return;
-  router.push({ name: "spending" });
 }
 </script>
 

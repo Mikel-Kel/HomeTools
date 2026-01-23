@@ -12,7 +12,7 @@ export default defineConfig({
   },
   server: {
     allowedHosts: [
-      "horn-arch-chapel-archived.trycloudflare.com",
+      "webcams-chain-pleased-stands.trycloudflare.com",
     ],
   },
 });

@@ -15,6 +15,24 @@
 }
 
 /* =========================
+   Authorised Font & Sizes
+========================= */
+:root {
+  --font-family-base: system-ui, -apple-system, BlinkMacSystemFont,
+                    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-size-xs: 0.75rem;   /* badges, hints */
+  --font-size-sm: 0.85rem;   /* filters, metadata */
+  --font-size-md: 0.95rem;   /* contenu standard */
+  --font-size-lg: 1.05rem;   /* titres secondaires */
+  --font-size-xl: 1.25rem;   /* titres principaux */
+}
+
+html {
+  font-family: var(--font-family-base);
+  color: var(--text);
+}
+
+/* =========================
    Theme: Dark
 ========================= */
 [data-theme="dark"] {

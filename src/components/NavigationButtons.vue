@@ -5,11 +5,17 @@ import AppIcon from "@/components/AppIcon.vue";
 const router = useRouter();
 const route = useRoute();
 
+const props = defineProps<{
+  disabled?: boolean;
+}>();
+
 function goBack() {
+  if (props.disabled) return;
   router.back();
 }
 
 function goHome() {
+  if (props.disabled) return;
   router.push("/");
 }
 
@@ -23,6 +29,7 @@ const showBack = level >= 2;
       v-if="showBack"
       class="nav-btn"
       @click="goBack"
+      :disabled="disabled"
       title="Back"
     >
       <AppIcon name="back" :size="32" />
@@ -31,7 +38,8 @@ const showBack = level >= 2;
     <button
       class="nav-btn"
       @click="goHome"
-      title="Home"
+      title="Home",
+      :disabled="disabled"
     >
       <AppIcon name="home" :size="32" />
     </button>
