@@ -1,3 +1,74 @@
+/**
+ * ============================================================
+ * Allocation — Business rules & state machine
+ * ============================================================
+ *
+ * CORE PRINCIPLE
+ * --------------
+ * Allocation is driven by a single deterministic state machine.
+ * UI buttons (Save / Release) are derived ONLY from this state.
+ *
+ *
+ * STATES
+ * ------
+ * EMPTY     : no allocation yet
+ * EDITING   : allocations exist, remaining ≠ 0
+ * BALANCED  : allocations exist, remaining = 0, not drafted
+ * DRAFTED   : draft saved in Drive (drafts/)
+ * BUSY      : transient state during async Drive operations
+ *
+ *
+ * BUSINESS RULES
+ * --------------
+ *
+ * R1 — Save draft
+ *      A draft can be saved IF AND ONLY IF:
+ *        - remaining === 0
+ *        - state === BALANCED
+ *
+ * R2 — Release
+ *      A draft can be released IF AND ONLY IF:
+ *        - state === DRAFTED
+ *
+ * R3 — Draft invalidation
+ *      Any user modification AFTER a draft exists
+ *      (currently: allocation removal)
+ *      MUST:
+ *        - delete the draft file from Drive
+ *        - revert state to EDITING / BALANCED
+ *
+ * R4 — Post-save behavior
+ *      After a successful saveDraft:
+ *        - state becomes DRAFTED
+ *        - Save button is disabled
+ *        - Release button becomes available
+ *
+ * R5 — Auto-save
+ *      When user actions lead to remaining === 0
+ *      (typically after the last ADD),
+ *      a draft is automatically saved.
+ *
+ * R6 — Reopen released
+ *      When AllocationView is opened:
+ *        - if no draft exists
+ *        - but a released file exists
+ *      THEN:
+ *        - released file is moved back to drafts
+ *        - allocation becomes editable again
+ *        - state becomes DRAFTED
+ *
+ *
+ * TECHNICAL GUARANTEES
+ * --------------------
+ * - All async operations are serialized via runExclusive()
+ * - State transitions are explicit and centralized
+ * - No watcher-based side effects
+ * - UI derives from state, never the opposite
+ *
+ * ============================================================
+ */
+
+
 import { ref, computed } from "vue";
 import {
   listFilesInFolder,

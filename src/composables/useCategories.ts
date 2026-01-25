@@ -1,6 +1,7 @@
 import { ref, computed } from "vue";
 import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
 import { useDrive } from "@/composables/useDrive";
+import { googleAuthenticated } from "@/services/google/googleInit";
 
 /* =========================
    Types
