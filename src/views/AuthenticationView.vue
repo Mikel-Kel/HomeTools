@@ -1,26 +1,39 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { useRouter } from "vue-router";
+import PageHeader from "@/components/PageHeader.vue";
 import { useDrive } from "@/composables/useDrive";
 
 const router = useRouter();
 
 const {
-  connect,        // ← celui-ci vient de useDrive
-  driveReady,
+  connect,
+  driveStatus,
   driveBusy,
   driveError,
 } = useDrive();
 
+/* =========================
+   Derived state
+========================= */
+const isConnected = computed(
+  () => driveStatus.value === "CONNECTED"
+);
+
+/* =========================
+   Actions
+========================= */
 async function handleConnect() {
   try {
-    await connect(); // appel useDrive.connect()
-    router.push({ name: "home" }); // ✅ retour Home
+    await connect();
+    if (driveStatus.value === "CONNECTED") {
+      router.push({ name: "home" });
+    }
   } catch (err) {
     console.error(err);
   }
 }
 </script>
-
 
 <template>
   <PageHeader title="Authentication" icon="lock" />
@@ -33,9 +46,9 @@ async function handleConnect() {
 
     <button
       @click="handleConnect"
-      :disabled="driveBusy || driveReady"
+      :disabled="driveBusy || isConnected"
     >
-      {{ driveReady ? "Drive connected" : "Connect Google Drive" }}
+      {{ isConnected ? "Drive connected" : "Connect Google Drive" }}
     </button>
 
     <p v-if="driveBusy">Connecting…</p>
