@@ -13,6 +13,7 @@ export interface SpendingRecord {
   accountId: string;
   date: string;
   party: string;
+  partyID: number | null;
   amount: number;
   owner: string;
 }

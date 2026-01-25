@@ -128,7 +128,7 @@ async function findFileByName(folderId: string, filename: string) {
 /* =========================
    Composable
 ========================= */
-export function useAllocation(spendingId: string, spendingAmount: number) {
+export function useAllocation(spendingId: string, spendingAmount: number, partyID: number | null) {
   const { driveState } = useDrive();
 
   /* =========================
@@ -156,6 +156,7 @@ export function useAllocation(spendingId: string, spendingAmount: number) {
   /* =========================
      State (UI)
   ========================= */
+console.log("🎯 useAllocation partyID =", partyID);  
   const state = ref<AllocationState>("EMPTY");
   const busy = ref(false);
   const busyAction = ref<"save" | "release" | null>(null);
@@ -272,6 +273,7 @@ async function deleteDraftFileIfExists(): Promise<void> {
       {
         version: 1,
         spendingId,
+        partyID: partyID ?? null,
         savedAt: new Date().toISOString(),
         allocations: allocations.value,
       },
@@ -491,6 +493,7 @@ console.log("📊 allocations AFTER:", allocations.value);
           {
             version: 1,
             spendingId,
+            partyID: partyID ?? null,
             spendingAmount: Number(spendingAmount.toFixed(2)),
             currency: "CHF",
             releasedAt: new Date().toISOString(),

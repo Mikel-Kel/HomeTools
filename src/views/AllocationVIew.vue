@@ -3,51 +3,96 @@ import { computed, onMounted, nextTick, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
+import { useSpending } from "@/composables/spending/useSpending";
 import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
 
 import type { SpendingRecord } from "@/composables/spending/useSpending";
 
 /* =========================
-   Router
+   Router / Props
 ========================= */
 const router = useRouter();
+const props = defineProps<{ id: string }>();
 
 /* =========================
-   Props
+   Stores
 ========================= */
-const props = defineProps<{ record: string }>();
-const record: SpendingRecord = JSON.parse(props.record);
-
-/* =========================
-   Categories
-========================= */
+const spendingStore = useSpending();
 const categoriesStore = useCategories();
 
 /* =========================
-   Allocation logic
+   Record (nullable)
 ========================= */
-const {
-  allocations,
-  categoryID,
-  subCategoryID,
-  comment,
-  amount,
+const record = computed<SpendingRecord | null>(() =>
+  spendingStore.records.value.find(r => r.id === props.id) ?? null
+);
 
-  totalAllocated,
-  remainingAmount,
-  isBalanced,
-  canSaveDraft,
-  canRelease,
-  busy,
-  busyAction,
+const recordReady = computed(() => record.value !== null);
 
-  loadDraft,
-  addAllocation,
-  removeAllocation,
-  saveDraft,
-  release,
-} = useAllocation(String(record.id), record.amount);
+/* ✅ Alias NON NULL pour le template */
+const recordSafe = computed<SpendingRecord>(() => {
+  return record.value ?? ({} as SpendingRecord);
+});
+
+/* =========================
+   Allocation (créé seulement si record existe)
+========================= */
+const allocation = computed(() =>
+  record.value
+    ? useAllocation(
+        record.value.id,
+        record.value.amount,
+        record.value.partyID
+      )
+    : null
+);
+
+/* =========================
+   Exposition SAFE pour le template
+========================= */
+const allocations = computed(() => allocation.value?.allocations.value ?? []);
+
+const categoryID = computed<number | null>({
+  get: () => allocation.value?.categoryID.value ?? null,
+  set: v => allocation.value && (allocation.value.categoryID.value = v),
+});
+
+const subCategoryID = computed<number | null>({
+  get: () => allocation.value?.subCategoryID.value ?? null,
+  set: v =>
+    allocation.value && (allocation.value.subCategoryID.value = v),
+});
+
+const comment = computed<string>({
+  get: () => allocation.value?.comment.value ?? "",
+  set: v => allocation.value && (allocation.value.comment.value = v),
+});
+
+const amount = computed<number>({
+  get: () => allocation.value?.amount.value ?? 0,
+  set: v => allocation.value && (allocation.value.amount.value = v),
+});
+
+const totalAllocated = computed(
+  () => allocation.value?.totalAllocated.value ?? 0
+);
+const remainingAmount = computed(
+  () => allocation.value?.remainingAmount.value ?? 0
+);
+const isBalanced = computed(
+  () => allocation.value?.isBalanced.value ?? false
+);
+const canSaveDraft = computed(
+  () => allocation.value?.canSaveDraft.value ?? false
+);
+const canRelease = computed(
+  () => allocation.value?.canRelease.value ?? false
+);
+const busy = computed(() => allocation.value?.busy.value ?? false);
+const busyAction = computed(
+  () => allocation.value?.busyAction.value ?? null
+);
 
 /* =========================
    Focus
@@ -65,22 +110,22 @@ async function resetAmountToRemaining() {
 ========================= */
 onMounted(async () => {
   await categoriesStore.load();
-  await loadDraft();
-  await resetAmountToRemaining();
+
+  if (allocation.value) {
+    await allocation.value.loadDraft();
+    await resetAmountToRemaining();
+  }
 });
 
 /* =========================
-   Computed
+   Derived
 ========================= */
 const absRemainingAmount = computed(() =>
   Math.abs(remainingAmount.value)
 );
 
-/* =========================
-   Category filtering by sign
-========================= */
 const allowedNature = computed(() =>
-  record.amount >= 0 ? "I" : "E"
+  record.value && record.value.amount >= 0 ? "I" : "E"
 );
 
 const categories = computed(() =>
@@ -96,7 +141,7 @@ const subCategories = computed(() =>
 );
 
 /* =========================
-   Category helpers
+   Helpers (MANQUANTS AVANT)
 ========================= */
 function categoryLabel(id: number | null) {
   return id == null
@@ -127,21 +172,22 @@ function formatAmount(a: number) {
    Actions
 ========================= */
 async function onAddAllocation() {
-  await addAllocation();
+  if (!allocation.value) return;
+  await allocation.value.addAllocation();
   await resetAmountToRemaining();
 }
 
 async function onSaveDraft() {
-  await saveDraft();
+  await allocation.value?.saveDraft();
 }
 
 async function onRelease() {
-  await release();
+  await allocation.value?.release();
   router.push({ name: "spending" });
 }
 
 async function onRemoveAllocation(index: number) {
-  await removeAllocation(index);
+  await allocation.value?.removeAllocation(index);
 }
 
 function closeView() {
@@ -152,8 +198,10 @@ function closeView() {
 
 <template>
   <PageHeader title="Allocation" icon="shopping_cart" />
-
-  <div class="allocation-view">
+  <div v-if="!recordReady" class="loading">
+    <p>Loading allocation...</p>
+  </div>
+  <div v-else class="allocation-view">  
     <!-- Busy overlay -->
     <div v-if="busy" class="busy-overlay">
       <div class="busy-box">
@@ -167,19 +215,19 @@ function closeView() {
     </div>
 
     <!-- =========================
-         1. Record summary
+        1. Record summary
     ========================== -->
     <section class="allocation-record">
       <div class="record-main">
-        <div class="record-party">{{ record.party }}</div>
-        <div class="record-meta">{{ record.date }}</div>
+        <div class="record-party">{{ recordSafe.party }}</div>
+        <div class="record-meta">{{ recordSafe.date }}</div>
       </div>
 
       <div class="record-amounts">
         <div class="amount-box total">
           <div class="amount-label">Total</div>
           <div class="amount-value">
-            {{ formatAmount(Math.abs(record.amount)) }}
+            {{ formatAmount(Math.abs(recordSafe.amount)) }}
           </div>
         </div>
 
@@ -196,7 +244,7 @@ function closeView() {
     </section>
 
     <!-- =========================
-         2. Allocation form
+        2. Allocation form
     ========================== -->
     <section class="allocation-form">
       <div class="form-row">
@@ -241,7 +289,7 @@ function closeView() {
     <div class="allocation-separator"></div>
 
     <!-- =========================
-         3. Allocations list
+        3. Allocations list
     ========================== -->
     <section class="allocation-list">
       <table>
@@ -274,7 +322,7 @@ function closeView() {
     </section>
 
     <!-- =========================
-         4. Footer actions
+        4. Footer actions
     ========================== -->
     <footer class="allocation-footer">
       <div class="footer-total">

@@ -9,6 +9,7 @@ export interface BackendSpendingRow {
   Account: string;
   Comment?: string;
   PartyName: string;
+  PartyID?: number;
   ValueDate: string;
   ExpenseOwner: string;
 }
@@ -28,7 +29,6 @@ export function transformSpendingRaw(
 
   const accountMap = new Map<string, Account>();
   const records: SpendingRecord[] = [];
-
   for (const row of raw) {
     if (
       !row.FITID ||
@@ -54,6 +54,7 @@ export function transformSpendingRaw(
       accountId: row.Account,
       date: row.ValueDate,
       party: row.PartyName,
+      partyID: row.PartyID ?? null,
       amount: row.Amount,
       owner: row.ExpenseOwner,
     });

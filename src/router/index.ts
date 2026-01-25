@@ -36,7 +36,7 @@ const router = createRouter({
       meta: { level: 1, title: "Contact", requiresDrive: true },
     },
     {
-      path: "/allocation/:record",
+      path: "/allocation/:id",
       name: "allocation",
       component: AllocationView,
       props: true,
