@@ -61,6 +61,35 @@ async function driveFetch(
 }
 
 /* =========================
+   Find subfolder by name
+========================= */
+export async function findFolderByName(
+  parentId: string,
+  folderName: string
+): Promise<DriveItem | null> {
+  const q =
+    `'${parentId}' in parents and ` +
+    `mimeType='application/vnd.google-apps.folder' and ` +
+    `name='${folderName}' and trashed=false`;
+
+  const url =
+    `${DRIVE_BASE}/files` +
+    `?q=${encodeURIComponent(q)}` +
+    `&spaces=drive` +
+    `&includeItemsFromAllDrives=true` +
+    `&supportsAllDrives=true` +
+    `&fields=files(id,name,mimeType)`;
+
+  const res = await driveFetch(url);
+  if (!res.ok) {
+    throw new Error(`[Drive] findFolderByName HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.files?.[0] ?? null;
+}
+
+/* =========================
    List files in folder
 ========================= */
 export async function listFilesInFolder(
@@ -201,3 +230,4 @@ export async function deleteFile(fileId: string): Promise<void> {
     throw new Error(`[Drive] deleteFile HTTP ${res.status}`);
   }
 }
+

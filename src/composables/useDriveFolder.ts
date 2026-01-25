@@ -39,20 +39,20 @@ export function useDriveFolder(
   async function resolveFolderId(): Promise<string> {
     if (!folderName) return parentId;
 
-    if (!folder.value) {
-      const found = await findFolderByName(
-        parentId,
-        folderName
-      );
+    let current = folder.value;
+
+    if (!current) {
+      const found = await findFolderByName(parentId, folderName);
       if (!found) {
         throw new Error(
           `[Drive] Folder '${folderName}' not found`
         );
       }
       folder.value = found;
+      current = found;
     }
 
-    return folder.value.id;
+    return current.id;
   }
 
   /* =========================
