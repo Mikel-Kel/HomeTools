@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { watch, onMounted, onBeforeUnmount, computed, ref } from "vue";
+import { onMounted, onBeforeUnmount, computed, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
 import { listFilesInFolder } from "@/services/google/googleDrive";
 import { loadJSONFromFolder } from "@/services/google/driveRepository";
-import { useSpending, type SpendingWithStatus, type AllocationStatus } from "@/composables/spending/useSpending";
+import {
+  useSpending,
+  type SpendingWithStatus,
+  type AllocationStatus,
+} from "@/composables/spending/useSpending";
 import { useDrive } from "@/composables/useDrive";
 import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
 
@@ -31,11 +35,14 @@ const maxAmount = ref<number | null>(null);
    Collapse accounts
 ========================= */
 const collapsedAccounts = ref<Set<string>>(new Set());
+
 const toggleAccount = (id: string) =>
   collapsedAccounts.value.has(id)
     ? collapsedAccounts.value.delete(id)
     : collapsedAccounts.value.add(id);
-const isCollapsed = (id: string) => collapsedAccounts.value.has(id);
+
+const isCollapsed = (id: string) =>
+  collapsedAccounts.value.has(id);
 
 /* =========================
    Helpers
@@ -44,15 +51,17 @@ const accounts = computed(() => spending.accounts.value);
 
 const availableOwners = computed(() => {
   const set = new Set<string>();
-
   spending.records.value.forEach(r => {
     if (r.owner) set.add(r.owner);
   });
-
   return Array.from(set).sort();
 });
 
-const allStatuses: AllocationStatus[] = ["none", "draft", "released"];
+const allStatuses: AllocationStatus[] = [
+  "none",
+  "draft",
+  "released",
+];
 
 function toggleStatus(status: AllocationStatus) {
   statusFilter.value.has(status)
@@ -62,12 +71,15 @@ function toggleStatus(status: AllocationStatus) {
 
 const isStatusActive = (s: AllocationStatus) =>
   statusFilter.value.has(s);
+
 function toggleOwner(owner: string) {
   ownerFilter.value.has(owner)
     ? ownerFilter.value.delete(owner)
     : ownerFilter.value.add(owner);
 }
-const isOwnerActive = (o: string) => ownerFilter.value.has(o);
+
+const isOwnerActive = (o: string) =>
+  ownerFilter.value.has(o);
 
 const isAllStatusesActive = computed(
   () => statusFilter.value.size === 0
@@ -109,20 +121,29 @@ function selectAllStatuses() {
 }
 
 function recordsFor(accountId: string) {
-  return applyFilters(spending.getRecordsForAccount(accountId));
+  return applyFilters(
+    spending.getRecordsForAccount(accountId)
+  );
 }
 
 function totalFor(accountId: string) {
-  return recordsFor(accountId).reduce((s, r) => s + r.amount, 0);
+  return recordsFor(accountId).reduce(
+    (s, r) => s + r.amount,
+    0
+  );
 }
 
 const remainingAmount = computed(() =>
-  accounts.value.reduce((sum, account) => sum + totalFor(account.id), 0)
+  accounts.value.reduce(
+    (sum, account) => sum + totalFor(account.id),
+    0
+  )
 );
 
 const absRemainingAmount = computed(() =>
   Math.abs(remainingAmount.value)
 );
+
 /* =========================
    Formatting
 ========================= */
@@ -136,7 +157,9 @@ function formatAmount(amount: number) {
     })
   );
 }
-const formatDate = (d: string) => new Date(d).toLocaleDateString();
+
+const formatDate = (d: string) =>
+  new Date(d).toLocaleDateString();
 
 /* =========================
    Navigation
@@ -152,71 +175,63 @@ function openAllocation(record: SpendingWithStatus) {
    Drive loader
 ========================= */
 async function loadFromDrive() {
-  if (!driveState.value) return;
+  const folderId =
+    driveState.value!.folders.spending;
 
-  try {
-    const folderId = driveState.value.folders.spending;
+  const raw = await loadJSONFromFolder<any>(
+    folderId,
+    "spending.json"
+  );
+  if (!raw) return;
 
-    const raw = await loadJSONFromFolder<any>(
-      folderId,
-      "spending.json"
-    );
-    if (!raw) return;
+  const { accounts, records } =
+    transformSpendingRaw(raw);
 
-    const { accounts, records } = transformSpendingRaw(raw);
+  // backend = vérité
+  spending.replaceAll(accounts, records);
 
-    // backend = vérité
-    spending.replaceAll(accounts, records);
-
-    // statuts depuis Drive
-    await loadAllocationStatusFromDrive();
-  } catch (err: any) {
-    if (err.message === "DRIVE_SESSION_EXPIRED") {
-      console.warn("🔐 Google Drive disconnected (handled in view)");
-      // 👉 ici plus tard : toast / banner / bouton reconnect
-      return;
-    }
-    throw err;
-  }
+  // statuts depuis Drive
+  await loadAllocationStatusFromDrive();
 }
 
 async function loadAllocationStatusFromDrive() {
-  if (!driveState.value) return;
+  const draftsFolder =
+    driveState.value!.folders.allocations.drafts;
+  const releasedFolder =
+    driveState.value!.folders.allocations.released;
 
-  try {
-    const draftsFolder =
-      driveState.value.folders.allocations.drafts;
-    const releasedFolder =
-      driveState.value.folders.allocations.released;
-
-    const [draftFiles, releasedFiles] = await Promise.all([
+  const [draftFiles, releasedFiles] =
+    await Promise.all([
       listFilesInFolder(draftsFolder),
       listFilesInFolder(releasedFolder),
     ]);
 
-    const draftIds = new Set(
-      draftFiles.map(f => f.name.replace(".json", ""))
-    );
-    const releasedIds = new Set(
-      releasedFiles.map(f => f.name.replace(".json", ""))
-    );
+  const draftIds = new Set(
+    draftFiles.map(f =>
+      f.name.replace(".json", "")
+    )
+  );
+  const releasedIds = new Set(
+    releasedFiles.map(f =>
+      f.name.replace(".json", "")
+    )
+  );
 
-    spending.applyAllocationStatus(draftIds, releasedIds);
-  } catch (err: any) {
-    if (err.message === "DRIVE_SESSION_EXPIRED") return;
-    throw err;
-  }
+  spending.applyAllocationStatus(
+    draftIds,
+    releasedIds
+  );
 }
 
 /* =========================
    Lifecycle
 ========================= */
+onMounted(loadFromDrive);
 
-onMounted(() => driveState.value && loadFromDrive());
-watch(() => driveState.value, s => s && loadFromDrive());
-
+/* =========================
+   Sticky header sizing
+========================= */
 const stickyRef = ref<HTMLElement | null>(null);
-
 let ro: ResizeObserver | null = null;
 
 onMounted(() => {
@@ -225,23 +240,24 @@ onMounted(() => {
 
   const apply = () => {
     const h = el.getBoundingClientRect().height;
-    el.style.setProperty("--sticky-height", `${Math.ceil(h)}px`);
+    el.style.setProperty(
+      "--sticky-height",
+      `${Math.ceil(h)}px`
+    );
   };
 
   apply();
-
-  ro = new ResizeObserver(() => apply());
+  ro = new ResizeObserver(apply);
   ro.observe(el);
 });
 
 onBeforeUnmount(() => {
-  if (ro && stickyRef.value) ro.unobserve(stickyRef.value);
+  if (ro && stickyRef.value)
+    ro.unobserve(stickyRef.value);
   ro = null;
 });
-
-
 </script>
-
+  
 <template>
   <PageHeader title="Spending" icon="shopping_cart" />
 

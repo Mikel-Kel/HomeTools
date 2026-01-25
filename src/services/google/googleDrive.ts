@@ -1,11 +1,22 @@
-// src/services/google/googleDrive.ts
-import { log } from "@/utils/logger"; 
+/**
+ * =========================================================
+ * Google Drive low-level API
+ * ---------------------------------------------------------
+ * Règles STRICTES :
+ * 1. Ne JAMAIS appeler Drive si driveStatus !== CONNECTED
+ * 2. Un 401 invalide TOUTE la session (expire())
+ * 3. AUCUN état local caché
+ * 4. Toute erreur Drive remonte (pas swallow)
+ * =========================================================
+ */
+
 import { getAccessToken } from "./googleInit";
+import { useDrive } from "@/composables/useDrive";
 
 const DRIVE_BASE = "https://www.googleapis.com/drive/v3";
 
 /* =========================
-   Types Drive
+   Types
 ========================= */
 export type DriveItem = {
   id: string;
@@ -15,24 +26,21 @@ export type DriveItem = {
 };
 
 /* =========================
-   Drive session state
-========================= */
-let driveAuthorized = true;
-
-/* =========================
-   Helper fetch Drive REST
+   Core fetch helper
 ========================= */
 async function driveFetch(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  if (!driveAuthorized) {
-    throw new Error("DRIVE_UNAUTHORIZED");
+  const { driveStatus, expire } = useDrive();
+
+  if (driveStatus.value !== "CONNECTED") {
+    throw new Error("DRIVE_UNAVAILABLE");
   }
 
   const token = getAccessToken();
   if (!token) {
-    driveAuthorized = false;
+    expire("Missing access token");
     throw new Error("DRIVE_UNAUTHORIZED");
   }
 
@@ -45,8 +53,7 @@ async function driveFetch(
   });
 
   if (res.status === 401) {
-    console.warn("[Drive] 401 Unauthorized – token expired");
-    driveAuthorized = false; // 🔴 coupe tout
+    expire("HTTP 401 Unauthorized");
     throw new Error("DRIVE_UNAUTHORIZED");
   }
 
@@ -54,28 +61,7 @@ async function driveFetch(
 }
 
 /* =========================
-   TEST — List My Drive root
-========================= */
-export async function listMyDriveRoot(): Promise<DriveItem[]> {
-  const res = await driveFetch(
-    `${DRIVE_BASE}/files` +
-      `?spaces=drive` +
-      `&includeItemsFromAllDrives=true` +
-      `&supportsAllDrives=true` +
-      `&pageSize=20` +
-      `&fields=files(id,name,mimeType)`
-  );
-
-  if (!res.ok) {
-    throw new Error(`[Drive] root list HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  return data.files ?? [];
-}
-
-/* =========================
-   List items in folder
+   List files in folder
 ========================= */
 export async function listFilesInFolder(
   folderId: string
@@ -100,36 +86,7 @@ export async function listFilesInFolder(
 }
 
 /* =========================
-   Find subfolder by name
-========================= */
-export async function findFolderByName(
-  parentId: string,
-  folderName: string
-): Promise<DriveItem | null> {
-  const q =
-    `'${parentId}' in parents and ` +
-    `mimeType='application/vnd.google-apps.folder' and ` +
-    `name='${folderName}' and trashed=false`;
-
-  const url =
-    `${DRIVE_BASE}/files` +
-    `?q=${encodeURIComponent(q)}` +
-    `&spaces=drive` +
-    `&includeItemsFromAllDrives=true` +
-    `&supportsAllDrives=true` +
-    `&fields=files(id,name,mimeType)`;
-
-  const res = await driveFetch(url);
-  if (!res.ok) {
-    throw new Error(`[Drive] findFolder HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  return data.files?.[0] ?? null;
-}
-
-/* =========================
-   Read JSON file (by id)
+   Read JSON file
 ========================= */
 export async function readJSON<T = any>(
   fileId: string
@@ -146,7 +103,7 @@ export async function readJSON<T = any>(
 }
 
 /* =========================
-   Write JSON file
+   Write JSON file (create / update)
 ========================= */
 export async function writeJSON(
   folderId: string,
@@ -154,6 +111,16 @@ export async function writeJSON(
   data: any,
   existingFileId?: string
 ): Promise<string> {
+  const { driveStatus } = useDrive();
+  if (driveStatus.value !== "CONNECTED") {
+    throw new Error("DRIVE_UNAVAILABLE");
+  }
+
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error("DRIVE_UNAUTHORIZED");
+  }
+
   const metadata = {
     name: filename,
     parents: existingFileId ? undefined : [folderId],
@@ -173,9 +140,6 @@ export async function writeJSON(
     })
   );
 
-  const token = getAccessToken();
-  if (!token) throw new Error("[Drive] Not authenticated");
-
   const url = existingFileId
     ? `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart&supportsAllDrives=true`
     : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
@@ -188,6 +152,12 @@ export async function writeJSON(
     body: form,
   });
 
+  if (res.status === 401) {
+    const { expire } = useDrive();
+    expire("HTTP 401 during writeJSON");
+    throw new Error("DRIVE_UNAUTHORIZED");
+  }
+
   if (!res.ok) {
     throw new Error(`[Drive] writeJSON HTTP ${res.status}`);
   }
@@ -196,10 +166,20 @@ export async function writeJSON(
   return result.id;
 }
 
+/* =========================
+   Delete file
+========================= */
 export async function deleteFile(fileId: string): Promise<void> {
+  const { driveStatus, expire } = useDrive();
+
+  if (driveStatus.value !== "CONNECTED") {
+    throw new Error("DRIVE_UNAVAILABLE");
+  }
+
   const token = getAccessToken();
   if (!token) {
-    throw new Error("[Drive] Not authenticated");
+    expire("Missing token during delete");
+    throw new Error("DRIVE_UNAUTHORIZED");
   }
 
   const res = await fetch(
@@ -212,23 +192,12 @@ export async function deleteFile(fileId: string): Promise<void> {
     }
   );
 
+  if (res.status === 401) {
+    expire("HTTP 401 during delete");
+    throw new Error("DRIVE_UNAUTHORIZED");
+  }
+
   if (!res.ok) {
-    throw new Error(
-      `[Drive] deleteFile HTTP ${res.status}`
-    );
+    throw new Error(`[Drive] deleteFile HTTP ${res.status}`);
   }
 }
-
-/* =========================
-   Debug
-========================= */
-console.log("googleDrive exports", {
-  listFilesInFolder,
-  readJSON,
-  writeJSON,
-  deleteFile,
-});
-
-log.info("googleDrive exports loaded", {
-  listMyDriveRoot,
-});
