@@ -97,6 +97,8 @@ type AllocationState =
   | "DRAFTED"   // draft sauvegardé
   | "BUSY";     // transition
 
+const loading = ref(true);
+
 /* =========================
    Helpers Drive
 ========================= */
@@ -159,8 +161,8 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
 console.log("🎯 useAllocation partyID =", partyID);  
   const state = ref<AllocationState>("EMPTY");
   const busy = ref(false);
-  const busyAction = ref<"save" | "release" | null>(null);
-
+  const busyAction = ref<"load" | "save" | "release" | null>(null);
+  
   /* =========================
      Domain data
   ========================= */
@@ -286,32 +288,26 @@ async function deleteDraftFileIfExists(): Promise<void> {
   ========================= */
 
   async function loadDraft(): Promise<void> {
-console.group("📥 loadDraft()");
-console.log("🆔 spendingId:", spendingId);
+    loading.value = true; // 🔑 cycle de vie UI : chargement initial
+
     return runExclusive(async () => {
-      if (!driveAvailable()) return;
+      if (!driveAvailable()) {
+        loading.value = false;
+        return;
+      }
 
       busy.value = true;
-      busyAction.value = null;
-/*      state.value = "BUSY";*/
+      busyAction.value = "load";
+      /* state.value = "BUSY"; */
 
       try {
         const draftsFolder = driveState.value!.folders.allocations.drafts;
         const filename = `${spendingId}.json`;
 
-/*        const file = await findFileByName(draftsFolder, filename);
-        if (!file) {
-          // pas de draft → état dépend du local
-          state.value = "EMPTY";
-          recomputeLocalState();
-          return;
-         }
-*/
         let file = await findFileByName(draftsFolder, filename);
 
         if (!file) {
           const reopened = await reopenReleasedIfExists();
-
           if (reopened) {
             file = await findFileByName(draftsFolder, filename);
           }
@@ -326,12 +322,11 @@ console.log("🆔 spendingId:", spendingId);
 
         const raw = await readJSON<any>(file.id);
         if (!Array.isArray(raw?.allocations)) {
-          // draft invalide → on ne casse pas tout
+          // draft invalide → on repart proprement
           state.value = "EMPTY";
           recomputeLocalState();
           return;
         }
-console.log("📄 Draft content:", raw);
 
         allocations.value = raw.allocations.map((a: any) => ({
           id: crypto.randomUUID(),
@@ -341,9 +336,7 @@ console.log("📄 Draft content:", raw);
           amount: Number(Number(a.amount).toFixed(2)),
         }));
 
-        // draft chargé ⇒ état DRAFTED (même si remaining ≠ 0, on respecte le fait "draft existe")
-        // (si tu veux forcer la cohérence, on peut invalider automatiquement,
-        //  mais tu n’as pas demandé ça)
+        // draft chargé ⇒ état DRAFTED (prioritaire sur le calcul local)
         state.value = "DRAFTED";
 
         // preset montant
@@ -351,13 +344,7 @@ console.log("📄 Draft content:", raw);
       } finally {
         busy.value = false;
         busyAction.value = null;
-
-        // si on n’est pas DRAFTED, on recalcule l’état local
-/*        if (state.value !== "DRAFTED") {
-          recomputeLocalState();
-        }*/
-console.log("🏁 loadDraft done — state:", state.value);
-console.groupEnd();        
+        loading.value = false; // 🔑 fin définitive du "Loading…"
       }
     });
   }
@@ -412,15 +399,10 @@ console.groupEnd();
   }
 
   async function removeAllocation(index: number): Promise<void> {
-console.group("🗑️ removeAllocation()");
-console.log("📌 index:", index);
-console.log("📊 allocations BEFORE:", allocations.value);
-console.log("📍 state BEFORE:", state.value);    
     return runExclusive(async () => {
       if (index < 0 || index >= allocations.value.length) return;
 
       allocations.value.splice(index, 1);
-console.log("📊 allocations AFTER:", allocations.value);
       presetAmount();
 
       // 🔑 règle métier : toute suppression invalide un draft éventuel
@@ -573,6 +555,7 @@ console.log("📊 allocations AFTER:", allocations.value);
     hasDraft,
 
     // busy
+    loading,
     busy,
     busyAction,
 

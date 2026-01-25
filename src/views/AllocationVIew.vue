@@ -35,9 +35,21 @@ const recordSafe = computed<SpendingRecord>(() => {
   return record.value ?? ({} as SpendingRecord);
 });
 
+const allocationSafe = computed(() => {
+  return allocation.value ?? {
+    loading: ref(true),
+    busy: ref(false),
+    busyAction: ref(null),
+  };
+});
+
 /* =========================
    Allocation (créé seulement si record existe)
 ========================= */
+const loading = computed(() => allocationSafe.value.loading.value);
+const busy = computed(() => allocationSafe.value.busy.value);
+const busyAction = computed(() => allocationSafe.value.busyAction.value);
+
 const allocation = computed(() =>
   record.value
     ? useAllocation(
@@ -89,10 +101,19 @@ const canSaveDraft = computed(
 const canRelease = computed(
   () => allocation.value?.canRelease.value ?? false
 );
-const busy = computed(() => allocation.value?.busy.value ?? false);
-const busyAction = computed(
-  () => allocation.value?.busyAction.value ?? null
-);
+
+const busyMessage = computed(() => {
+  if (loading.value) return "Loading…";
+
+  switch (busyAction.value) {
+    case "save":
+      return "Saving…";
+    case "release":
+      return "Releasing…";
+    default:
+      return "";
+  }
+});
 
 /* =========================
    Focus
@@ -198,18 +219,17 @@ function closeView() {
 
 <template>
   <PageHeader title="Allocation" icon="shopping_cart" />
+
   <div v-if="!recordReady" class="loading">
     <p>Loading allocation...</p>
   </div>
   <div v-else class="allocation-view">  
     <!-- Busy overlay -->
-    <div v-if="busy" class="busy-overlay">
-      <div class="busy-box">
+      <div v-if="loading || busy" class="busy-overlay">
+        <div class="busy-box">
         <div class="spinner"></div>
         <div class="busy-text">
-          {{ busyAction === "release"
-            ? "Releasing… please wait"
-            : "Saving… please wait" }}
+          {{ busyMessage }}
         </div>
       </div>
     </div>
@@ -642,12 +662,61 @@ button:disabled {
 /* =========================================================
    Busy overlay (inchangé mais positionné)
 ========================================================= */
+/* =========================================================
+   Busy HUD — iOS style
+========================================================= */
 .busy-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
   z-index: 999;
   display: flex;
   align-items: center;
   justify-content: center;
-}</style>
+}
+
+/* Le panneau flottant */
+.busy-box {
+  min-width: 160px;
+  max-width: 220px;
+  padding: 14px 16px;
+  border-radius: 14px;
+
+  background: rgba(255, 255, 255, 0.85);
+  color: #111;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.15);
+
+  text-align: center;
+}
+
+/* Texte */
+.busy-text {
+  font-size: 0.85rem;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+/* Spinner iOS-like */
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  border-top-color: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+</style>
