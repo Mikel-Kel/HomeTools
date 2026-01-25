@@ -6,6 +6,7 @@ import {
   deleteFile,
 } from "@/services/google/googleDrive";
 import { useDrive } from "@/composables/useDrive";
+import { googleAuthenticated } from "@/services/google/googleInit";
 
 /* =========================
    Types
@@ -18,129 +19,452 @@ export interface Allocation {
   amount: number;
 }
 
+type AllocationState =
+  | "EMPTY"     // aucune allocation
+  | "EDITING"   // remaining != 0
+  | "BALANCED"  // remaining == 0, pas drafté
+  | "DRAFTED"   // draft sauvegardé
+  | "BUSY";     // transition
+
 /* =========================
-   Helpers
+   Helpers Drive
 ========================= */
-async function findFileByName(
-  folderId: string,
-  filename: string
-) {
+/*async function findFileByName(folderId: string, filename: string) {
   const files = await listFilesInFolder(folderId);
-  return files.find(f => f.name === filename) ?? null;
+  return files.find((f) => f.name === filename) ?? null;
 }
-async function reopenReleasedIfNeeded(
-  spendingId: string,
-  draftsFolder: string,
-  releasedFolder: string
-): Promise<void> {
-  const filename = `${spendingId}.json`;
+*/
+async function findFileByName(folderId: string, filename: string) {
+  console.groupCollapsed("🔍 findFileByName");
+  console.log("📁 folderId:", folderId);
+  console.log("📄 filename:", filename);
 
-  // 1️⃣ draft existe déjà → rien à faire
-  const draft = await findFileByName(draftsFolder, filename);
-  if (draft) return;
+  const files = await listFilesInFolder(folderId);
 
-  // 2️⃣ released existe ?
-  const released = await findFileByName(releasedFolder, filename);
-  if (!released) return;
-
-  // 3️⃣ déplacer released → drafts
-  const data = await readJSON<any>(released.id);
-
-  await writeJSON(
-    draftsFolder,
-    filename,
-    data
+  console.log(
+    "📦 files returned:",
+    files.map(f => ({ id: f.id, name: f.name }))
   );
 
-  await deleteFile(released.id);
+  const found = files.find(f => f.name === filename) ?? null;
 
-  console.info(
-    `🔁 Allocation ${spendingId} moved from released → drafts`
-  );
+  console.log("🎯 found:", found);
+  console.groupEnd();
+
+  return found;
 }
 
 /* =========================
    Composable
 ========================= */
-export function useAllocation(
-  spendingId: string,
-  spendingAmount: number
-) {
+export function useAllocation(spendingId: string, spendingAmount: number) {
   const { driveState } = useDrive();
 
-  
   /* =========================
-     State
+     Drive availability
   ========================= */
+  function driveAvailable(): boolean {
+    return !!driveState.value && googleAuthenticated.value;
+  }
+
+  /* =========================
+     Mutex (serialize async ops)
+     → évite les courses "click + autosave + delete"
+  ========================= */
+  let chain = Promise.resolve();
+  function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const next = chain.then(fn, fn);
+    // ne casse pas la chaîne en cas d’erreur
+    chain = next.then(
+      () => undefined,
+      () => undefined
+    ) as unknown as Promise<void>;
+    return next;
+  }
+
+  /* =========================
+     State (UI)
+  ========================= */
+  const state = ref<AllocationState>("EMPTY");
   const busy = ref(false);
   const busyAction = ref<"save" | "release" | null>(null);
 
+  /* =========================
+     Domain data
+  ========================= */
   const allocations = ref<Allocation[]>([]);
 
   const categoryID = ref<number | null>(null);
   const subCategoryID = ref<number | null>(null);
   const comment = ref<string>("");
-
   const amount = ref<number>(Math.abs(spendingAmount));
 
-  const hasDraft = ref(false);
-  const draftLoaded = ref(false);
-
   /* =========================
-     Computed
+     Computed amounts
   ========================= */
   const totalAllocated = computed(() =>
     allocations.value.reduce((s, a) => s + a.amount, 0)
   );
 
-  const remainingAmount = computed(() =>
-    spendingAmount - totalAllocated.value
-  );
+  const remainingAmount = computed(() => spendingAmount - totalAllocated.value);
 
-  const isBalanced = computed(() =>
-    Number(remainingAmount.value.toFixed(2)) === 0
-  );
-
-  const canSaveDraft = computed(() =>
-    isBalanced.value
-  );
-
-  const canRelease = computed(() =>
-    isBalanced.value && hasDraft.value
+  const isBalanced = computed(
+    () => Number(remainingAmount.value.toFixed(2)) === 0
   );
 
   /* =========================
-     Allocation editing
+     UI flags (DERIVED ONLY)
+     - pas des états métier supplémentaires
   ========================= */
-  function addAllocation() {
-    if (!categoryID.value || !subCategoryID.value) return;
-    if (!Number.isFinite(amount.value) || amount.value === 0) return;
+  const hasDraft = computed(() => state.value === "DRAFTED");
+  const canSaveDraft = computed(() => state.value === "BALANCED");
+  const canRelease = computed(() => state.value === "DRAFTED");
 
-    const signed =
-      spendingAmount < 0
-        ? -Math.abs(amount.value)
-        : Math.abs(amount.value);
+  /* =========================
+     Local state recomputation
+     (pure, sans Drive)
+  ========================= */
+  function recomputeLocalState(base?: AllocationState) {
+    // base: état actuel (si on veut préserver DRAFTED/BUSY)
+    const current = base ?? state.value;
 
-    allocations.value.push({
-      id: crypto.randomUUID(),
-      categoryID: categoryID.value,
-      subCategoryID: subCategoryID.value,
-      comment: comment.value.trim() || "No comment typed by user",
-      amount: Number(signed.toFixed(2)),
-    });
+    // On ne “recalcule” pas DRAFTED/BUSY automatiquement :
+    // ces états sont posés explicitement après succès Drive.
+    if (current === "DRAFTED" || current === "BUSY") return;
 
-    resetForm();
+    if (allocations.value.length === 0) {
+      state.value = "EMPTY";
+      return;
+    }
+
+    state.value = isBalanced.value ? "BALANCED" : "EDITING";
   }
 
-  function removeAllocation(index: number) {
-    allocations.value.splice(index, 1);
-    presetAmount();
+  /* =========================
+     Draft file helpers
+  ========================= */
+/*  async function deleteDraftFileIfExists(): Promise<void> {
+    if (!driveAvailable()) return;
+
+    const draftsFolder = driveState.value!.folders.allocations.drafts;
+    const filename = `${spendingId}.json`;
+
+    const existing = await findFileByName(draftsFolder, filename);
+    if (existing) {
+      await deleteFile(existing.id);
+    }
+  }
+*/
+async function deleteDraftFileIfExists(): Promise<void> {
+  console.group("🔥 deleteDraftFileIfExists");
+
+  if (!driveAvailable()) {
+    console.warn("🚫 Drive not available");
+    console.groupEnd();
+    return;
   }
 
-  function presetAmount() {
-    amount.value = Number(
-      Math.abs(remainingAmount.value).toFixed(2)
+  const folder = driveState.value!.folders.allocations.drafts;
+  const filename = `${spendingId}.json`;
+
+  console.log("📁 draftsFolder:", folder);
+  console.log("📄 filename:", filename);
+
+  const existing = await findFileByName(folder, filename);
+
+  if (!existing) {
+    console.warn("❌ Draft file NOT FOUND → nothing deleted");
+    console.groupEnd();
+    return;
+  }
+
+  console.log("🧨 Deleting draft file:", existing);
+  await deleteFile(existing.id);
+  console.log("✅ Draft file deleted");
+
+  console.groupEnd();
+}
+
+
+  async function saveDraftInternal(): Promise<void> {
+    if (!driveAvailable()) return;
+
+    const draftsFolder = driveState.value!.folders.allocations.drafts;
+    const filename = `${spendingId}.json`;
+
+    // upsert (évite doublons)
+    const existing = await findFileByName(draftsFolder, filename);
+
+    await writeJSON(
+      draftsFolder,
+      filename,
+      {
+        version: 1,
+        spendingId,
+        savedAt: new Date().toISOString(),
+        allocations: allocations.value,
+      },
+      existing?.id
     );
+  }
+
+  /* =========================
+     Public actions
+  ========================= */
+
+  async function loadDraft(): Promise<void> {
+console.group("📥 loadDraft()");
+console.log("🆔 spendingId:", spendingId);
+    return runExclusive(async () => {
+      if (!driveAvailable()) return;
+
+      busy.value = true;
+      busyAction.value = null;
+/*      state.value = "BUSY";*/
+
+      try {
+        const draftsFolder = driveState.value!.folders.allocations.drafts;
+        const filename = `${spendingId}.json`;
+
+/*        const file = await findFileByName(draftsFolder, filename);
+        if (!file) {
+          // pas de draft → état dépend du local
+          state.value = "EMPTY";
+          recomputeLocalState();
+          return;
+         }
+*/
+        let file = await findFileByName(draftsFolder, filename);
+
+        if (!file) {
+          const reopened = await reopenReleasedIfExists();
+
+          if (reopened) {
+            file = await findFileByName(draftsFolder, filename);
+          }
+        }
+
+        if (!file) {
+          console.info("⚠️ No draft or released file found");
+          state.value = "EMPTY";
+          recomputeLocalState();
+          return;
+        }
+
+        const raw = await readJSON<any>(file.id);
+        if (!Array.isArray(raw?.allocations)) {
+          // draft invalide → on ne casse pas tout
+          state.value = "EMPTY";
+          recomputeLocalState();
+          return;
+        }
+console.log("📄 Draft content:", raw);
+
+        allocations.value = raw.allocations.map((a: any) => ({
+          id: crypto.randomUUID(),
+          categoryID: a.categoryID ?? null,
+          subCategoryID: a.subCategoryID ?? null,
+          comment: a.comment ?? "",
+          amount: Number(Number(a.amount).toFixed(2)),
+        }));
+
+        // draft chargé ⇒ état DRAFTED (même si remaining ≠ 0, on respecte le fait "draft existe")
+        // (si tu veux forcer la cohérence, on peut invalider automatiquement,
+        //  mais tu n’as pas demandé ça)
+        state.value = "DRAFTED";
+
+        // preset montant
+        presetAmount();
+      } finally {
+        busy.value = false;
+        busyAction.value = null;
+
+        // si on n’est pas DRAFTED, on recalcule l’état local
+/*        if (state.value !== "DRAFTED") {
+          recomputeLocalState();
+        }*/
+console.log("🏁 loadDraft done — state:", state.value);
+console.groupEnd();        
+      }
+    });
+  }
+
+  async function addAllocation(): Promise<void> {
+    return runExclusive(async () => {
+      if (!categoryID.value || !subCategoryID.value) return;
+      if (!Number.isFinite(amount.value) || amount.value === 0) return;
+
+      const signed =
+        spendingAmount < 0 ? -Math.abs(amount.value) : Math.abs(amount.value);
+
+      // modif locale
+      allocations.value.push({
+        id: crypto.randomUUID(),
+        categoryID: categoryID.value,
+        subCategoryID: subCategoryID.value,
+        comment: comment.value.trim() || "No comment typed by user",
+        amount: Number(signed.toFixed(2)),
+      });
+
+      resetForm();
+
+      // 1) On calcule l’état local (sans Drive)
+      // Si on était DRAFTED, ADD n’est normalement pas le chemin de modification chez toi
+      // (tu disais “modif uniquement par suppression”), mais on reste robuste :
+      if (state.value === "DRAFTED") {
+        // invalidation si un draft existe (robuste)
+        await deleteDraftFileIfExists();
+        state.value = "EDITING";
+      } else {
+        recomputeLocalState();
+      }
+
+      // 2) R5 — si maintenant Balanced après ADD ⇒ auto-save ⇒ DRAFTED
+      if (state.value === "BALANCED") {
+        if (!driveAvailable()) return;
+
+        busy.value = true;
+        busyAction.value = "save";
+        state.value = "BUSY";
+
+        try {
+          await saveDraftInternal();
+          state.value = "DRAFTED"; // R4
+        } finally {
+          busy.value = false;
+          busyAction.value = null;
+        }
+      }
+    });
+  }
+
+  async function removeAllocation(index: number): Promise<void> {
+console.group("🗑️ removeAllocation()");
+console.log("📌 index:", index);
+console.log("📊 allocations BEFORE:", allocations.value);
+console.log("📍 state BEFORE:", state.value);    
+    return runExclusive(async () => {
+      if (index < 0 || index >= allocations.value.length) return;
+
+      allocations.value.splice(index, 1);
+console.log("📊 allocations AFTER:", allocations.value);
+      presetAmount();
+
+      // 🔑 règle métier : toute suppression invalide un draft éventuel
+      if (driveAvailable()) {
+        busy.value = true;
+        busyAction.value = null;
+        state.value = "BUSY";
+
+        try {
+          await deleteDraftFileIfExists();
+        } finally {
+          busy.value = false;
+          busyAction.value = null;
+        }
+      }
+
+      // retour à un état local cohérent
+      recomputeLocalState();
+    });
+  }
+
+  async function saveDraft(): Promise<void> {
+    return runExclusive(async () => {
+      // R1 : uniquement BALANCED
+      if (state.value !== "BALANCED") return;
+      if (!driveAvailable()) return;
+
+      busy.value = true;
+      busyAction.value = "save";
+      state.value = "BUSY";
+
+      try {
+        await saveDraftInternal();
+        state.value = "DRAFTED"; // R4
+      } finally {
+        busy.value = false;
+        busyAction.value = null;
+      }
+    });
+  }
+
+  async function release(): Promise<void> {
+    return runExclusive(async () => {
+      // R2 : uniquement DRAFTED
+      if (state.value !== "DRAFTED") return;
+      if (!driveAvailable()) return;
+
+      busy.value = true;
+      busyAction.value = "release";
+      state.value = "BUSY";
+
+      try {
+        const draftsFolder = driveState.value!.folders.allocations.drafts;
+        const releasedFolder = driveState.value!.folders.allocations.released;
+        const filename = `${spendingId}.json`;
+
+        const draftFile = await findFileByName(draftsFolder, filename);
+        if (!draftFile) {
+          // draft attendu mais absent → on retombe sur logique locale
+          state.value = "EDITING";
+          recomputeLocalState();
+          return;
+        }
+
+        const existingReleased = await findFileByName(releasedFolder, filename);
+
+        await writeJSON(
+          releasedFolder,
+          filename,
+          {
+            version: 1,
+            spendingId,
+            spendingAmount: Number(spendingAmount.toFixed(2)),
+            currency: "CHF",
+            releasedAt: new Date().toISOString(),
+            allocations: allocations.value,
+          },
+          existingReleased?.id
+        );
+
+        await deleteFile(draftFile.id);
+
+        // après release, on n’a plus de draft
+        state.value = "EDITING";
+        recomputeLocalState();
+      } finally {
+        busy.value = false;
+        busyAction.value = null;
+      }
+    });
+  }
+
+  async function reopenReleasedIfExists(): Promise<boolean> {
+    if (!driveAvailable()) return false;
+
+    const draftsFolder = driveState.value!.folders.allocations.drafts;
+    const releasedFolder = driveState.value!.folders.allocations.released;
+    const filename = `${spendingId}.json`;
+
+    const released = await findFileByName(releasedFolder, filename);
+    if (!released) return false;
+
+    console.info("🔁 Reopening released → drafts", released);
+
+    const data = await readJSON<any>(released.id);
+
+    await writeJSON(draftsFolder, filename, data);
+    await deleteFile(released.id);
+
+    return true;
+  }
+
+/* =========================
+     Form helpers
+  ========================= */
+  function presetAmount() {
+    amount.value = Number(Math.abs(remainingAmount.value).toFixed(2));
   }
 
   function resetForm() {
@@ -151,204 +475,34 @@ export function useAllocation(
   }
 
   /* =========================
-     Load draft
-  ========================= */
-async function loadDraft(): Promise<void> {
-  if (draftLoaded.value || !driveState.value) return;
-
-  busy.value = true;
-
-  try {
-    const draftsFolder =
-      driveState.value.folders.allocations.drafts;
-    const releasedFolder =
-      driveState.value.folders.allocations.released;
-
-    const filename = `${spendingId}.json`;
-
-    /* ─────────────────────────────
-       1️⃣ Cherche un draft
-    ───────────────────────────── */
-    const draftFiles = await listFilesInFolder(draftsFolder);
-    let file = draftFiles.find(f => f.name === filename);
-
-    /* ─────────────────────────────
-       2️⃣ Sinon → released → draft
-    ───────────────────────────── */
-    if (!file) {
-      const releasedFiles =
-        await listFilesInFolder(releasedFolder);
-      const releasedFile = releasedFiles.find(
-        f => f.name === filename
-      );
-
-      if (releasedFile) {
-        const raw = await readJSON<any>(releasedFile.id);
-
-        // écrire en drafts
-        await writeJSON(
-          draftsFolder,
-          filename,
-          raw
-        );
-
-        // supprimer released
-        await deleteFile(releasedFile.id);
-
-        // relister drafts
-        const updatedDrafts =
-          await listFilesInFolder(draftsFolder);
-        file = updatedDrafts.find(f => f.name === filename);
-      }
-    }
-
-    /* ─────────────────────────────
-       3️⃣ Rien trouvé → stop
-    ───────────────────────────── */
-    if (!file) return;
-
-    /* ─────────────────────────────
-       4️⃣ Charger le draft
-    ───────────────────────────── */
-    const raw = await readJSON<any>(file.id);
-    if (!Array.isArray(raw?.allocations)) return;
-
-    allocations.value = raw.allocations.map((a: any) => ({
-      id: crypto.randomUUID(),
-      categoryID: a.categoryID ?? null,
-      subCategoryID: a.subCategoryID ?? null,
-      comment: a.comment ?? "",
-      amount: Number(Number(a.amount).toFixed(2)),
-    }));
-
-    hasDraft.value = true;
-    presetAmount();
-  } finally {
-    draftLoaded.value = true;
-    busy.value = false;
-  }
-}
-
-  /* =========================
-     Save draft
-  ========================= */
-  async function saveDraft(): Promise<void> {
-    if (!canSaveDraft.value || !driveState.value) return;
-
-    busy.value = true;
-    busyAction.value = "save";
-
-    try {
-      const folder = driveState.value.folders.allocations.drafts;
-      const filename = `${spendingId}.json`;
-
-      const files = await listFilesInFolder(folder);
-      const existing = files.find(f => f.name === filename);
-
-      await writeJSON(
-        folder,
-        filename,
-        {
-          version: 1,
-          spendingId,
-          savedAt: new Date().toISOString(),
-          allocations: allocations.value,
-        },
-        existing?.id
-      );
-
-      hasDraft.value = true;
-    } finally {
-      busy.value = false;
-      busyAction.value = null;
-    }
-  }
-
-  /* =========================
-     Release = MOVE draft
-  ========================= */
-async function release(): Promise<void> {
-  if (!canRelease.value || !driveState.value) return;
-
-  busy.value = true;
-  busyAction.value = "release";
-
-  try {
-    const draftsFolder =
-      driveState.value.folders.allocations.drafts;
-    const releasedFolder =
-      driveState.value.folders.allocations.released;
-
-    const filename = `${spendingId}.json`;
-
-    /* ─────────────────────────────
-       1) retrouver le draft
-    ───────────────────────────── */
-    const draftFiles = await listFilesInFolder(draftsFolder);
-    const draftFile = draftFiles.find(f => f.name === filename);
-    if (!draftFile) {
-      throw new Error("Draft not found for release");
-    }
-
-    /* ─────────────────────────────
-       2) vérifier s’il existe déjà
-          un fichier released
-    ───────────────────────────── */
-    const releasedFiles = await listFilesInFolder(releasedFolder);
-    const existingReleased = releasedFiles.find(
-      f => f.name === filename
-    );
-
-    /* ─────────────────────────────
-       3) écrire dans released
-          (PATCH si existant)
-    ───────────────────────────── */
-    await writeJSON(
-      releasedFolder,
-      filename,
-      {
-        version: 1,
-        spendingId,
-        spendingAmount: Number(spendingAmount.toFixed(2)),
-        currency: "CHF",
-        releasedAt: new Date().toISOString(),
-        allocations: allocations.value,
-      },
-      existingReleased?.id   // ⭐ clé anti-(1)
-    );
-
-    /* ─────────────────────────────
-       4) supprimer le draft
-    ───────────────────────────── */
-    await deleteFile(draftFile.id);
-
-    hasDraft.value = false;
-  } finally {
-    busy.value = false;
-    busyAction.value = null;
-  }
-}
-
-
-  /* =========================
      Public API
   ========================= */
   return {
+    // state (si tu veux le logger/debug)
+    state,
+
+    // data
     allocations,
     categoryID,
     subCategoryID,
     comment,
     amount,
 
+    // computed amounts
     totalAllocated,
     remainingAmount,
     isBalanced,
 
+    // UI flags derived from state
     canSaveDraft,
     canRelease,
+    hasDraft,
+
+    // busy
     busy,
     busyAction,
 
+    // actions
     loadDraft,
     addAllocation,
     removeAllocation,

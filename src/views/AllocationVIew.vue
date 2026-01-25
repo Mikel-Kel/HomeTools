@@ -20,7 +20,7 @@ const props = defineProps<{ record: string }>();
 const record: SpendingRecord = JSON.parse(props.record);
 
 /* =========================
-   Categories (settings)
+   Categories
 ========================= */
 const categoriesStore = useCategories();
 
@@ -50,34 +50,14 @@ const {
 } = useAllocation(String(record.id), record.amount);
 
 /* =========================
-   Focus management
+   Focus
 ========================= */
 const amountInput = ref<HTMLInputElement | null>(null);
 
-/* =========================
-   Helpers
-========================= */
-async function resetAmountToRemaining(focus = true) {
+async function resetAmountToRemaining() {
   await nextTick();
   amount.value = Math.abs(remainingAmount.value);
-  if (focus) amountInput.value?.focus();
-}
-/* =========================
-   Allocation display helpers (2.2) ✅ FIX
-========================= */
-function categoryLabel(categoryID: number | null) {
-  if (categoryID == null) return "";
-  return categoriesStore.getCategory(categoryID)?.label ?? "";
-}
-
-function subCategoryLabel(
-  categoryID: number | null,
-  subCategoryID: number | null
-) {
-  if (categoryID == null || subCategoryID == null) return "";
-
-  const subs = categoriesStore.getSubcategories(categoryID);
-  return subs.find(sc => sc.id === subCategoryID)?.label ?? "";
+  amountInput.value?.focus();
 }
 
 /* =========================
@@ -86,16 +66,14 @@ function subCategoryLabel(
 onMounted(async () => {
   await categoriesStore.load();
   await loadDraft();
-
-  // ✅ 1️⃣ premier affichage → Remaining par défaut
-  await resetAmountToRemaining(true);
+  await resetAmountToRemaining();
 });
 
 /* =========================
    Computed
 ========================= */
 const absRemainingAmount = computed(() =>
-  Math.abs(remainingAmount?.value ?? 0)
+  Math.abs(remainingAmount.value)
 );
 
 /* =========================
@@ -107,7 +85,7 @@ const allowedNature = computed(() =>
 
 const categories = computed(() =>
   categoriesStore.categories.value.filter(
-    (c) => c.nature === allowedNature.value
+    c => c.nature === allowedNature.value
   )
 );
 
@@ -118,13 +96,39 @@ const subCategories = computed(() =>
 );
 
 /* =========================
+   Category helpers
+========================= */
+function categoryLabel(id: number | null) {
+  return id == null
+    ? ""
+    : categoriesStore.getCategory(id)?.label ?? "";
+}
+
+function subCategoryLabel(
+  categoryID: number | null,
+  subCategoryID: number | null
+) {
+  if (categoryID == null || subCategoryID == null) return "";
+  return (
+    categoriesStore
+      .getSubcategories(categoryID)
+      .find(sc => sc.id === subCategoryID)?.label ?? ""
+  );
+}
+
+function formatAmount(a: number) {
+  return a.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/* =========================
    Actions
 ========================= */
 async function onAddAllocation() {
-  addAllocation();
-
-  // ✅ 2️⃣ après chaque ajout → nouveau Remaining
-  await resetAmountToRemaining(true);
+  await addAllocation();
+  await resetAmountToRemaining();
 }
 
 async function onSaveDraft() {
@@ -132,27 +136,17 @@ async function onSaveDraft() {
 }
 
 async function onRelease() {
-  try {
-    await release();
-    router.push({ name: "spending" });
-  } catch (err) {
-    console.error("Release failed", err);
-  }
+  await release();
+  router.push({ name: "spending" });
+}
+
+async function onRemoveAllocation(index: number) {
+  await removeAllocation(index);
 }
 
 function closeView() {
   if (busy.value) return;
   router.push({ name: "spending" });
-}
-
-/* =========================
-   Utils
-========================= */
-function formatAmount(a: number) {
-  return a.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 }
 </script>
 
@@ -180,6 +174,7 @@ function formatAmount(a: number) {
         <div class="record-party">{{ record.party }}</div>
         <div class="record-meta">{{ record.date }}</div>
       </div>
+
       <div class="record-amounts">
         <div class="amount-box total">
           <div class="amount-label">Total</div>
@@ -219,6 +214,7 @@ function formatAmount(a: number) {
           </option>
         </select>
       </div>
+
       <div class="form-row">
         <input
           ref="amountInput"
@@ -242,6 +238,8 @@ function formatAmount(a: number) {
       />
     </section>
 
+    <div class="allocation-separator"></div>
+
     <!-- =========================
          3. Allocations list
     ========================== -->
@@ -249,12 +247,10 @@ function formatAmount(a: number) {
       <table>
         <tbody>
           <tr v-for="a in allocations" :key="a.id">
-            <!-- Texte -->
             <td class="alloc-text">
               <div class="alloc-comment">
                 {{ a.comment || "(no comment)" }}
               </div>
-
               <div class="alloc-category">
                 {{ categoryLabel(a.categoryID) }}
                 <span v-if="a.subCategoryID">
@@ -263,19 +259,16 @@ function formatAmount(a: number) {
               </div>
             </td>
 
-            <!-- Montant -->
             <td class="right alloc-amount">
               {{ formatAmount(a.amount) }}
             </td>
 
-            <!-- Suppression -->
             <td class="alloc-action">
-              <button @click="removeAllocation(allocations.indexOf(a))">
+              <button @click="onRemoveAllocation(allocations.indexOf(a))">
                 ✕
               </button>
             </td>
           </tr>
-
         </tbody>
       </table>
     </section>
@@ -289,23 +282,33 @@ function formatAmount(a: number) {
       </div>
 
       <div class="footer-actions">
+        <!-- Save Draft -->
         <button
           @click="onSaveDraft"
           :disabled="busy || !canSaveDraft"
         >
-          {{ busy && busyAction === "save"
-              ? "Saving…"
-              : "Save draft" }}
-        </button>
+          <template v-if="busy && busyAction === 'save'">
+            Saving…
+          </template>
 
+          <template v-else-if="canRelease">
+            Draft saved ✓
+          </template>
+
+          <template v-else>
+            Save draft
+          </template>
+        </button>
+        <!-- Release -->
         <button
           @click="onRelease"
           :disabled="busy || !canRelease"
         >
           {{ busy && busyAction === "release"
-              ? "Releasing…"
-              : "Release" }}
+            ? "Releasing…"
+            : "Release" }}
         </button>
+
         <button class="secondary" @click="closeView" :disabled="busy">
           Close
         </button>
@@ -487,6 +490,11 @@ function formatAmount(a: number) {
   color: var(--text);
   border: 1px solid var(--border);
 }
+button.saved {
+  background: var(--primary-soft);
+  color: var(--positive);
+  border: 1px solid var(--positive-soft);
+}
 
 button:disabled {
   opacity: 0.45;
@@ -578,6 +586,11 @@ button:disabled {
   opacity: 1;
 }
 
+.allocation-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 0.75rem 0;
+}
 /* =========================================================
    Busy overlay (inchangé mais positionné)
 ========================================================= */

@@ -12,7 +12,7 @@ function handleDriveError(err: any): never {
   if (err?.message === "DRIVE_UNAUTHORIZED") {
     googleAuthenticated.value = false;
     console.warn("🔐 Google Drive session expired");
-    throw new Error("DRIVE_SESSION_EXPIRED");
+    throw err;
   }
   throw err;
 }

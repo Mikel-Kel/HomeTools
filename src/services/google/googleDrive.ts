@@ -15,14 +15,26 @@ export type DriveItem = {
 };
 
 /* =========================
+   Drive session state
+========================= */
+let driveAuthorized = true;
+
+/* =========================
    Helper fetch Drive REST
 ========================= */
 async function driveFetch(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
+  if (!driveAuthorized) {
+    throw new Error("DRIVE_UNAUTHORIZED");
+  }
+
   const token = getAccessToken();
-  if (!token) throw new Error("[Drive] Not authenticated");
+  if (!token) {
+    driveAuthorized = false;
+    throw new Error("DRIVE_UNAUTHORIZED");
+  }
 
   const res = await fetch(url, {
     ...options,
@@ -32,9 +44,9 @@ async function driveFetch(
     },
   });
 
-  // 🔴 TOKEN EXPIRED / INVALID
   if (res.status === 401) {
-    console.warn("[Drive] 401 Unauthorized – token expired?");
+    console.warn("[Drive] 401 Unauthorized – token expired");
+    driveAuthorized = false; // 🔴 coupe tout
     throw new Error("DRIVE_UNAUTHORIZED");
   }
 
