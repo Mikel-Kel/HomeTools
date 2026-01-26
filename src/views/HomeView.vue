@@ -7,6 +7,10 @@ import { googleAuthenticated } from "@/services/google/googleInit";
 import AppTitle from "@/components/AppTitle.vue";
 import AppIcon from "@/components/AppIcon.vue";
 
+
+// version app (injectée par Vite)
+const appVersion = __APP_VERSION__;
+
 /* =========================
    Theme
 ========================= */
@@ -83,6 +87,10 @@ const driveStatus = computed<"connected" | "disconnected">(() =>
         </router-link>
       </li>
     </ul>
+    <!-- Version app -->
+    <div class="app-version">
+      Version {{ appVersion }}
+    </div>
   </div>
 </template>
 
@@ -195,4 +203,19 @@ margin-top: -1.1rem;   /* remonte le texte vers l’icône */
 .menu-item.dev {
   opacity: 0.85;
 }
+
+/* =========================
+   App version (footer)
+========================= */
+.app-version {
+  margin-top: 2rem;
+  text-align: center;
+
+  font-size: 0.75rem;
+  opacity: 0.45;
+  letter-spacing: 0.03em;
+
+  user-select: none;
+}
+
 </style>
