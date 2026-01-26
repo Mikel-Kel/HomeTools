@@ -108,21 +108,10 @@ const loading = ref(true);
 }
 */
 async function findFileByName(folderId: string, filename: string) {
-  console.groupCollapsed("🔍 findFileByName");
-  console.log("📁 folderId:", folderId);
-  console.log("📄 filename:", filename);
 
   const files = await listFilesInFolder(folderId);
 
-  console.log(
-    "📦 files returned:",
-    files.map(f => ({ id: f.id, name: f.name }))
-  );
-
   const found = files.find(f => f.name === filename) ?? null;
-
-  console.log("🎯 found:", found);
-  console.groupEnd();
 
   return found;
 }
@@ -158,7 +147,6 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
   /* =========================
      State (UI)
   ========================= */
-console.log("🎯 useAllocation partyID =", partyID);  
   const state = ref<AllocationState>("EMPTY");
   const busy = ref(false);
   const busyAction = ref<"load" | "save" | "release" | null>(null);
@@ -230,7 +218,6 @@ console.log("🎯 useAllocation partyID =", partyID);
   }
 */
 async function deleteDraftFileIfExists(): Promise<void> {
-  console.group("🔥 deleteDraftFileIfExists");
 
   if (!driveAvailable()) {
     console.warn("🚫 Drive not available");
@@ -240,10 +227,6 @@ async function deleteDraftFileIfExists(): Promise<void> {
 
   const folder = driveState.value!.folders.allocations.drafts;
   const filename = `${spendingId}.json`;
-
-  console.log("📁 draftsFolder:", folder);
-  console.log("📄 filename:", filename);
-
   const existing = await findFileByName(folder, filename);
 
   if (!existing) {
@@ -252,11 +235,8 @@ async function deleteDraftFileIfExists(): Promise<void> {
     return;
   }
 
-  console.log("🧨 Deleting draft file:", existing);
   await deleteFile(existing.id);
-  console.log("✅ Draft file deleted");
 
-  console.groupEnd();
 }
 
 
@@ -314,7 +294,6 @@ async function deleteDraftFileIfExists(): Promise<void> {
         }
 
         if (!file) {
-          console.info("⚠️ No draft or released file found");
           state.value = "EMPTY";
           recomputeLocalState();
           return;
@@ -505,8 +484,6 @@ async function deleteDraftFileIfExists(): Promise<void> {
 
     const released = await findFileByName(releasedFolder, filename);
     if (!released) return false;
-
-    console.info("🔁 Reopening released → drafts", released);
 
     const data = await readJSON<any>(released.id);
 

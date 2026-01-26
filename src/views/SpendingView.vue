@@ -165,7 +165,6 @@ const formatDate = (d: string) =>
    Navigation
 ========================= */
 function openAllocation(record: SpendingWithStatus) {
-console.log("🚀 openAllocation record =", record);
 
   router.push({
     name: "allocation",

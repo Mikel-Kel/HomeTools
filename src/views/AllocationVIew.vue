@@ -3,6 +3,8 @@ import { computed, onMounted, nextTick, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
+import AppIcon from "@/components/AppIcon.vue";
+
 import { useSpending } from "@/composables/spending/useSpending";
 import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
@@ -84,6 +86,17 @@ const comment = computed<string>({
 const amount = computed<number>({
   get: () => allocation.value?.amount.value ?? 0,
   set: v => allocation.value && (allocation.value.amount.value = v),
+});
+
+const amountDisplay = computed<string>({
+  get: () => amount.value.toFixed(2),
+  set: (v) => {
+    const normalized = v.replace(",", ".");
+    const n = Number(normalized);
+    if (Number.isFinite(n)) {
+      amount.value = Number(n.toFixed(2));
+    }
+  },
 });
 
 const totalAllocated = computed(
@@ -223,10 +236,12 @@ function closeView() {
   <div v-if="!recordReady" class="loading">
     <p>Loading allocation...</p>
   </div>
-  <div v-else class="allocation-view">  
+
+  <div v-else class="allocation-view">
+
     <!-- Busy overlay -->
-      <div v-if="loading || busy" class="busy-overlay">
-        <div class="busy-box">
+    <div v-if="loading || busy" class="busy-overlay">
+      <div class="busy-box">
         <div class="spinner"></div>
         <div class="busy-text">
           {{ busyMessage }}
@@ -267,43 +282,49 @@ function closeView() {
         2. Allocation form
     ========================== -->
     <section class="allocation-form">
-      <div class="form-row">
-        <select v-model="categoryID">
-          <option :value="null" disabled>Category</option>
-          <option v-for="c in categories" :key="c.id" :value="c.id">
-            {{ c.label }}
-          </option>
-        </select>
 
-        <select v-model="subCategoryID" :disabled="categoryID === null">
-          <option :value="null" disabled>Sub-category</option>
-          <option v-for="sc in subCategories" :key="sc.id" :value="sc.id">
-            {{ sc.label }}
-          </option>
-        </select>
-      </div>
+      <select v-model="categoryID" class="field field-short">
+        <option :value="null" disabled>Category</option>
+        <option v-for="c in categories" :key="c.id" :value="c.id">
+          {{ c.label }}
+        </option>
+      </select>
 
-      <div class="form-row">
-        <input
-          ref="amountInput"
-          v-model.number="amount"
-          type="number"
-          step="0.01"
-        />
-        <button
-          class="primary"
-          @click="onAddAllocation"
-          :disabled="!categoryID || !subCategoryID || amount === 0"
-        >
-          Add
-        </button>
-      </div>
+      <select
+        v-model="subCategoryID"
+        :disabled="categoryID === null"
+        class="field field-short"
+      >
+        <option :value="null" disabled>Sub-category</option>
+        <option v-for="sc in subCategories" :key="sc.id" :value="sc.id">
+          {{ sc.label }}
+        </option>
+      </select>
 
       <input
-        v-model="comment"
-        class="comment"
-        placeholder="(optional comment)"
+        ref="amountInput"
+        v-model="amountDisplay"
+        type="text"
+        inputmode="decimal"
+        class="field field-short amount-input"
       />
+      <div class="comment-row">
+        <input
+          v-model="comment"
+          class="field field-long"
+          placeholder="(optional comment)"
+        />
+        <button
+          class="theme-toggle"
+          @click="onAddAllocation"
+          :disabled="!categoryID || !subCategoryID || amount === 0"
+          aria-label="Add allocation"
+        >
+          <AppIcon name="add" :size="24" />
+        </button>
+
+      </div>
+
     </section>
 
     <div class="allocation-separator"></div>
@@ -350,7 +371,6 @@ function closeView() {
       </div>
 
       <div class="footer-actions">
-        <!-- Save Draft -->
         <button
           @click="onSaveDraft"
           :disabled="busy || !canSaveDraft"
@@ -358,16 +378,14 @@ function closeView() {
           <template v-if="busy && busyAction === 'save'">
             Saving…
           </template>
-
           <template v-else-if="canRelease">
             Draft saved ✓
           </template>
-
           <template v-else>
             Save draft
           </template>
         </button>
-        <!-- Release -->
+
         <button
           @click="onRelease"
           :disabled="busy || !canRelease"
@@ -382,6 +400,7 @@ function closeView() {
         </button>
       </div>
     </footer>
+
   </div>
 </template>
 
@@ -466,33 +485,60 @@ function closeView() {
 /* =========================================================
    2. Allocation form
 ========================================================= */
+
 .allocation-form {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.75rem;
+  align-items: flex-start;
+
+  /* ⬅️ VARIABLES ICI (pas :root) */
+  --short-w: 200px; /* ajuste à 200 / 180 / 160 */
+  --long-w: 450px;
 }
 
-.allocation-form select,
-.allocation-form input {
+.field {
+  box-sizing: border-box;
   font-size: 0.9rem;
 }
 
-.form-row button {
-  min-width: 70px;
-  font-weight: 600;
+/* champs courts */
+:deep(.field-short) {
+  width: var(--short-w) !important;
+  max-width: var(--short-w) !important;
 }
-.form-row {
+
+/* champ long */
+:deep(.field-long) {
+  width: var(--long-w) !important;
+  max-width: var(--long-w) !important;
+}
+
+/* montant aligné à droite */
+.amount-input {
+  text-align: right;
+}
+
+/* commentaire + bouton Add */
+.comment-row {
   display: flex;
-  gap: 0.6rem;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.form-row select,
-.form-row input {
+.comment-row button {
+  appearance: none;
+  -webkit-appearance: none;
+
+  background: none;
+  border: none;
+  box-shadow: none;
+  outline: none;
+}
+
+/* le champ commentaire prend toute la largeur prévue */
+.comment-row .field-long {
   flex: 1;
-}
-
-.allocation-form .comment {
-  width: 100%;
 }
 
 /* =========================================================
@@ -556,12 +602,10 @@ function closeView() {
 .footer-actions .secondary {
   background: var(--bg);
   color: var(--text);
-  border: 1px solid var(--border);
 }
 button.saved {
   background: var(--primary-soft);
   color: var(--positive);
-  border: 1px solid var(--positive-soft);
 }
 
 button:disabled {
@@ -659,9 +703,7 @@ button:disabled {
   background: var(--border);
   margin: 0.75rem 0;
 }
-/* =========================================================
-   Busy overlay (inchangé mais positionné)
-========================================================= */
+
 /* =========================================================
    Busy HUD — iOS style
 ========================================================= */
