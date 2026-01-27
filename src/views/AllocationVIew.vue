@@ -146,6 +146,21 @@ async function resetAmountToRemaining() {
   amountInput.value?.focus();
 }
 
+const dateInput = ref<HTMLInputElement | null>(null);
+
+function openDatePicker() {
+  if (!dateInput.value) return;
+
+  // API moderne (Chrome, Safari récent, iOS)
+  if (typeof dateInput.value.showPicker === "function") {
+    dateInput.value.showPicker();
+  } else {
+    // fallback ancien navigateur
+    dateInput.value.focus();
+    dateInput.value.click();
+  }
+}
+
 /* =========================
    Lifecycle
 ========================= */
@@ -327,28 +342,25 @@ function closeView() {
             class="field field-short amount-input"
           />
 
-          <!-- 🔑 ancrage popover sur ce wrapper -->
-          <div class="date-anchor">
-            <button
-              class="icon-button"
-              :class="{ active: allocationDate }"
-              @click="showAllocationDate = !showAllocationDate"
-              aria-label="Set allocation date"
-            >
-              <AppIcon name="calendar" :size="32" />
-            </button>
+          <!-- bouton calendrier -->
+          <button
+            class="icon-button"
+            :class="{ active: allocationDate }"
+            @click="openDatePicker"
+            aria-label="Set allocation date"
+          >
+            <AppIcon name="calendar" :size="32" />
+          </button>
 
-            <!-- ✅ popover à DROITE du bouton -->
-            <div v-if="showAllocationDate" class="date-popover">
-              <input
-                type="date"
-                v-model="allocationDate"
-                class="date-input"
-              />
-            </div>
-          </div>
+          <!-- input date INVISIBLE mais fonctionnel -->
+          <input
+            ref="dateInput"
+            type="date"
+            v-model="allocationDate"
+            class="hidden-date-input"
+          />
         </div>
-      </div>
+      </div> 
 
       <!-- commentaire + add -->
       <div class="comment-row">
@@ -607,6 +619,14 @@ function closeView() {
   font-family: inherit;
   font-size: 0.9rem;
   outline: none;
+}
+/* input date invisible mais actif */
+.hidden-date-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
 }
 
 /* =========================================================
