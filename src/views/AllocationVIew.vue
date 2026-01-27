@@ -57,7 +57,8 @@ const allocation = computed(() =>
     ? useAllocation(
         record.value.id,
         record.value.amount,
-        record.value.partyID
+        record.value.partyID,
+        record.value.date
       )
     : null
 );
@@ -396,9 +397,9 @@ function closeView() {
                   {{ a.comment || "(no comment)" }}
                 </span>
 
-                <!-- 🗓 BADGE DATE -->
+                <!-- 🗓 BADGE DATE (affiché seulement si ≠ date du spending) -->
                 <span
-                  v-if="a.allocationDate"
+                  v-if="a.allocationDate && a.allocationDate !== recordSafe.date"
                   class="alloc-date-badge"
                   :title="a.allocationDate"
                 >
@@ -840,11 +841,12 @@ button:disabled {
   border-radius: 999px;
 
   border: 1px solid var(--border);
-  background: var(--surface-soft);
+  background: var(--primary-soft);
+  color: var(--primary);
 
   font-size: 0.75rem;
-  font-weight: 600;
-  opacity: 0.75;
+  font-weight: 800;
+  opacity: 1;
   white-space: nowrap;
 }
 

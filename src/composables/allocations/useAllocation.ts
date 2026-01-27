@@ -125,7 +125,7 @@ function todayISODate() {
 /* =========================
    Composable
 ========================= */
-export function useAllocation(spendingId: string, spendingAmount: number, partyID: number | null) {
+export function useAllocation(spendingId: string, spendingAmount: number, partyID: number | null, spendingDate: string) {
   const { driveState } = useDrive();
 
   /* =========================
@@ -348,7 +348,7 @@ async function deleteDraftFileIfExists(): Promise<void> {
         const normalizedDate =
         allocationDate.value && allocationDate.value.trim() !== ""
           ? allocationDate.value
-          : null;
+          : spendingDate;
 
       // modif locale
       allocations.value.push({
