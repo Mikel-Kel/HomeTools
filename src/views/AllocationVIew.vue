@@ -315,7 +315,8 @@ function closeView() {
         </option>
       </select>
 
-      <div class="amount-row">
+      <!-- 🔽 MONTANT + CALENDRIER -->
+      <div class="amount-block">
         <div class="amount-row">
           <input
             ref="amountInput"
@@ -325,25 +326,30 @@ function closeView() {
             class="field field-short amount-input"
           />
 
-          <button
-            class="icon-button"
-            :class="{ active: allocationDate }"
-            @click="showAllocationDate = !showAllocationDate"
-            aria-label="Set allocation date"
-          >
-            <AppIcon name="calendar" :size="32" />
-          </button>
-        </div>
+          <!-- 🔑 ancrage popover sur ce wrapper -->
+          <div class="date-anchor">
+            <button
+              class="icon-button"
+              :class="{ active: allocationDate }"
+              @click="showAllocationDate = !showAllocationDate"
+              aria-label="Set allocation date"
+            >
+              <AppIcon name="calendar" :size="32" />
+            </button>
 
-        <!-- champ date repliable JUSTE EN DESSOUS -->
-        <input
-          v-if="showAllocationDate"
-          type="date"
-          v-model="allocationDate"
-          class="field field-short"
-        />
+            <!-- ✅ popover à DROITE du bouton -->
+            <div v-if="showAllocationDate" class="date-popover">
+              <input
+                type="date"
+                v-model="allocationDate"
+                class="date-input"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
+      <!-- commentaire + add -->
       <div class="comment-row">
         <input
           v-model="comment"
@@ -358,11 +364,10 @@ function closeView() {
         >
           <AppIcon name="add" :size="24" />
         </button>
-
       </div>
 
     </section>
-
+    
     <div class="allocation-separator"></div>
 
     <!-- =========================
@@ -463,16 +468,13 @@ function closeView() {
   margin-bottom: 16px;
   border-radius: 10px;
 }
-
 .record-main {
   margin-bottom: 12px;
 }
-
 .record-party {
   font-size: 1.1rem;
   font-weight: 600;
 }
-
 .record-meta {
   font-size: 0.85rem;
   opacity: 0.7;
@@ -486,40 +488,31 @@ function closeView() {
   justify-content: space-between;
   gap: 24px;
 }
-
 .amount-box {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-
-/* libellé au-dessus */
 .amount-label {
   font-size: 0.85rem;
   opacity: 0.7;
 }
-
-/* valeur principale */
 .amount-value {
   font-size: 1.2rem;
   font-weight: 600;
 }
-
-/* couleurs */
 .amount-box.total {
   color: var(--text);
 }
-
 .amount-box.remaining.unbalanced {
   color: var(--negative);
 }
-
 .amount-box.remaining.balanced {
   color: var(--positive);
 }
 
 /* =========================================================
-   2. Allocation form
+   2. Allocation form - global
 ========================================================= */
 
 .allocation-form {
@@ -528,9 +521,10 @@ function closeView() {
   gap: 0.75rem;
   align-items: flex-start;
 
-  /* ⬅️ VARIABLES ICI (pas :root) */
-  --short-w: 200px; /* ajuste à 200 / 180 / 160 */
+  /* variables locales */
+  --short-w: 200px;
   --long-w: 450px;
+  --icon-gap: 0.6rem; /* espace montant ↔ calendrier */
 }
 
 .field {
@@ -538,13 +532,11 @@ function closeView() {
   font-size: 0.9rem;
 }
 
-/* champs courts */
+/* champs courts/longs */
 :deep(.field-short) {
   width: var(--short-w) !important;
   max-width: var(--short-w) !important;
 }
-
-/* champ long */
 :deep(.field-long) {
   width: var(--long-w) !important;
   max-width: var(--long-w) !important;
@@ -556,17 +548,30 @@ function closeView() {
 }
 
 /* =========================================================
-   Allocation form — allocation date (repliable)
+   Allocation date — bouton + popover
+========================================================= */
+/* =========================================================
+   Allocation date — bouton + popover (à droite)
 ========================================================= */
 
-/* Montant + bouton calendrier */
+.amount-block {
+  display: inline-block;
+}
+
 .amount-row {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 0.6rem; /* espace montant ↔ bouton */
 }
 
-/* bouton icône (même logique que Add) */
+/* wrapper d'ancrage */
+.date-anchor {
+  position: relative; /* 🔑 référence pour le popover */
+  display: inline-flex;
+  align-items: center;
+}
+
+/* bouton icône */
 .icon-button {
   appearance: none;
   -webkit-appearance: none;
@@ -575,40 +580,62 @@ function closeView() {
   padding: 0;
   cursor: pointer;
   line-height: 0;
+  opacity: 0.7;
+}
+
+.icon-button:hover {
+  opacity: 1;
 }
 
 .icon-button.active {
   opacity: 1;
-}
-
-/* feedback hover discret */
-.icon-button:hover {
-  opacity: 0.75;
-}
-
-/* optionnel : état actif si une date est définie */
-.icon-button.active {
   color: var(--primary);
 }
 
-/* commentaire + bouton Add */
+/* ✅ popover placé à droite du bouton */
+.date-popover {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 10px); /* petit espace à droite du bouton */
+  transform: translateY(-50%);
+
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  z-index: 50;
+  white-space: nowrap; /* évite que ça passe à la ligne */
+}
+
+.date-input {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+/* =========================================================
+   Comment row
+========================================================= */
+
 .comment-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 1rem;
 }
 
 .comment-row button {
   appearance: none;
   -webkit-appearance: none;
-
   background: none;
   border: none;
   box-shadow: none;
   outline: none;
 }
 
-/* le champ commentaire prend toute la largeur prévue */
 .comment-row .field-long {
   flex: 1;
 }
