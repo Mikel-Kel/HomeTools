@@ -99,6 +99,12 @@ const amountDisplay = computed<string>({
   },
 });
 
+const allocationDate = computed<string | null>({
+  get: () => allocation.value?.allocationDate?.value ?? null,
+  set: v => allocation.value && (allocation.value.allocationDate.value = v),
+});
+
+
 const totalAllocated = computed(
   () => allocation.value?.totalAllocated.value ?? 0
 );
@@ -309,12 +315,19 @@ function closeView() {
       </select>
 
       <input
+        type="date"
+        v-model="allocationDate"
+        class="field field-short"
+      />
+
+      <input
         ref="amountInput"
         v-model="amountDisplay"
         type="text"
         inputmode="decimal"
         class="field field-short amount-input"
       />
+
       <div class="comment-row">
         <input
           v-model="comment"

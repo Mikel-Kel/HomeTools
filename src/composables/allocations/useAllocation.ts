@@ -88,7 +88,7 @@ export interface Allocation {
   subCategoryID: number | null;
   comment: string;
   amount: number;
-  allocationDate: string;          // YYYY-MM-DD
+  allocationDate: string | null; // YYYY-MM-DD ou null
   allocatedTagID: number | null;   // tag choisi (peut rester null)
 }
 
@@ -166,6 +166,7 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
   const subCategoryID = ref<number | null>(null);
   const comment = ref<string>("");
   const amount = ref<number>(Math.abs(spendingAmount));
+  const allocationDate = ref<string | null>(null);
 
   /* =========================
      Computed amounts
@@ -319,7 +320,7 @@ async function deleteDraftFileIfExists(): Promise<void> {
           subCategoryID: a.subCategoryID ?? null,
           comment: a.comment ?? "",
           amount: Number(Number(a.amount).toFixed(2)),
-          allocationDate: a.allocationDate ?? todayISODate(),
+          allocationDate: a.allocationDate ?? null,
           allocatedTagID: a.allocatedTagID ?? null,
         }));
 
@@ -351,7 +352,7 @@ async function deleteDraftFileIfExists(): Promise<void> {
         subCategoryID: subCategoryID.value,
         comment: comment.value.trim() || "Please comment",
         amount: Number(signed.toFixed(2)),
-        allocationDate: todayISODate(),
+        allocationDate: allocationDate.value,
         allocatedTagID: null, // (plus tard: valeur issue du tag saisi)
       });
 
@@ -514,6 +515,7 @@ async function deleteDraftFileIfExists(): Promise<void> {
     categoryID.value = null;
     subCategoryID.value = null;
     comment.value = "";
+    allocationDate.value=null;
     presetAmount();
   }
 
@@ -530,6 +532,7 @@ async function deleteDraftFileIfExists(): Promise<void> {
     subCategoryID,
     comment,
     amount,
+    allocationDate,
 
     // computed amounts
     totalAllocated,
