@@ -88,6 +88,8 @@ export interface Allocation {
   subCategoryID: number | null;
   comment: string;
   amount: number;
+  allocationDate: string;          // YYYY-MM-DD
+  allocatedTagID: number | null;   // tag choisi (peut rester null)
 }
 
 type AllocationState =
@@ -114,6 +116,10 @@ async function findFileByName(folderId: string, filename: string) {
   const found = files.find(f => f.name === filename) ?? null;
 
   return found;
+}
+
+function todayISODate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 /* =========================
@@ -313,6 +319,8 @@ async function deleteDraftFileIfExists(): Promise<void> {
           subCategoryID: a.subCategoryID ?? null,
           comment: a.comment ?? "",
           amount: Number(Number(a.amount).toFixed(2)),
+          allocationDate: a.allocationDate ?? todayISODate(),
+          allocatedTagID: a.allocatedTagID ?? null,
         }));
 
         // draft chargé ⇒ état DRAFTED (prioritaire sur le calcul local)
@@ -341,8 +349,10 @@ async function deleteDraftFileIfExists(): Promise<void> {
         id: crypto.randomUUID(),
         categoryID: categoryID.value,
         subCategoryID: subCategoryID.value,
-        comment: comment.value.trim() || "No comment typed by user",
+        comment: comment.value.trim() || "Please comment",
         amount: Number(signed.toFixed(2)),
+        allocationDate: todayISODate(),
+        allocatedTagID: null, // (plus tard: valeur issue du tag saisi)
       });
 
       resetForm();

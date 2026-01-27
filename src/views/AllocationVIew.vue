@@ -147,6 +147,13 @@ onMounted(async () => {
 
   if (allocation.value) {
     await allocation.value.loadDraft();
+    // ✅ preset (si pas de draft chargé)
+    if (allocation.value.allocations.value.length === 0 && record.value) {
+      allocation.value.categoryID.value = record.value.categoryID;
+      allocation.value.subCategoryID.value = record.value.subCategoryID;
+      allocation.value.comment.value = record.value.allocComment ?? "";
+      // tagID : pas encore disponible / visible ici, mais utilisé par useAllocation lors de addAllocation()
+    }
     await resetAmountToRemaining();
   }
 });
