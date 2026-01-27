@@ -186,7 +186,7 @@ async function loadFromDrive() {
   if (!raw) return;
 
   const { accounts, records } =
-    transformSpendingRaw(raw);
+    transformSpendingRaw(raw.items);
 
   // backend = vérité
   spending.replaceAll(accounts, records);

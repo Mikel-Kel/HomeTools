@@ -4,14 +4,18 @@ import type { Account, SpendingRecord } from "@/composables/spending/useSpending
    Types backend brut
 ========================= */
 export interface BackendSpendingRow {
-  FITID: string;
-  Amount: number;
-  Account: string;
-  Comment?: string;
-  PartyName: string;
-  PartyID?: number;
-  ValueDate: string;
-  ExpenseOwner: string;
+  fitid: string;
+  amount: number;
+  account: string;
+  partyName: string;
+  partyID?: number | null;
+  valueDate: string;
+  expenseOwner: string;
+  // champs ajoutés dans spending.json (déjà en camelCase)
+  categoryID?: number | null;
+  subCategoryID?: number | null;
+  allocComment?: string;
+  tagID?: number | null;
 }
 
 /* =========================
@@ -31,32 +35,36 @@ export function transformSpendingRaw(
   const records: SpendingRecord[] = [];
   for (const row of raw) {
     if (
-      !row.FITID ||
-      !row.Account ||
-      !row.PartyName ||
-      !row.ValueDate ||
-      typeof row.Amount !== "number" ||
-      !row.ExpenseOwner
+      !row.fitid ||
+      !row.account ||
+      !row.partyName ||
+      !row.valueDate ||
+      typeof row.amount !== "number"
     ) {
       throw new Error("Invalid backend spending row");
     }
-
     // Comptes uniques
-    if (!accountMap.has(row.Account)) {
-      accountMap.set(row.Account, {
-        id: row.Account,
-        label: row.Account,
+    if (!accountMap.has(row.account)) {
+      accountMap.set(row.account, {
+        id: row.account,
+        label: row.account,
       });
     }
 
     records.push({
-      id: row.FITID,
-      accountId: row.Account,
-      date: row.ValueDate,
-      party: row.PartyName,
-      partyID: row.PartyID ?? null,
-      amount: row.Amount,
-      owner: row.ExpenseOwner,
+      id: row.fitid,
+      accountId: row.account,
+      date: row.valueDate,
+      party: row.partyName,
+      partyID: row.partyID ?? null,
+      amount: row.amount,
+      owner: row.expenseOwner ?? "",
+
+      // nouveaux champs à véhiculer
+      categoryID: row.categoryID ?? null,
+      subCategoryID: row.subCategoryID ?? null,
+      allocComment: row.allocComment ?? "",
+      tagID: row.tagID ?? null,
     });
   }
 

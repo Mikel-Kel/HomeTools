@@ -7,7 +7,6 @@ export interface Account {
   id: string;
   label: string;
 }
-
 export interface SpendingRecord {
   id: string;
   accountId: string;
@@ -16,6 +15,12 @@ export interface SpendingRecord {
   partyID: number | null;
   amount: number;
   owner: string;
+
+  // 🔽 additonal fields to ease allocation process
+  categoryID: number | null;
+  subCategoryID: number | null;
+  allocComment: string;
+  tagID: number | null;
 }
 
 export type AllocationStatus = "none" | "draft" | "released";
