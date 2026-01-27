@@ -104,6 +104,7 @@ const allocationDate = computed<string | null>({
   set: v => allocation.value && (allocation.value.allocationDate.value = v),
 });
 
+const showAllocationDate = ref(false);
 
 const totalAllocated = computed(
   () => allocation.value?.totalAllocated.value ?? 0
@@ -314,19 +315,34 @@ function closeView() {
         </option>
       </select>
 
-      <input
-        type="date"
-        v-model="allocationDate"
-        class="field field-short"
-      />
+      <div class="amount-row">
+        <div class="amount-row">
+          <input
+            ref="amountInput"
+            v-model="amountDisplay"
+            type="text"
+            inputmode="decimal"
+            class="field field-short amount-input"
+          />
 
-      <input
-        ref="amountInput"
-        v-model="amountDisplay"
-        type="text"
-        inputmode="decimal"
-        class="field field-short amount-input"
-      />
+          <button
+            class="icon-button"
+            :class="{ active: allocationDate }"
+            @click="showAllocationDate = !showAllocationDate"
+            aria-label="Set allocation date"
+          >
+            <AppIcon name="calendar" :size="32" />
+          </button>
+        </div>
+
+        <!-- champ date repliable JUSTE EN DESSOUS -->
+        <input
+          v-if="showAllocationDate"
+          type="date"
+          v-model="allocationDate"
+          class="field field-short"
+        />
+      </div>
 
       <div class="comment-row">
         <input
@@ -537,6 +553,42 @@ function closeView() {
 /* montant aligné à droite */
 .amount-input {
   text-align: right;
+}
+
+/* =========================================================
+   Allocation form — allocation date (repliable)
+========================================================= */
+
+/* Montant + bouton calendrier */
+.amount-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+/* bouton icône (même logique que Add) */
+.icon-button {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.icon-button.active {
+  opacity: 1;
+}
+
+/* feedback hover discret */
+.icon-button:hover {
+  opacity: 0.75;
+}
+
+/* optionnel : état actif si une date est définie */
+.icon-button.active {
+  color: var(--primary);
 }
 
 /* commentaire + bouton Add */
