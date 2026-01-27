@@ -345,6 +345,11 @@ async function deleteDraftFileIfExists(): Promise<void> {
       const signed =
         spendingAmount < 0 ? -Math.abs(amount.value) : Math.abs(amount.value);
 
+        const normalizedDate =
+        allocationDate.value && allocationDate.value.trim() !== ""
+          ? allocationDate.value
+          : null;
+
       // modif locale
       allocations.value.push({
         id: crypto.randomUUID(),
@@ -352,7 +357,7 @@ async function deleteDraftFileIfExists(): Promise<void> {
         subCategoryID: subCategoryID.value,
         comment: comment.value.trim() || "Please comment",
         amount: Number(signed.toFixed(2)),
-        allocationDate: allocationDate.value,
+        allocationDate: normalizedDate,
         allocatedTagID: null, // (plus tard: valeur issue du tag saisi)
       });
 

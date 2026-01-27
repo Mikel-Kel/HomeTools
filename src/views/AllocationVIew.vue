@@ -106,9 +106,9 @@ const allocationDate = computed<string | null>({
 
 const showAllocationDate = ref(false);
 
-const totalAllocated = computed(
+/*const totalAllocated = computed(
   () => allocation.value?.totalAllocated.value ?? 0
-);
+);*/
 const remainingAmount = computed(
   () => allocation.value?.remainingAmount.value ?? 0
 );
@@ -222,6 +222,7 @@ function formatAmount(a: number) {
 async function onAddAllocation() {
   if (!allocation.value) return;
   await allocation.value.addAllocation();
+  showAllocationDate.value = false;
   await resetAmountToRemaining();
 }
 
@@ -378,9 +379,21 @@ function closeView() {
         <tbody>
           <tr v-for="a in allocations" :key="a.id">
             <td class="alloc-text">
-              <div class="alloc-comment">
-                {{ a.comment || "(no comment)" }}
+              <div class="alloc-comment-row">
+                <span class="alloc-comment">
+                  {{ a.comment || "(no comment)" }}
+                </span>
+
+                <!-- 🗓 BADGE DATE -->
+                <span
+                  v-if="a.allocationDate"
+                  class="alloc-date-badge"
+                  :title="a.allocationDate"
+                >
+                  {{ a.allocationDate }}
+                </span>
               </div>
+
               <div class="alloc-category">
                 {{ categoryLabel(a.categoryID) }}
                 <span v-if="a.subCategoryID">
@@ -388,11 +401,9 @@ function closeView() {
                 </span>
               </div>
             </td>
-
             <td class="right alloc-amount">
               {{ formatAmount(a.amount) }}
             </td>
-
             <td class="alloc-action">
               <button @click="onRemoveAllocation(allocations.indexOf(a))">
                 ✕
@@ -407,10 +418,11 @@ function closeView() {
         4. Footer actions
     ========================== -->
     <footer class="allocation-footer">
+      <!--
       <div class="footer-total">
         Total allocated: {{ formatAmount(totalAllocated) }}
-      </div>
-
+      </div>*/
+      -->
       <div class="footer-actions">
         <button
           @click="onSaveDraft"
@@ -514,7 +526,6 @@ function closeView() {
 /* =========================================================
    2. Allocation form - global
 ========================================================= */
-
 .allocation-form {
   display: flex;
   flex-direction: column;
@@ -526,13 +537,10 @@ function closeView() {
   --long-w: 450px;
   --icon-gap: 0.6rem; /* espace montant ↔ calendrier */
 }
-
 .field {
   box-sizing: border-box;
   font-size: 0.9rem;
 }
-
-/* champs courts/longs */
 :deep(.field-short) {
   width: var(--short-w) !important;
   max-width: var(--short-w) !important;
@@ -541,37 +549,26 @@ function closeView() {
   width: var(--long-w) !important;
   max-width: var(--long-w) !important;
 }
-
-/* montant aligné à droite */
 .amount-input {
   text-align: right;
 }
 
 /* =========================================================
-   Allocation date — bouton + popover
-========================================================= */
-/* =========================================================
    Allocation date — bouton + popover (à droite)
 ========================================================= */
-
 .amount-block {
   display: inline-block;
 }
-
 .amount-row {
   display: flex;
   align-items: center;
   gap: 0.6rem; /* espace montant ↔ bouton */
 }
-
-/* wrapper d'ancrage */
 .date-anchor {
   position: relative; /* 🔑 référence pour le popover */
   display: inline-flex;
   align-items: center;
 }
-
-/* bouton icône */
 .icon-button {
   appearance: none;
   -webkit-appearance: none;
@@ -582,17 +579,13 @@ function closeView() {
   line-height: 0;
   opacity: 0.7;
 }
-
 .icon-button:hover {
   opacity: 1;
 }
-
 .icon-button.active {
   opacity: 1;
   color: var(--primary);
 }
-
-/* ✅ popover placé à droite du bouton */
 .date-popover {
   position: absolute;
   top: 50%;
@@ -608,7 +601,6 @@ function closeView() {
   z-index: 50;
   white-space: nowrap; /* évite que ça passe à la ligne */
 }
-
 .date-input {
   border: none;
   background: transparent;
@@ -620,13 +612,11 @@ function closeView() {
 /* =========================================================
    Comment row
 ========================================================= */
-
 .comment-row {
   display: flex;
   align-items: center;
   gap: 1rem;
 }
-
 .comment-row button {
   appearance: none;
   -webkit-appearance: none;
@@ -635,7 +625,6 @@ function closeView() {
   box-shadow: none;
   outline: none;
 }
-
 .comment-row .field-long {
   flex: 1;
 }
@@ -647,18 +636,15 @@ function closeView() {
   width: 100%;
   border-collapse: collapse;
 }
-
 .allocation-list td {
   padding: 6px 4px;
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
   vertical-align: middle;
 }
-
 .allocation-list td:first-child {
   opacity: 0.85;
 }
-
 .allocation-list button {
   background: none;
   border: none;
@@ -666,7 +652,6 @@ function closeView() {
   font-size: 1rem;
   cursor: pointer;
 }
-
 .allocation-list td.right {
   text-align: right;
 }
@@ -674,7 +659,7 @@ function closeView() {
 /* =========================================================
    4. Footer actions
 ========================================================= */
-.allocation-footer {
+/*.allocation-footer {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -686,7 +671,7 @@ function closeView() {
   font-size: 0.85rem;
   opacity: 0.75;
 }
-
+*/
 .footer-actions {
   display: flex;
   justify-content: flex-end;
@@ -801,6 +786,46 @@ button:disabled {
   height: 1px;
   background: var(--border);
   margin: 0.75rem 0;
+}
+
+/* =========================================================
+   Allocation list — comment + date badge (iOS-like)
+========================================================= */
+
+.alloc-topline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0; /* pour ellipsis */
+}
+
+.alloc-comment {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.alloc-date-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 2px 8px;
+  border-radius: 999px;
+
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.75;
+  white-space: nowrap;
 }
 
 /* =========================================================
