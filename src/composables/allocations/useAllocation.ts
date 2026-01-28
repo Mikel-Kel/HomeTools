@@ -27,7 +27,7 @@
  *        - state === BALANCED
  *
  * R2 — Release
- *      A draft can be released IF AND ONLY IF:
+ *      A draft can only be read IF AND ONLY IF:
  *        - state === DRAFTED
  *
  * R3 — Draft invalidation
@@ -97,6 +97,7 @@ type AllocationState =
   | "EDITING"   // remaining != 0
   | "BALANCED"  // remaining == 0, pas drafté
   | "DRAFTED"   // draft sauvegardé
+  | "READONLY"   // draft sauvegardé
   | "BUSY";     // transition
 
 const loading = ref(true);
@@ -212,39 +213,27 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
   /* =========================
      Draft file helpers
   ========================= */
-/*  async function deleteDraftFileIfExists(): Promise<void> {
-    if (!driveAvailable()) return;
+  async function deleteDraftFileIfExists(): Promise<void> {
 
-    const draftsFolder = driveState.value!.folders.allocations.drafts;
-    const filename = `${spendingId}.json`;
-
-    const existing = await findFileByName(draftsFolder, filename);
-    if (existing) {
-      await deleteFile(existing.id);
+    if (!driveAvailable()) {
+      console.warn("🚫 Drive not available");
+      console.groupEnd();
+      return;
     }
+
+    const folder = driveState.value!.folders.allocations.drafts;
+    const filename = `${spendingId}.json`;
+    const existing = await findFileByName(folder, filename);
+
+    if (!existing) {
+      console.warn("❌ Draft file NOT FOUND → nothing deleted");
+      console.groupEnd();
+      return;
+    }
+
+    await deleteFile(existing.id);
+
   }
-*/
-async function deleteDraftFileIfExists(): Promise<void> {
-
-  if (!driveAvailable()) {
-    console.warn("🚫 Drive not available");
-    console.groupEnd();
-    return;
-  }
-
-  const folder = driveState.value!.folders.allocations.drafts;
-  const filename = `${spendingId}.json`;
-  const existing = await findFileByName(folder, filename);
-
-  if (!existing) {
-    console.warn("❌ Draft file NOT FOUND → nothing deleted");
-    console.groupEnd();
-    return;
-  }
-
-  await deleteFile(existing.id);
-
-}
 
 
   async function saveDraftInternal(): Promise<void> {
@@ -285,50 +274,82 @@ async function deleteDraftFileIfExists(): Promise<void> {
 
       busy.value = true;
       busyAction.value = "load";
-      /* state.value = "BUSY"; */
 
       try {
         const draftsFolder = driveState.value!.folders.allocations.drafts;
+        const releasedFolder = driveState.value!.folders.allocations.released;
         const filename = `${spendingId}.json`;
 
+        /* =====================================================
+          1. Tentative : DRAFT
+        ===================================================== */
         let file = await findFileByName(draftsFolder, filename);
 
-        if (!file) {
-          const reopened = await reopenReleasedIfExists();
-          if (reopened) {
-            file = await findFileByName(draftsFolder, filename);
+        if (file) {
+          const raw = await readJSON<any>(file.id);
+
+          if (!Array.isArray(raw?.allocations)) {
+            // draft invalide → on repart proprement
+            allocations.value = [];
+            state.value = "EMPTY";
+            recomputeLocalState();
+            return;
           }
-        }
 
-        if (!file) {
-          state.value = "EMPTY";
-          recomputeLocalState();
+          allocations.value = raw.allocations.map((a: any) => ({
+            id: crypto.randomUUID(),
+            categoryID: a.categoryID ?? null,
+            subCategoryID: a.subCategoryID ?? null,
+            comment: a.comment ?? "",
+            amount: Number(Number(a.amount).toFixed(2)),
+            allocationDate: a.allocationDate ?? null,
+            allocatedTagID: a.allocatedTagID ?? null,
+          }));
+
+          // draft chargé ⇒ état DRAFTED
+          state.value = "DRAFTED";
+          presetAmount();
           return;
         }
 
-        const raw = await readJSON<any>(file.id);
-        if (!Array.isArray(raw?.allocations)) {
-          // draft invalide → on repart proprement
-          state.value = "EMPTY";
-          recomputeLocalState();
+        /* =====================================================
+          2. Tentative : RELEASED (lecture seule)
+        ===================================================== */
+        const released = await findFileByName(releasedFolder, filename);
+
+        if (released) {
+          const raw = await readJSON<any>(released.id);
+
+          if (!Array.isArray(raw?.allocations)) {
+            allocations.value = [];
+            state.value = "EMPTY";
+            recomputeLocalState();
+            return;
+          }
+
+          allocations.value = raw.allocations.map((a: any) => ({
+            id: crypto.randomUUID(),
+            categoryID: a.categoryID ?? null,
+            subCategoryID: a.subCategoryID ?? null,
+            comment: a.comment ?? "",
+            amount: Number(Number(a.amount).toFixed(2)),
+            allocationDate: a.allocationDate ?? null,
+            allocatedTagID: a.allocatedTagID ?? null,
+          }));
+
+          // 🔒 lecture seule
+          state.value = "READONLY";
+          presetAmount();
           return;
         }
 
-        allocations.value = raw.allocations.map((a: any) => ({
-          id: crypto.randomUUID(),
-          categoryID: a.categoryID ?? null,
-          subCategoryID: a.subCategoryID ?? null,
-          comment: a.comment ?? "",
-          amount: Number(Number(a.amount).toFixed(2)),
-          allocationDate: a.allocationDate ?? null,
-          allocatedTagID: a.allocatedTagID ?? null,
-        }));
+        /* =====================================================
+          3. Rien trouvé
+        ===================================================== */
+        allocations.value = [];
+        state.value = "EMPTY";
+        recomputeLocalState();
 
-        // draft chargé ⇒ état DRAFTED (prioritaire sur le calcul local)
-        state.value = "DRAFTED";
-
-        // preset montant
-        presetAmount();
       } finally {
         busy.value = false;
         busyAction.value = null;
@@ -491,7 +512,7 @@ async function deleteDraftFileIfExists(): Promise<void> {
     });
   }
 
-  async function reopenReleasedIfExists(): Promise<boolean> {
+  /*async function reopenReleasedIfExists(): Promise<boolean> {
     if (!driveAvailable()) return false;
 
     const draftsFolder = driveState.value!.folders.allocations.drafts;
@@ -507,7 +528,7 @@ async function deleteDraftFileIfExists(): Promise<void> {
     await deleteFile(released.id);
 
     return true;
-  }
+  }*/
 
 /* =========================
      Form helpers
