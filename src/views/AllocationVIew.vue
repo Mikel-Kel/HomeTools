@@ -149,19 +149,6 @@ async function resetAmountToRemaining() {
 
 const dateInput = ref<HTMLInputElement | null>(null);
 
-/*function openDatePicker() {
-  if (!dateInput.value) return;
-
-  // API moderne (Chrome, Safari récent, iOS)
-  if (typeof dateInput.value.showPicker === "function") {
-    dateInput.value.showPicker();
-  } else {
-    // fallback ancien navigateur
-    dateInput.value.focus();
-    dateInput.value.click();
-  }
-}*/
-
 /* =========================
    Lifecycle
 ========================= */
@@ -314,24 +301,29 @@ function closeView() {
     ========================== -->
     <section class="allocation-form">
 
-      <select v-model="categoryID" class="field field-short">
+      <select v-model="categoryID"
+      class="field field-short"
+      :disabled="allocation?.state.value === 'DRAFTED' 
+                || allocation?.state.value === 'BUSY'
+                || allocation?.state.value === 'READONLY'"
+      > 
         <option :value="null" disabled>Category</option>
         <option v-for="c in categories" :key="c.id" :value="c.id">
           {{ c.label }}
         </option>
       </select>
-
-      <select
-        v-model="subCategoryID"
-        :disabled="categoryID === null"
-        class="field field-short"
+      <select v-model="subCategoryID"
+      :disabled="categoryID === null
+             || allocation?.state.value === 'DRAFTED'
+             || allocation?.state.value === 'BUSY'
+             || allocation?.state.value === 'READONLY'"
+      class="field field-short"
       >
         <option :value="null" disabled>Sub-category</option>
         <option v-for="sc in subCategories" :key="sc.id" :value="sc.id">
           {{ sc.label }}
         </option>
       </select>
-
       <!-- 🔽 MONTANT + CALENDRIER -->
       <div class="amount-block">
         <div class="amount-row">
@@ -341,55 +333,51 @@ function closeView() {
             type="text"
             inputmode="decimal"
             class="field field-short amount-input"
+            :disabled="allocation?.state.value === 'DRAFTED'
+                      || allocation?.state.value === 'BUSY'
+                      || allocation?.state.value === 'READONLY'"
           />
+          <label class="date-button">
+            <AppIcon name="calendar" :size="32" />
+            <input ref="dateInput"
+              type="date"
+              v-model="allocationDate"
+              class="date-input-overlay"
+              :disabled="allocation?.state.value === 'DRAFTED'
+                        || allocation?.state.value === 'BUSY'
+                        || allocation?.state.value === 'READONLY'"
+             aria-label="Set allocation date"
+            />
+          </label>
 
-          <!-- bouton calendrier -->
-          <!--button
-            class="icon-button"
-            :class="{ active: allocationDate }"
-            @click"openDatePicker"
-            aria-label="Set allocation date"
-          >-->
-<label class="date-button">
-  <AppIcon name="calendar" :size="32" />
-
-  <input
-    ref="dateInput"
-    type="date"
-    v-model="allocationDate"
-    class="date-input-overlay"
-    aria-label="Set allocation date"
-  />
-</label>
-
-
-          <!-- input date INVISIBLE mais fonctionnel -->
-          <!-- <input
-            ref="dateInput"
-            type="date"
-            v-model="allocationDate"
-            class="hidden-date-input"
-          /> -->
         </div>
       </div> 
-
       <!-- commentaire + add -->
       <div class="comment-row">
-        <input
-          v-model="comment"
+        <input v-model="comment"
           class="field field-long"
           placeholder="(optional comment)"
+          :disabled="allocation?.state.value === 'DRAFTED'
+                    || allocation?.state.value === 'BUSY'
+                    || allocation?.state.value === 'READONLY'
+                    || !categoryID
+                    || !subCategoryID
+                    || amount === 0"
         />
         <button
           class="theme-toggle"
           @click="onAddAllocation"
-          :disabled="!categoryID || !subCategoryID || amount === 0"
+          :disabled="allocation?.state.value === 'DRAFTED'
+                    || allocation?.state.value === 'BUSY'
+                    || allocation?.state.value === 'READONLY'
+                    || !categoryID
+                    || !subCategoryID
+                    || amount === 0"
           aria-label="Add allocation"
         >
           <AppIcon name="add" :size="24" />
         </button>
       </div>
-
     </section>
     
     <div class="allocation-separator"></div>
@@ -428,7 +416,11 @@ function closeView() {
               {{ formatAmount(a.amount) }}
             </td>
             <td class="alloc-action">
-              <button @click="onRemoveAllocation(allocations.indexOf(a))">
+              <button
+                @click="onRemoveAllocation(allocations.indexOf(a))"
+                :disabled="allocation?.state.value === 'BUSY'
+                          || allocation?.state.value === 'READONLY'"
+              >
                 ✕
               </button>
             </td>
