@@ -15,7 +15,7 @@ export default defineConfig({
   },
   server: {
     allowedHosts: [
-      "webcams-chain-pleased-stands.trycloudflare.com",
+      "eva-beverages-witnesses-fibre.trycloudflare.com",
     ],
   },
 });

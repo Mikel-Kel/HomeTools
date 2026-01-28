@@ -149,7 +149,7 @@ async function resetAmountToRemaining() {
 
 const dateInput = ref<HTMLInputElement | null>(null);
 
-function openDatePicker() {
+/*function openDatePicker() {
   if (!dateInput.value) return;
 
   // API moderne (Chrome, Safari récent, iOS)
@@ -160,7 +160,7 @@ function openDatePicker() {
     dateInput.value.focus();
     dateInput.value.click();
   }
-}
+}*/
 
 /* =========================
    Lifecycle
@@ -344,22 +344,32 @@ function closeView() {
           />
 
           <!-- bouton calendrier -->
-          <button
+          <!--button
             class="icon-button"
             :class="{ active: allocationDate }"
-            @click="openDatePicker"
+            @click"openDatePicker"
             aria-label="Set allocation date"
-          >
-            <AppIcon name="calendar" :size="32" />
-          </button>
+          >-->
+<label class="date-button">
+  <AppIcon name="calendar" :size="32" />
+
+  <input
+    ref="dateInput"
+    type="date"
+    v-model="allocationDate"
+    class="date-input-overlay"
+    aria-label="Set allocation date"
+  />
+</label>
+
 
           <!-- input date INVISIBLE mais fonctionnel -->
-          <input
+          <!-- <input
             ref="dateInput"
             type="date"
             v-model="allocationDate"
             class="hidden-date-input"
-          />
+          /> -->
         </div>
       </div> 
 
@@ -582,7 +592,7 @@ function closeView() {
   display: inline-flex;
   align-items: center;
 }
-.icon-button {
+/*.icon-button {
   appearance: none;
   -webkit-appearance: none;
   background: none;
@@ -591,7 +601,7 @@ function closeView() {
   cursor: pointer;
   line-height: 0;
   opacity: 0.7;
-}
+}*/
 .icon-button:hover {
   opacity: 1;
 }
@@ -599,6 +609,26 @@ function closeView() {
   opacity: 1;
   color: var(--primary);
 }
+
+.date-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.date-button:hover {
+  opacity: 1;
+}
+
+.date-input-overlay {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .date-popover {
   position: absolute;
   top: 50%;
@@ -622,13 +652,14 @@ function closeView() {
   outline: none;
 }
 /* input date invisible mais actif */
+/*
 .hidden-date-input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
   width: 0;
   height: 0;
-}
+}*/
 
 /* =========================================================
    Comment row
