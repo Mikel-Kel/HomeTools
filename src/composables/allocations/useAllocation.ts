@@ -251,6 +251,7 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
       {
         version: 1,
         spendingId,
+        processed: false,
         partyID: partyID ?? null,
         savedAt: new Date().toISOString(),
         allocations: allocations.value,
@@ -287,6 +288,7 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
 
         if (file) {
           const raw = await readJSON<any>(file.id);
+          const processed = raw?.processed === true;
 
           if (!Array.isArray(raw?.allocations)) {
             // draft invalide → on repart proprement
@@ -319,6 +321,7 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
 
         if (released) {
           const raw = await readJSON<any>(released.id);
+          const processed = raw?.processed === true;
 
           if (!Array.isArray(raw?.allocations)) {
             allocations.value = [];
@@ -491,6 +494,7 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
           {
             version: 1,
             spendingId,
+            processed: false,
             partyID: partyID ?? null,
             spendingAmount: Number(spendingAmount.toFixed(2)),
             currency: "CHF",
@@ -511,24 +515,6 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
       }
     });
   }
-
-  /*async function reopenReleasedIfExists(): Promise<boolean> {
-    if (!driveAvailable()) return false;
-
-    const draftsFolder = driveState.value!.folders.allocations.drafts;
-    const releasedFolder = driveState.value!.folders.allocations.released;
-    const filename = `${spendingId}.json`;
-
-    const released = await findFileByName(releasedFolder, filename);
-    if (!released) return false;
-
-    const data = await readJSON<any>(released.id);
-
-    await writeJSON(draftsFolder, filename, data);
-    await deleteFile(released.id);
-
-    return true;
-  }*/
 
 /* =========================
      Form helpers
