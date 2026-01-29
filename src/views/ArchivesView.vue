@@ -3,21 +3,21 @@ import PageHeader from "@/components/PageHeader.vue";
 </script>
 
 <template>
-  <PageHeader title="Event Log" icon="rss" />
+  <PageHeader title="Archives" icon="folder" />
 
-  <div class="event-log-view">
+  <div class="archives-view">
     <div class="wip-box">
       <div class="wip-title">Work in progress</div>
       <div class="wip-text">
-        The event log is not available yet.<br />
-        This feature will be enabled in a future release.
+        This section is not available yet.<br />
+        It will be implemented in a future release.
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.event-log-view {
+.archives-view {
   padding: 1.5rem;
   background: var(--bg);
   color: var(--text);
@@ -27,19 +27,15 @@ import PageHeader from "@/components/PageHeader.vue";
   align-items: center;
 }
 
-/* Carte centrale */
 .wip-box {
-  max-width: 380px;
+  max-width: 360px;
   padding: 1.25rem 1.5rem;
-
   border-radius: 14px;
   background: var(--primary-soft);
   border: 1px solid var(--border);
-
   text-align: center;
 }
 
-/* Titre */
 .wip-title {
   font-size: 1rem;
   font-weight: 700;
@@ -47,7 +43,6 @@ import PageHeader from "@/components/PageHeader.vue";
   color: var(--primary);
 }
 
-/* Texte */
 .wip-text {
   font-size: 0.85rem;
   opacity: 0.8;

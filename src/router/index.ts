@@ -4,8 +4,9 @@ import { useDrive } from "@/composables/useDrive";
 import HomeView from "../views/HomeView.vue";
 import AuthenticationView from "../views/AuthenticationView.vue";
 import SpendingView from "../views/SpendingView.vue";
-import ContactView from "../views/ContactView.vue";
 import AllocationView from "../views/AllocationView.vue";
+import FollowUpView from "../views/FollowUpView.vue"; 
+import ArchivesView from "../views/ArchivesView.vue";
 import EventLogView from "../views/devtools/EventLogView.vue";
 
 const router = createRouter({
@@ -30,17 +31,23 @@ const router = createRouter({
       meta: { level: 1, title: "Spending", requiresDrive: true },
     },
     {
-      path: "/contact",
-      name: "contact",
-      component: ContactView,
-      meta: { level: 1, title: "Contact", requiresDrive: true },
-    },
-    {
       path: "/allocation/:id",
       name: "allocation",
       component: AllocationView,
       props: true,
       meta: { level: 2, title: "Allocation", requiresDrive: true },
+    },
+    {
+      path: "/follow-up",
+      name: "followup",
+      component: FollowUpView,
+      meta: { level: 1, title: "Follow-up", requiresDrive: true },
+    },
+    {
+      path: "/archives",
+      name: "archives",
+      component: ArchivesView,
+      meta: { level: 1, title: "Archives", requiresDrive: true },
     },
     {
       path: "/events",

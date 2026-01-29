@@ -74,16 +74,22 @@ const driveStatus = computed<"connected" | "disconnected">(() =>
       </li>
 
       <li>
-        <router-link to="/contact" class="menu-item">
-          <AppIcon name="users" :size="32" />
-          <span>Contact</span>
+        <router-link to="/follow-up" class="menu-item">
+          <AppIcon name="equalizer" :size="32" />
+          <span>Follow-up</span>
+        </router-link>
+      </li>
+      <li>
+        <router-link to="/archives" class="menu-item">
+          <AppIcon name="folder" :size="32" />
+          <span>Archives</span>
         </router-link>
       </li>
 
       <li>
         <router-link to="/events" class="menu-item dev">
           <AppIcon name="rss" :size="32" />
-          <span>Events (DevTools)</span>
+          <span>Activity logs</span>
         </router-link>
       </li>
     </ul>

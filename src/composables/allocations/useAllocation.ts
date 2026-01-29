@@ -15,6 +15,7 @@
  * EDITING   : allocations exist, remaining ≠ 0
  * BALANCED  : allocations exist, remaining = 0, not drafted
  * DRAFTED   : draft saved in Drive (drafts/)
+ * READONLY  : released allocation loaded (processed or not), read-only
  * BUSY      : transient state during async Drive operations
  *
  *
@@ -27,7 +28,7 @@
  *        - state === BALANCED
  *
  * R2 — Release
- *      A draft can only be read IF AND ONLY IF:
+ *      A draft can be released IF AND ONLY IF:
  *        - state === DRAFTED
  *
  * R3 — Draft invalidation
@@ -48,14 +49,14 @@
  *      (typically after the last ADD),
  *      a draft is automatically saved.
  *
- * R6 — Reopen released
+ * R6 — Released allocations
  *      When AllocationView is opened:
- *        - if no draft exists
- *        - but a released file exists
- *      THEN:
- *        - released file is moved back to drafts
- *        - allocation becomes editable again
- *        - state becomes DRAFTED
+ *        - if a draft exists → it is loaded (editable)
+ *        - else if a released file exists → it is loaded READ-ONLY
+ *
+ *      Released files are NEVER moved back to drafts.
+ *      Their lifecycle is handled exclusively by backend/batch processes
+ *      via the `processed` flag.
  *
  *
  * TECHNICAL GUARANTEES
@@ -63,11 +64,11 @@
  * - All async operations are serialized via runExclusive()
  * - State transitions are explicit and centralized
  * - No watcher-based side effects
+ * - Released files are immutable from the UI
  * - UI derives from state, never the opposite
  *
  * ============================================================
  */
-
 
 import { ref, computed } from "vue";
 import {

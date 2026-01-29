@@ -3,21 +3,21 @@ import PageHeader from "@/components/PageHeader.vue";
 </script>
 
 <template>
-  <PageHeader title="Event Log" icon="rss" />
+  <PageHeader title="Follow-up" icon="equalizer" />
 
-  <div class="event-log-view">
+  <div class="followup-view">
     <div class="wip-box">
       <div class="wip-title">Work in progress</div>
       <div class="wip-text">
-        The event log is not available yet.<br />
-        This feature will be enabled in a future release.
+        This section is not available yet.<br />
+        It will be implemented in a future release.
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.event-log-view {
+.followup-view {
   padding: 1.5rem;
   background: var(--bg);
   color: var(--text);
@@ -29,7 +29,7 @@ import PageHeader from "@/components/PageHeader.vue";
 
 /* Carte centrale */
 .wip-box {
-  max-width: 380px;
+  max-width: 360px;
   padding: 1.25rem 1.5rem;
 
   border-radius: 14px;
