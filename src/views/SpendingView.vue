@@ -300,12 +300,12 @@ onBeforeUnmount(() => {
 <template>
   <PageHeader
     title="Spending"
-    icon="shopping_cart"
+    icon="spending"
   >
     <template #actions>
       <!-- Archive -->
       <AppIcon
-        name="folder"
+        name="bookshelf"
         :size="32"
         class="header-icon"
         title="Archives"

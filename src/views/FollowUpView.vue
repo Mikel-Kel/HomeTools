@@ -3,7 +3,7 @@ import PageHeader from "@/components/PageHeader.vue";
 </script>
 
 <template>
-  <PageHeader title="Follow-up" icon="equalizer" />
+  <PageHeader title="Follow-up" icon="followup" />
 
   <div class="followup-view">
     <div class="wip-box">

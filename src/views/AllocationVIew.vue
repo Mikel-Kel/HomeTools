@@ -249,7 +249,7 @@ function closeView() {
 </script>
 
 <template>
-  <PageHeader title="Allocation" icon="shopping_cart" />
+  <PageHeader title="Allocation" icon="spending" />
 
   <div v-if="!recordReady" class="loading">
     <p>Loading allocation...</p>

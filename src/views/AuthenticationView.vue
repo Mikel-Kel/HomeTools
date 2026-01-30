@@ -36,7 +36,7 @@ async function handleConnect() {
 </script>
 
 <template>
-  <PageHeader title="Authentication" icon="lock" />
+  <PageHeader title="Authentication" icon="locker" />
 
   <div class="authentication-view">
     <p>

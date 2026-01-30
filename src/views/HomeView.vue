@@ -61,27 +61,27 @@ const driveStatus = computed<"connected" | "disconnected">(() =>
     <ul class="menu">
       <li>
         <router-link to="/authentication" class="menu-item">
-          <AppIcon name="lock" :size="32" />
+          <AppIcon name="locker" :size="32" />
           <span>Authentication</span>
         </router-link>
       </li>
 
       <li>
         <router-link to="/spending" class="menu-item">
-          <AppIcon name="shopping_cart" :size="32" />
+          <AppIcon name="spending" :size="32" />
           <span>Spending</span>
         </router-link>
       </li>
 
       <li>
         <router-link to="/follow-up" class="menu-item">
-          <AppIcon name="equalizer" :size="32" />
+          <AppIcon name="followup" :size="32" />
           <span>Follow-up</span>
         </router-link>
       </li>
       <li>
         <router-link to="/documentsArchive" class="menu-item">
-          <AppIcon name="folder" :size="32" />
+          <AppIcon name="bookshelf" :size="32" />
           <span>Archives</span>
         </router-link>
       </li>
