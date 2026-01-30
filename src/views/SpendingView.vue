@@ -14,6 +14,7 @@ import {
 } from "@/composables/spending/useSpending";
 import { useDrive } from "@/composables/useDrive";
 import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
+import { releaseDraftsBatch } from  "@/composables/allocations/releaseBatch";
 
 /* =========================
    State
@@ -151,6 +152,36 @@ function openArchives() {
 }
 
 /* =========================
+   Release all drafts
+========================= */
+
+const draftRecords = computed(() =>
+  spending.getDraftRecords()
+);
+
+const draftCount = computed(
+  () => draftRecords.value.length
+);
+
+const canReleaseAll = computed(
+  () => draftCount.value > 0
+);
+
+async function releaseAllDrafts() {
+  if (!canReleaseAll.value) return;
+
+  const ok = confirm(
+    `Release ${draftCount.value} draft(s)?\nThis action cannot be undone.`
+  );
+  if (!ok) return;
+
+  await releaseDraftsBatch(draftRecords.value);
+
+  // 🔁 refresh spending (statuts + données)
+  await loadFromDrive();
+}
+
+/* =========================
    Formatting
 ========================= */
 function formatAmount(amount: number) {
@@ -266,20 +297,17 @@ onBeforeUnmount(() => {
 </script>
   
 <template>
-  <PageHeader
-    title="Spending"
-    icon="shopping_cart"
-  >
-    <template #actions>
-      <AppIcon
-        name="folder"
-        :size="32"
-        class="header-icon"
-        title="documentsArchive"
-        @click="openArchives"
-      />
-    </template>
-  </PageHeader>
+  <header class="page-header">
+    <AppTitle
+      :text="title"
+      :icon="icon"
+    />
+
+    <div class="page-actions">
+      <slot name="actions" />
+      <NavigationButtons :disabled="disabled" />
+    </div>
+  </header>
 
   <div class="spending-scroll">
     <!-- Sticky zone (Filters) -->
@@ -445,6 +473,15 @@ onBeforeUnmount(() => {
 
 .header-action:hover {
   background: var(--primary-soft);
+}
+
+.header-icon {
+  cursor: pointer;
+}
+
+.header-icon.disabled {
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 /* =========================================================
@@ -701,9 +738,6 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
-/* =========================================================
-   Status pill (table)
-========================================================= */
 /* =========================================================
    Status pill (table)
 ========================================================= */

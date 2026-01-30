@@ -17,6 +17,11 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+.vite
+dist/
+node_modules/
+tsbuildinfo
+**/*.vue.js
 *.suo
 *.ntvs*
 *.njsproj
