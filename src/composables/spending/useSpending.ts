@@ -7,6 +7,7 @@ export interface Account {
   id: string;
   label: string;
 }
+
 export interface SpendingRecord {
   id: string;
   accountId: string;
@@ -16,7 +17,7 @@ export interface SpendingRecord {
   amount: number;
   owner: string;
 
-  // 🔽 additonal fields to ease allocation process
+  // 🔽 additional fields to ease allocation process
   categoryID: number | null;
   subCategoryID: number | null;
   allocComment: string;
@@ -38,8 +39,8 @@ const records = ref<SpendingWithStatus[]>([]);
 /* =========================
    Composable
 ========================= */
-// useSpending.ts
 export function useSpending() {
+
   function replaceAll(
     newAccounts: Account[],
     newRecords: SpendingRecord[]
@@ -71,11 +72,19 @@ export function useSpending() {
       .sort((a, b) => b.date.localeCompare(a.date));
   }
 
+  // ✅ C’EST CETTE FONCTION QUI ÉTAIT ABSENTE AVANT
+  function getDraftRecords() {
+    return records.value.filter(
+      r => r.allocationStatus === "draft"
+    );
+  }
+
   return {
     accounts,
     records,
     replaceAll,
     applyAllocationStatus,
     getRecordsForAccount,
+    getDraftRecords, // ✅ exposée correctement
   };
 }

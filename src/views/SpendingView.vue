@@ -12,6 +12,7 @@ import {
   type SpendingWithStatus,
   type AllocationStatus,
 } from "@/composables/spending/useSpending";
+
 import { useDrive } from "@/composables/useDrive";
 import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
 import { releaseDraftsBatch } from  "@/composables/allocations/releaseBatch";
@@ -20,9 +21,9 @@ import { releaseDraftsBatch } from  "@/composables/allocations/releaseBatch";
    State
 ========================= */
 const router = useRouter();
-const spending = useSpending();
 const statusFilter = ref<Set<AllocationStatus>>(new Set());
 const { driveState } = useDrive();
+const spending = useSpending();
 
 /* =========================
    Filters
@@ -297,17 +298,31 @@ onBeforeUnmount(() => {
 </script>
   
 <template>
-  <header class="page-header">
-    <AppTitle
-      :text="title"
-      :icon="icon"
-    />
+  <PageHeader
+    title="Spending"
+    icon="shopping_cart"
+  >
+    <template #actions>
+      <!-- Archive -->
+      <AppIcon
+        name="folder"
+        :size="32"
+        class="header-icon"
+        title="Archives"
+        @click="openArchives"
+      />
 
-    <div class="page-actions">
-      <slot name="actions" />
-      <NavigationButtons :disabled="disabled" />
-    </div>
-  </header>
+      <!-- Release all drafts -->
+      <AppIcon
+        name="rss"
+        :size="32"
+        class="header-icon"
+        :class="{ disabled: !canReleaseAll }"
+        title="Release all drafts"
+        @click="releaseAllDrafts"
+      />
+    </template>
+  </PageHeader>
 
   <div class="spending-scroll">
     <!-- Sticky zone (Filters) -->
