@@ -64,7 +64,7 @@ const subCategoryFilter = ref<Set<number>>(new Set());
 const availableBanks = computed(() =>
   banksStore.banks.value
     .map(b => ({
-      id: b.bankID,
+      id: b.id,
       label: b.label,
     }))
     .sort((a, b) => a.label.localeCompare(b.label))
@@ -109,7 +109,7 @@ function resolveBank(spendingId: string) {
   const bankID = spendingId.slice(0, 3);
 
   return banksStore.banks.value.find(
-    b => b.bankID === bankID
+    b => b.id === bankID
   ) ?? null;
 }
 
@@ -228,7 +228,7 @@ async function loadArchivedAllocations() {
       out.push({
         spendingId,
 
-        bankID: bank?.bankID ?? "unknown",
+        bankID: bank?.id ?? "unknown",
         bankLabel: bank?.label ?? "Unknown bank",
 
         allocationId: a.id,
