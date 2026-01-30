@@ -5,8 +5,9 @@ import HomeView from "../views/HomeView.vue";
 import AuthenticationView from "../views/AuthenticationView.vue";
 import SpendingView from "../views/SpendingView.vue";
 import AllocationView from "../views/AllocationView.vue";
+import AllocationsArchiveView from "../views/AllocationsArchiveView.vue"; 
 import FollowUpView from "../views/FollowUpView.vue"; 
-import ArchivesView from "../views/ArchivesView.vue";
+import DocumentsArchiveView from "../views/DocumentsArchiveView.vue";
 import EventLogView from "../views/devtools/EventLogView.vue";
 
 const router = createRouter({
@@ -25,6 +26,12 @@ const router = createRouter({
       meta: { level: 1, title: "Authentication" },
     },
     {
+      path: "/allocationsArchive",
+      name: "allocationsArchive",
+      component: AllocationsArchiveView,
+      meta: { level: 2, title: "Allocation Archives" },
+    },
+    {
       path: "/spending",
       name: "spending",
       component: SpendingView,
@@ -38,16 +45,22 @@ const router = createRouter({
       meta: { level: 2, title: "Allocation", requiresDrive: true },
     },
     {
+      path: "/allocationsArchive",
+      name: "allocationsArchive",
+      component: AllocationsArchiveView,
+      meta: { level: 2, title: "Allocation Archives", requiresDrive: true },
+    },
+    {
       path: "/follow-up",
       name: "followup",
       component: FollowUpView,
       meta: { level: 1, title: "Follow-up", requiresDrive: true },
     },
     {
-      path: "/archives",
-      name: "archives",
-      component: ArchivesView,
-      meta: { level: 1, title: "Archives", requiresDrive: true },
+      path: "/documentsArchive",
+      name: "documentsArchive",
+      component: DocumentsArchiveView,
+      meta: { level: 1, title: "Documents Archives", requiresDrive: true },
     },
     {
       path: "/events",

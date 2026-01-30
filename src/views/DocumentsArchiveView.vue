@@ -3,7 +3,7 @@ import PageHeader from "@/components/PageHeader.vue";
 </script>
 
 <template>
-  <PageHeader title="Archives" icon="folder" />
+  <PageHeader title="Documents archives" icon="folder" />
 
   <div class="archives-view">
     <div class="wip-box">

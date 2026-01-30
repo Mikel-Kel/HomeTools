@@ -11,6 +11,7 @@ export type HomeToolsDriveState = {
     allocations: {
       drafts: string;
       released: string;
+      archived: string;
     };
   };
 };
@@ -27,6 +28,7 @@ export const DRIVE_STATE = {
     allocations: {
       drafts: "1WheqzXBd47NK9u8xwGlbDQAbBYYtOG08",
       released: "1CqevaUPvOy_evidswrEfgOrNVUZWi2VL",
+      archived: "1o9jPu6CuOKDC0o7RLbmq9Rt6fSBAE8U7",
     },
   },
 };

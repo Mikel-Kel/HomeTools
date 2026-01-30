@@ -11,12 +11,20 @@ defineProps<{
 
 <template>
   <header class="page-header">
+    <!-- LEFT -->
     <AppTitle
       :text="title"
       :icon="icon"
     />
 
-    <NavigationButtons :disabled="disabled" />
+    <!-- RIGHT -->
+    <div class="header-right">
+      <!-- 🔌 actions spécifiques à la vue -->
+      <slot name="actions" />
+
+      <!-- navigation globale -->
+      <NavigationButtons :disabled="disabled" />
+    </div>
   </header>
 </template>
 
@@ -29,13 +37,16 @@ defineProps<{
   align-items: center;
   justify-content: space-between;
 
-  margin-bottom: 0rem;
   padding: 0.75rem 1rem;
-
   background: var(--bg);
   color: var(--text);
-
   border-bottom: 1px solid var(--border);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 /* AppTitle hérite correctement */

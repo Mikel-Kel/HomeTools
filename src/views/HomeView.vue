@@ -80,7 +80,7 @@ const driveStatus = computed<"connected" | "disconnected">(() =>
         </router-link>
       </li>
       <li>
-        <router-link to="/archives" class="menu-item">
+        <router-link to="/documentsArchive" class="menu-item">
           <AppIcon name="folder" :size="32" />
           <span>Archives</span>
         </router-link>

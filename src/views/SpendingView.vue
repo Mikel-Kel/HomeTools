@@ -3,6 +3,8 @@ import { onMounted, onBeforeUnmount, computed, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
+import AppIcon from "@/components/AppIcon.vue";
+
 import { listFilesInFolder } from "@/services/google/googleDrive";
 import { loadJSONFromFolder } from "@/services/google/driveRepository";
 import {
@@ -144,6 +146,10 @@ const absRemainingAmount = computed(() =>
   Math.abs(remainingAmount.value)
 );
 
+function openArchives() {
+  router.push({ name: "allocationsArchive" });
+}
+
 /* =========================
    Formatting
 ========================= */
@@ -260,7 +266,20 @@ onBeforeUnmount(() => {
 </script>
   
 <template>
-  <PageHeader title="Spending" icon="shopping_cart" />
+  <PageHeader
+    title="Spending"
+    icon="shopping_cart"
+  >
+    <template #actions>
+      <AppIcon
+        name="folder"
+        :size="32"
+        class="header-icon"
+        title="documentsArchive"
+        @click="openArchives"
+      />
+    </template>
+  </PageHeader>
 
   <div class="spending-scroll">
     <!-- Sticky zone (Filters) -->
@@ -414,6 +433,20 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+
+.header-action {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.header-action:hover {
+  background: var(--primary-soft);
+}
+
 /* =========================================================
    Root scroll area
 ========================================================= */
