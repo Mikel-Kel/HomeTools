@@ -8,7 +8,7 @@ withDefaults(
     iconSize?: 24 | 32 | 64 | 128;
   }>(),
   {
-    iconSize: 24,
+    iconSize: 64,
   }
 );
 </script>

@@ -13,18 +13,29 @@ const props = withDefaults(
 
 const src = ref<string>("");
 
-watchEffect(async () => {
-  try {
-    const mod = await import(
-      `@/assets/icons/png/${props.size}/${props.name}.png`
-    );
-    src.value = mod.default;
-  } catch (e) {
-    console.warn(
-      `[AppIcon] icon not found: ${props.name} (${props.size}px)`
-    );
-    src.value = "";
+// 🔑 tailles de secours globales
+const FALLBACK_SIZES = [props.size, 32, 24, 64, 128];
+
+// ⚠️ Vite doit connaître les fichiers à l’avance
+const icons = import.meta.glob(
+  "@/assets/icons/png/*/*.png",
+  { eager: true, import: "default" }
+) as Record<string, string>;
+
+watchEffect(() => {
+  src.value = "";
+
+  for (const size of FALLBACK_SIZES) {
+    const key = `/src/assets/icons/png/${size}/${props.name}.png`;
+    if (icons[key]) {
+      src.value = icons[key];
+      return;
+    }
   }
+
+  console.warn(
+    `[AppIcon] icon not found: ${props.name} (tried ${FALLBACK_SIZES.join(", ")})`
+  );
 });
 </script>
 
@@ -44,6 +55,5 @@ watchEffect(async () => {
 .png-icon {
   display: block;
   user-select: none;
-  image-rendering: auto;
 }
 </style>
