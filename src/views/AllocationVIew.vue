@@ -119,9 +119,6 @@ const isBalanced = computed(
 const canSaveDraft = computed(
   () => allocation.value?.canSaveDraft.value ?? false
 );
-const canRelease = computed(
-  () => allocation.value?.canRelease.value ?? false
-);
 
 const busyMessage = computed(() => {
   if (loading.value) return "Loading…";
@@ -129,8 +126,6 @@ const busyMessage = computed(() => {
   switch (busyAction.value) {
     case "save":
       return "Saving…";
-    case "release":
-      return "Releasing…";
     default:
       return "";
   }
@@ -231,11 +226,6 @@ async function onAddAllocation() {
 
 async function onSaveDraft() {
   await allocation.value?.saveDraft();
-}
-
-async function onRelease() {
-  await allocation.value?.release();
-  router.push({ name: "spending" });
 }
 
 async function onRemoveAllocation(index: number) {
@@ -452,15 +442,6 @@ function closeView() {
           <template v-else>
             Save draft
           </template>
-        </button>
-
-        <button
-          @click="onRelease"
-          :disabled="busy || !canRelease"
-        >
-          {{ busy && busyAction === "release"
-            ? "Releasing…"
-            : "Release" }}
         </button>
 
         <button class="secondary" @click="closeView" :disabled="busy">
