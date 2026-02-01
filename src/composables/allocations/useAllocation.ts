@@ -157,7 +157,7 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
   ========================= */
   const state = ref<AllocationState>("EMPTY");
   const busy = ref(false);
-  const busyAction = ref<"load" | "save" | "release" | null>(null);
+  const busyAction = ref<"load" | "save" | null>(null);
   
   /* =========================
      Domain data
@@ -411,8 +411,8 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
           await saveDraftInternal();
           state.value = "DRAFTED"; // R4
         } finally {
-          busy.value = false;
           busyAction.value = null;
+          busy.value = false;
         }
       }
     });
@@ -434,8 +434,8 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
         try {
           await deleteDraftFileIfExists();
         } finally {
-          busy.value = false;
           busyAction.value = null;
+          busy.value = false;
         }
       }
 
@@ -457,59 +457,6 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
       try {
         await saveDraftInternal();
         state.value = "DRAFTED"; // R4
-      } finally {
-        busy.value = false;
-        busyAction.value = null;
-      }
-    });
-  }
-
-  async function release(): Promise<void> {
-    return runExclusive(async () => {
-      // R2 : uniquement DRAFTED
-      if (state.value !== "DRAFTED") return;
-      if (!driveAvailable()) return;
-
-      busy.value = true;
-      busyAction.value = "release";
-      state.value = "BUSY";
-
-      try {
-        const draftsFolder = driveState.value!.folders.allocations.drafts;
-        const releasedFolder = driveState.value!.folders.allocations.released;
-        const filename = `${spendingId}.json`;
-
-        const draftFile = await findFileByName(draftsFolder, filename);
-        if (!draftFile) {
-          // draft attendu mais absent → on retombe sur logique locale
-          state.value = "EDITING";
-          recomputeLocalState();
-          return;
-        }
-
-        const existingReleased = await findFileByName(releasedFolder, filename);
-
-        await writeJSON(
-          releasedFolder,
-          filename,
-          {
-            version: 1,
-            spendingId,
-            processed: false,
-            partyID: partyID ?? null,
-            spendingAmount: Number(spendingAmount.toFixed(2)),
-            currency: "CHF",
-            releasedAt: new Date().toISOString(),
-            allocations: allocations.value,
-          },
-          existingReleased?.id
-        );
-
-        await deleteFile(draftFile.id);
-
-        // après release, on n’a plus de draft
-        state.value = "EDITING";
-        recomputeLocalState();
       } finally {
         busy.value = false;
         busyAction.value = null;
@@ -567,6 +514,5 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
     addAllocation,
     removeAllocation,
     saveDraft,
-    release,
   };
 }

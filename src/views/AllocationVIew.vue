@@ -225,7 +225,8 @@ async function onAddAllocation() {
 }
 
 async function onSaveDraft() {
-  await allocation.value?.saveDraft();
+  if (!allocation.value) return;
+  await allocation.value.saveDraft();
 }
 
 async function onRemoveAllocation(index: number) {
@@ -435,9 +436,6 @@ function closeView() {
         >
           <template v-if="busy && busyAction === 'save'">
             Saving…
-          </template>
-          <template v-else-if="canRelease">
-            Draft saved ✓
           </template>
           <template v-else>
             Save draft
