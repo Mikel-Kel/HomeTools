@@ -305,7 +305,7 @@ onBeforeUnmount(() => {
     <template #actions>
       <!-- Archive -->
       <AppIcon
-        name="bookshelf"
+        name="book"
         :size="32"
         class="header-icon"
         title="Archives"
