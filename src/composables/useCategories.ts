@@ -8,16 +8,17 @@ import { googleAuthenticated } from "@/services/google/googleInit";
 ========================= */
 export interface SubCategory {
   id: number;
+  seq: number;        // ✅ AJOUT
   label: string;
 }
 
 export interface Category {
   id: number;
+  seq: number;        // ✅ AJOUT
   label: string;
   nature: string;
   subcategories: SubCategory[];
 }
-
 interface CategoriesFile {
   version: number;
   updatedAt?: string;

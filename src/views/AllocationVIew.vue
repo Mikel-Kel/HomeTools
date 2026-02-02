@@ -175,14 +175,17 @@ const allowedNature = computed(() =>
 );
 
 const categories = computed(() =>
-  categoriesStore.categories.value.filter(
-    c => c.nature === allowedNature.value
-  )
+  categoriesStore.categories.value
+    .filter(c => c.nature === allowedNature.value)
+    .slice() // sécurité immutabilité
+    .sort((a, b) => a.seq - b.seq)
 );
-
 const subCategories = computed(() =>
   typeof categoryID.value === "number"
-    ? categoriesStore.getSubcategories(categoryID.value)
+    ? categoriesStore
+        .getSubcategories(categoryID.value)
+        .slice()
+        .sort((a, b) => a.seq - b.seq)
     : []
 );
 
