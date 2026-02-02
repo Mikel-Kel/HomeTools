@@ -3,7 +3,7 @@ import PageHeader from "@/components/PageHeader.vue";
 </script>
 
 <template>
-  <PageHeader title="Event Log" icon="rss" />
+  <PageHeader title="Event Log" icon="pages_warning" />
 
   <div class="event-log-view">
     <div class="wip-box">
