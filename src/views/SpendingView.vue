@@ -303,25 +303,32 @@ onBeforeUnmount(() => {
     icon="spending"
   >
     <template #actions>
-      <!-- Archive -->
-      <AppIcon
-        name="book"
-        :size="32"
-        class="header-icon"
-        title="Archives"
-        @click="openArchives"
-      />
+      <div class="header-actions">
+        <!-- Groupe navigation -->
+        <div class="header-group">
+          <AppIcon
+            name="book"
+            :size="32"
+            class="header-icon"
+            title="Archives"
+            @click="openArchives"
+          />
+        </div>
 
-      <!-- Release all drafts -->
-      <AppIcon
-        name="rss"
-        :size="32"
-        class="header-icon"
-        :class="{ disabled: !canReleaseAll }"
-        title="Release all drafts"
-        @click="releaseAllDrafts"
-      />
+        <!-- Groupe action forte -->
+        <div class="header-group danger">
+          <AppIcon
+            name="rss"
+            :size="32"
+            class="header-icon"
+            :class="{ disabled: !canReleaseAll }"
+            title="Release all drafts"
+            @click="releaseAllDrafts"
+          />
+        </div>
+      </div>
     </template>
+
   </PageHeader>
 
   <div class="spending-scroll">
@@ -476,27 +483,35 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* =========================================================
+   Header actions layout
+========================================================= */
 
-.header-action {
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  font-weight: 600;
-  cursor: pointer;
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* espace entre groupes */
 }
 
-.header-action:hover {
-  background: var(--primary-soft);
+.header-group {
+  display: flex;
+  align-items: center;
 }
 
-.header-icon {
-  cursor: pointer;
+/* Séparateur visuel très léger */
+.header-group + .header-group {
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
 }
 
-.header-icon.disabled {
-  opacity: 0.35;
-  pointer-events: none;
+/* Action "dangereuse" (release) */
+.header-group.danger .header-icon {
+  color: var(--negative);
+}
+
+.header-group.danger .header-icon:hover {
+  background: var(--negative-soft, rgba(255, 0, 0, 0.08));
+  border-radius: 6px;
 }
 
 /* =========================================================

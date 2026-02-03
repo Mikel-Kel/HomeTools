@@ -276,7 +276,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <PageHeader title="Archives" icon="book" />
+  <PageHeader title="Allocations archives" icon="book" />
 
   <div class="archives-scroll">
 
