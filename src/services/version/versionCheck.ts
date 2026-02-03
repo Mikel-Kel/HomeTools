@@ -6,7 +6,7 @@ export async function checkAppVersionConsistency() {
 
   if (driveVersion !== appVersion) {
     throw new Error(
-      `Version mismatch\n\nApp: ${appVersion}\nDrive: ${driveVersion}`
+      `Version mismatch\n\nCurrent App: ${appVersion}\nReference App: ${driveVersion}`
     );
   }
 
