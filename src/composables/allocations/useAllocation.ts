@@ -209,13 +209,12 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
      Local state recomputation
      (pure, sans Drive)
   ========================= */
-  function recomputeLocalState(base?: AllocationState) {
-    // base: état actuel (si on veut préserver DRAFTED/BUSY)
+/* function recomputeLocalState(base?: AllocationState) {
     const current = base ?? state.value;
 
-    // On ne “recalcule” pas DRAFTED/BUSY automatiquement :
-    // ces états sont posés explicitement après succès Drive.
-    if (current === "DRAFTED" || current === "BUSY") return;
+    // 🔑 DRAFTED est un état métier figé
+    // BUSY ne doit JAMAIS bloquer une recomposition
+    if (current === "DRAFTED") return;
 
     if (allocations.value.length === 0) {
       state.value = "EMPTY";
@@ -224,6 +223,35 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
 
     state.value = isBalanced.value ? "BALANCED" : "EDITING";
   }
+*/
+function recomputeLocalState(base?: AllocationState) {
+  const current = base ?? state.value;
+
+  console.log(
+    "[useAllocation] recomputeLocalState",
+    {
+      base,
+      current,
+      allocations: allocations.value.length,
+      remaining: remainingAmount.value,
+      balanced: isBalanced.value,
+    }
+  );
+
+  if (current === "DRAFTED") {
+    console.log("[useAllocation] recompute aborted (DRAFTED)");
+    return;
+  }
+
+  if (allocations.value.length === 0) {
+    state.value = "EMPTY";
+    console.log("[useAllocation] state -> EMPTY");
+    return;
+  }
+
+  state.value = isBalanced.value ? "BALANCED" : "EDITING";
+  console.log("[useAllocation] state ->", state.value);
+}
 
   /* =========================
      Draft file helpers
@@ -439,8 +467,10 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
       allocations.value.splice(index, 1);
       presetAmount();
 
-      // 🔑 règle métier : toute suppression invalide un draft éventuel
-      if (driveAvailable()) {
+      // 🔑 Si on venait d’un draft, on invalide explicitement l’état
+      const wasDrafted = state.value === "DRAFTED";
+
+      if (driveAvailable() && wasDrafted) {
         busy.value = true;
         busyAction.value = null;
         state.value = "BUSY";
@@ -448,13 +478,13 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
         try {
           await deleteDraftFileIfExists();
         } finally {
-          busyAction.value = null;
           busy.value = false;
+          busyAction.value = null;
         }
       }
 
-      // retour à un état local cohérent
-      recomputeLocalState();
+      // 🔑 SORTIE EXPLICITE DE DRAFTED
+      state.value = isBalanced.value ? "BALANCED" : "EDITING";
     });
   }
 

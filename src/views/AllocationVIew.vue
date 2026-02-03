@@ -137,6 +137,19 @@ const busyMessage = computed(() => {
   }
 });
 
+
+/* DEBUG TIME*/
+watch(
+  () => allocation.value?.state.value,
+  (s) => {
+    console.log(
+      "[AllocationView] allocation.state changed ->",
+      s
+    );
+  }
+);
+
+
 /* =========================
    Auto-close when balanced (FINAL)
 ========================= */
