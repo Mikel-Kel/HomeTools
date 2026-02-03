@@ -316,19 +316,20 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Groupe action forte -->
-        <div class="header-group danger">
+        <div
+          class="header-group danger"
+          :class="{ disabled: !canReleaseAll }"
+          :title="canReleaseAll ? 'Release all drafts' : 'No drafts to release'"
+          @click="canReleaseAll && releaseAllDrafts()"
+        >
           <AppIcon
             name="rss"
             :size="32"
             class="header-icon"
-            :class="{ disabled: !canReleaseAll }"
-            title="Release all drafts"
-            @click="releaseAllDrafts"
           />
         </div>
       </div>
     </template>
-
   </PageHeader>
 
   <div class="spending-scroll">
@@ -487,6 +488,10 @@ onBeforeUnmount(() => {
    Header actions layout
 ========================================================= */
 
+/* =========================================================
+   Header actions layout
+========================================================= */
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -496,6 +501,7 @@ onBeforeUnmount(() => {
 .header-group {
   display: flex;
   align-items: center;
+  cursor: pointer;
 }
 
 /* Séparateur visuel très léger */
@@ -509,9 +515,17 @@ onBeforeUnmount(() => {
   color: var(--negative);
 }
 
-.header-group.danger .header-icon:hover {
+/* Hover uniquement si actif */
+.header-group.danger:not(.disabled):hover .header-icon {
   background: var(--negative-soft, rgba(255, 0, 0, 0.08));
   border-radius: 6px;
+}
+
+/* État désactivé */
+.header-group.disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none; /* 🔑 BLOQUE TOUT */
 }
 
 /* =========================================================

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, nextTick, ref } from "vue";
+import { computed, onMounted, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
@@ -22,8 +22,14 @@ const props = defineProps<{ id: string }>();
 ========================= */
 const spendingStore = useSpending();
 const categoriesStore = useCategories();
-
 /* =========================
+
+   Auto-close arming
+========================= */
+const autoCloseArmed = ref<boolean>(false);
+const hasAutoClosed = ref<boolean>(false);
+
+  /* =========================
    Record (nullable)
 ========================= */
 const record = computed<SpendingRecord | null>(() =>
@@ -132,6 +138,33 @@ const busyMessage = computed(() => {
 });
 
 /* =========================
+   Auto-close when balanced (FINAL)
+========================= */
+watch(
+  [isBalanced, busy],
+  ([balanced, isBusy]) => {
+    console.log(
+      "[AllocationView] auto-close check",
+      "balanced =", balanced,
+      "busy =", isBusy,
+      "armed =", autoCloseArmed.value,
+      "done =", hasAutoClosed.value
+    );
+
+    if (
+      autoCloseArmed.value &&
+      balanced &&
+      !isBusy &&
+      !hasAutoClosed.value
+    ) {
+      hasAutoClosed.value = true;
+      console.log("[AllocationView] navigating to SpendingView");
+      router.push({ name: "spending" });
+    }
+  }
+);
+
+/* =========================
    Focus
 ========================= */
 const amountInput = ref<HTMLInputElement | null>(null);
@@ -222,6 +255,9 @@ function formatAmount(a: number) {
 ========================= */
 async function onAddAllocation() {
   if (!allocation.value) return;
+
+  autoCloseArmed.value = true; // 🔑 armement explicite
+
   await allocation.value.addAllocation();
   showAllocationDate.value = false;
   await resetAmountToRemaining();
@@ -233,6 +269,7 @@ async function onSaveDraft() {
 }
 
 async function onRemoveAllocation(index: number) {
+  autoCloseArmed.value = true; // 🔑 armement explicite
   await allocation.value?.removeAllocation(index);
 }
 

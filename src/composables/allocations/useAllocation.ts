@@ -58,7 +58,19 @@
  *      Their lifecycle is handled exclusively by backend/batch processes
  *      via the `processed` flag.
  *
+  * R7 — Balanced completion (UI responsibility)
+ *      When an allocation becomes BALANCED as a result of
+ *      a user action in AllocationView:
+ *        - the allocation is auto-saved (R5)
+ *        - the view may automatically close and return
+ *          to SpendingView
  *
+ *      This behavior is:
+ *        - NOT handled by this composable
+ *        - explicitly implemented in the view layer
+ *        - triggered only by a user-driven transition
+ *          to the BALANCED state (not on initial load)
+ * 
  * TECHNICAL GUARANTEES
  * --------------------
  * - All async operations are serialized via runExclusive()
@@ -66,6 +78,8 @@
  * - No watcher-based side effects
  * - Released files are immutable from the UI
  * - UI derives from state, never the opposite
+ * - Navigation and view lifecycle decisions are handled
+ *   exclusively by the view layer (AllocationView)
  *
  * ============================================================
  */
