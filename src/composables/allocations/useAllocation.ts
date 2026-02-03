@@ -187,15 +187,24 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
   /* =========================
      Computed amounts
   ========================= */
+  // Total à allouer = toujours positif (règle ii)
+  const totalToAllocate = computed(() => Math.abs(spendingAmount));
+
+  // Somme des montants alloués = somme SIGNÉE, telle que saisie (règle iii + iv)
   const totalAllocated = computed(() =>
-    allocations.value.reduce((s, a) => s + a.amount, 0)
+    Number(
+      allocations.value.reduce((s, a) => s + Number(a.amount || 0), 0).toFixed(2)
+    )
   );
 
-  const remainingAmount = computed(() => spendingAmount - totalAllocated.value);
-
-  const isBalanced = computed(
-    () => Number(remainingAmount.value.toFixed(2)) === 0
+  // Remaining (signé) = total positif - somme des allocations (tenant compte du signe)
+  // (règle iii)
+  const remainingAmount = computed(() =>
+    Number((totalToAllocate.value - totalAllocated.value).toFixed(2))
   );
+
+  const isBalanced = computed(() => remainingAmount.value === 0);
+
 
   /* =========================
      UI flags (DERIVED ONLY)
@@ -409,39 +418,33 @@ function recomputeLocalState(base?: AllocationState) {
       if (!categoryID.value || !subCategoryID.value) return;
       if (!Number.isFinite(amount.value) || amount.value === 0) return;
 
-      const signed =
-        spendingAmount < 0 ? -Math.abs(amount.value) : Math.abs(amount.value);
-
-        const normalizedDate =
+      const normalizedDate =
         allocationDate.value && allocationDate.value.trim() !== ""
           ? allocationDate.value
           : spendingDate;
 
-      // modif locale
+      // ✅ on conserve exactement le signe saisi (règle iv)
+      const typed = Number(amount.value.toFixed(2));
+
       allocations.value.push({
         id: crypto.randomUUID(),
         categoryID: categoryID.value,
         subCategoryID: subCategoryID.value,
         comment: comment.value.trim() || "Please comment",
-        amount: Number(signed.toFixed(2)),
+        amount: typed,
         allocationDate: normalizedDate,
-        allocatedTagID: null, // (plus tard: valeur issue du tag saisi)
+        allocatedTagID: null,
       });
 
       resetForm();
 
-      // 1) On calcule l’état local (sans Drive)
-      // Si on était DRAFTED, ADD n’est normalement pas le chemin de modification chez toi
-      // (tu disais “modif uniquement par suppression”), mais on reste robuste :
       if (state.value === "DRAFTED") {
-        // invalidation si un draft existe (robuste)
         await deleteDraftFileIfExists();
         state.value = "EDITING";
       } else {
         recomputeLocalState();
       }
 
-      // 2) R5 — si maintenant Balanced après ADD ⇒ auto-save ⇒ DRAFTED
       if (state.value === "BALANCED") {
         if (!driveAvailable()) return;
 
@@ -451,7 +454,7 @@ function recomputeLocalState(base?: AllocationState) {
 
         try {
           await saveDraftInternal();
-          state.value = "DRAFTED"; // R4
+          state.value = "DRAFTED";
         } finally {
           busyAction.value = null;
           busy.value = false;
@@ -459,7 +462,7 @@ function recomputeLocalState(base?: AllocationState) {
       }
     });
   }
-
+  
   async function removeAllocation(index: number): Promise<void> {
     return runExclusive(async () => {
       if (index < 0 || index >= allocations.value.length) return;
@@ -512,6 +515,8 @@ function recomputeLocalState(base?: AllocationState) {
      Form helpers
   ========================= */
   function presetAmount() {
+    // ✅ l’utilisateur voit un montant "naturel" (positif) à compléter
+    // le signe sera celui qu’il saisira (règle iii + iv)
     amount.value = Number(Math.abs(remainingAmount.value).toFixed(2));
   }
 
