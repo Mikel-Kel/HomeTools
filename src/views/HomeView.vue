@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 
 import { useTheme } from "@/composables/useTheme";
 import { googleAuthenticated } from "@/services/google/googleInit";
@@ -7,6 +7,19 @@ import { googleAuthenticated } from "@/services/google/googleInit";
 import AppTitle from "@/components/AppTitle.vue";
 import AppIcon from "@/components/AppIcon.vue";
 
+import { checkAppVersionConsistency } from "@/services/versionCheck";
+
+onMounted(async () => {
+  try {
+    await checkAppVersionConsistency();
+  } catch (err: any) {
+    alert(
+      "⚠️ Application version inconsistency detected.\n\n" +
+      err.message +
+      "\n\nPlease rebuild or redeploy the application."
+    );
+  }
+});
 
 // version app (injectée par Vite)
 const appVersion = __APP_VERSION__;
