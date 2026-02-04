@@ -137,33 +137,12 @@ const busyMessage = computed(() => {
   }
 });
 
-
-/* DEBUG TIME*/
-watch(
-  () => allocation.value?.state.value,
-  (s) => {
-    console.log(
-      "[AllocationView] allocation.state changed ->",
-      s
-    );
-  }
-);
-
-
 /* =========================
    Auto-close when balanced (FINAL)
 ========================= */
 watch(
   [isBalanced, busy],
   ([balanced, isBusy]) => {
-    console.log(
-      "[AllocationView] auto-close check",
-      "balanced =", balanced,
-      "busy =", isBusy,
-      "armed =", autoCloseArmed.value,
-      "done =", hasAutoClosed.value
-    );
-
     if (
       autoCloseArmed.value &&
       balanced &&
@@ -171,7 +150,6 @@ watch(
       !hasAutoClosed.value
     ) {
       hasAutoClosed.value = true;
-      console.log("[AllocationView] navigating to SpendingView");
       router.push({ name: "spending" });
     }
   }

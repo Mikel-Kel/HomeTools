@@ -7,6 +7,7 @@ import AppIcon from "@/components/AppIcon.vue";
 
 import { listFilesInFolder } from "@/services/google/googleDrive";
 import { loadJSONFromFolder } from "@/services/google/driveRepository";
+
 import {
   useSpending,
   type SpendingWithStatus,
@@ -15,15 +16,27 @@ import {
 
 import { useDrive } from "@/composables/useDrive";
 import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
-import { releaseDraftsBatch } from  "@/composables/allocations/releaseBatch";
+import { releaseDraftsBatch } from "@/composables/allocations/releaseBatch";
+import { useDriveWatcher } from "@/composables/useDriveWatcher";
 
 /* =========================
-   State
+   Router & Stores
 ========================= */
 const router = useRouter();
 const statusFilter = ref<Set<AllocationStatus>>(new Set());
+
 const { driveState } = useDrive();
 const spending = useSpending();
+
+/* =========================
+   Drive watcher
+========================= */
+useDriveWatcher({
+  folderId: driveState.value!.folders.spending,
+  fileName: "spending.json",
+  lastKnownModified: spending.spendingLastModified,
+  onChanged: loadFromDrive,
+});
 
 /* =========================
    Filters
@@ -203,7 +216,6 @@ const formatDate = (d: string) =>
    Navigation
 ========================= */
 function openAllocation(record: SpendingWithStatus) {
-
   router.push({
     name: "allocation",
     params: { id: record.id },
@@ -214,8 +226,7 @@ function openAllocation(record: SpendingWithStatus) {
    Drive loader
 ========================= */
 async function loadFromDrive() {
-  const folderId =
-    driveState.value!.folders.spending;
+  const folderId = driveState.value!.folders.spending;
 
   const raw = await loadJSONFromFolder<any>(
     folderId,
@@ -223,13 +234,16 @@ async function loadFromDrive() {
   );
   if (!raw) return;
 
+  // 🔑 mémorise la date de mise à jour Drive
+  if (raw.modifiedTime) {
+    spending.setSpendingLastModified(raw.modifiedTime);
+  }
+
   const { accounts, records } =
     transformSpendingRaw(raw.items);
 
-  // backend = vérité
   spending.replaceAll(accounts, records);
 
-  // statuts depuis Drive
   await loadAllocationStatusFromDrive();
 }
 
@@ -246,14 +260,10 @@ async function loadAllocationStatusFromDrive() {
     ]);
 
   const draftIds = new Set(
-    draftFiles.map(f =>
-      f.name.replace(".json", "")
-    )
+    draftFiles.map(f => f.name.replace(".json", ""))
   );
   const releasedIds = new Set(
-    releasedFiles.map(f =>
-      f.name.replace(".json", "")
-    )
+    releasedFiles.map(f => f.name.replace(".json", ""))
   );
 
   spending.applyAllocationStatus(

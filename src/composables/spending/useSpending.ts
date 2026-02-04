@@ -79,12 +79,20 @@ export function useSpending() {
     );
   }
 
-  return {
+const spendingLastModified = ref<string | null>(null);
+
+function setSpendingLastModified(ts: string) {
+  spendingLastModified.value = ts;
+}
+
+return {
     accounts,
     records,
     replaceAll,
     applyAllocationStatus,
     getRecordsForAccount,
-    getDraftRecords, // ✅ exposée correctement
+    getDraftRecords,
+    spendingLastModified,
+    setSpendingLastModified,
   };
 }

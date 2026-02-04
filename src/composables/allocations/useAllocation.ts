@@ -236,30 +236,16 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
 function recomputeLocalState(base?: AllocationState) {
   const current = base ?? state.value;
 
-  console.log(
-    "[useAllocation] recomputeLocalState",
-    {
-      base,
-      current,
-      allocations: allocations.value.length,
-      remaining: remainingAmount.value,
-      balanced: isBalanced.value,
-    }
-  );
-
   if (current === "DRAFTED") {
-    console.log("[useAllocation] recompute aborted (DRAFTED)");
     return;
   }
 
   if (allocations.value.length === 0) {
     state.value = "EMPTY";
-    console.log("[useAllocation] state -> EMPTY");
     return;
   }
 
   state.value = isBalanced.value ? "BALANCED" : "EDITING";
-  console.log("[useAllocation] state ->", state.value);
 }
 
   /* =========================

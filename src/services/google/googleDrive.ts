@@ -231,3 +231,34 @@ export async function deleteFile(fileId: string): Promise<void> {
   }
 }
 
+// To test if a file exists and get its metadata
+export async function getFileMetadataByName(
+  folderId: string,
+  fileName: string,
+) {
+  const q = [
+    `'${folderId}' in parents`,
+    `name = '${fileName}'`,
+    "trashed = false",
+  ].join(" and ");
+
+  const params = new URLSearchParams({
+    q,
+    fields: "files(id,name,modifiedTime)",
+    pageSize: "1",
+  });
+
+    const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${getAccessToken()}`, // 🔑 déjà existant chez toi
+      },
+    }
+  );
+
+  if (!res.ok) return null;
+
+  const json = await res.json();
+  return json.files?.[0] ?? null;
+}
