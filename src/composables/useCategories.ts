@@ -1,34 +1,45 @@
-import { ref, computed } from "vue";
+import { ref, computed, type Ref } from "vue";
 import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
 import { useDrive } from "@/composables/useDrive";
-import { googleAuthenticated } from "@/services/google/googleInit";
 
 /* =========================
    Types
 ========================= */
 export interface SubCategory {
   id: number;
-  seq: number;        // ✅ AJOUT
+  seq: number;
   label: string;
+  budgets?: BudgetYear[];
 }
 
 export interface Category {
   id: number;
-  seq: number;        // ✅ AJOUT
+  seq: number;
   label: string;
   nature: string;
   subcategories: SubCategory[];
+  budgets?: BudgetYear[];
 }
+
 interface CategoriesFile {
   version: number;
   updatedAt?: string;
   categories: Category[];
 }
 
+export interface BudgetItem {
+  budget: number;
+}
+
+export interface BudgetYear {
+  year: number;
+  items: BudgetItem[];
+}
+
 /* =========================
    State (singleton)
 ========================= */
-const categories = ref<Category[]>([]);
+const categories: Ref<Category[]> = ref([]);
 
 /* =========================
    Composable
@@ -36,9 +47,6 @@ const categories = ref<Category[]>([]);
 export function useCategories() {
   const { driveState } = useDrive();
 
-  /* =========================
-     Load from Drive
-  ========================= */
   async function load(): Promise<void> {
     if (!driveState.value) return;
 
@@ -60,13 +68,9 @@ export function useCategories() {
       throw new Error("Invalid categories.json format");
     }
 
-    // remplacement explicite
     categories.value = raw.categories;
   }
 
-  /* =========================
-     Helpers
-  ========================= */
   function getCategory(id: number): Category | undefined {
     return categories.value.find(c => c.id === id);
   }
@@ -75,12 +79,12 @@ export function useCategories() {
     return getCategory(categoryId)?.subcategories ?? [];
   }
 
-  const allSubcategories = computed(() =>
+  const allSubcategories = computed<SubCategory[]>(() =>
     categories.value.flatMap(c => c.subcategories)
   );
 
   return {
-    categories,
+    categories,          // ✅ Ref<Category[]>
     load,
     getCategory,
     getSubcategories,

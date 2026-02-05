@@ -69,21 +69,37 @@ const router = createRouter({
 /* =========================
    BEFORE — Access control
 ========================= */
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   document.title = (to.meta?.title as string) ?? "HomeTools";
 
-  const { driveStatus } = useDrive();
-
-  if (to.meta?.requiresDrive && driveStatus.value !== "CONNECTED") {
-    console.warn("🚫 Navigation blocked — Drive not connected", {
-      to: to.fullPath,
-      status: driveStatus.value,
-    });
-
-    return next({ name: "authentication" });
+  if (!to.meta?.requiresDrive) {
+    return next();
   }
 
-  next();
+  const drive = useDrive();
+
+  // Déjà prêt → OK
+  if (drive.driveStatus.value === "CONNECTED" && drive.driveState.value) {
+    return next();
+  }
+
+  // Tentative de connexion Drive
+  try {
+    await drive.connect();
+
+    if (drive.driveStatus.value === "CONNECTED" && drive.driveState.value) {
+      return next();
+    }
+  } catch {
+    // ignore, handled below
+  }
+
+  console.warn("🚫 Navigation blocked — Drive not ready", {
+    to: to.fullPath,
+    status: drive.driveStatus.value,
+  });
+
+  return next({ name: "authentication" });
 });
 
 /* =========================

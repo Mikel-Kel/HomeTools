@@ -9,6 +9,7 @@ export type HomeToolsDriveState = {
     logs: string;
     settings: string;
     allocations: {
+      budgetusage: string;
       drafts: string;
       released: string;
       archived: string;
@@ -26,6 +27,7 @@ export const DRIVE_STATE = {
     settings: "18pvl799XuGspqwAo8WFGhLS9bLgljpK2",
 
     allocations: {
+      budgetusage: "1Uaedb7UHrO1G6CnrHrSN_1LKzHV3ADh3",
       drafts: "1WheqzXBd47NK9u8xwGlbDQAbBYYtOG08",
       released: "1CqevaUPvOy_evidswrEfgOrNVUZWi2VL",
       archived: "1o9jPu6CuOKDC0o7RLbmq9Rt6fSBAE8U7",
