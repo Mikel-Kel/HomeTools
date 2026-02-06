@@ -361,6 +361,34 @@ const items = computed<FollowUpItem[]>(() => {
 });
 
 /* =========================
+   Total line (derived from items)
+========================= */
+const totalItem = computed<FollowUpItem | null>(() => {
+  if (!items.value.length) return null;
+
+  const amount = items.value.reduce(
+    (sum, i) => sum + i.amount,
+    0
+  );
+
+  const budgets = items.value
+    .map(i => displayedBudget.value(i))
+    .filter((b): b is number => b !== undefined);
+
+  const budget =
+    budgets.length > 0
+      ? budgets.reduce((s, b) => s + b, 0)
+      : undefined;
+
+  return {
+    id: "__total__",
+    label: "Total",
+    amount,
+    ...(budget !== undefined ? { budget } : {}),
+  };
+});
+
+/* =========================
    Scale for bars (|delta|)
 ========================= */
 const scale = computed(() => {
@@ -502,11 +530,39 @@ const scale = computed(() => {
     <div v-else-if="error" class="error">{{ error }}</div>
 
     <div v-else class="followup-table">
+      <!-- TOTAL ROW -->
+      <div
+        v-if="totalItem"
+        class="followup-row total"
+      >
+        <div class="label">
+          {{ totalItem.label }}
+        </div>
+
+        <div class="chart">
+          <FollowUpBar
+            :amount="totalItem.amount"
+            :budget="totalItem.budget"
+            :scale="scale"
+            :spreadLimit="followUpSpreadLimit"
+          />
+        </div>
+
+        <div class="budget">
+          <span v-if="totalItem.budget !== undefined">
+            {{ totalItem.budget.toLocaleString() }}
+          </span>
+          <span v-else class="muted">—</span>
+        </div>
+      </div>
+
+      <!-- ITEMS -->
       <div
         v-for="item in items"
         :key="item.id"
         class="followup-row"
       >
+
         <!-- Label -->
         <div class="label">
           {{ item.label }}
@@ -756,6 +812,17 @@ const scale = computed(() => {
   grid-template-columns: 190px 1fr 140px;
   align-items: center;
   column-gap: 16px;
+}
+.followup-row.total {
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+
+.followup-row.total .label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .label {
