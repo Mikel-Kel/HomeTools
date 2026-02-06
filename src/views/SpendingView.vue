@@ -568,7 +568,7 @@ onBeforeUnmount(() => {
 }
 
 .filters-header {
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 0.5rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -582,7 +582,7 @@ onBeforeUnmount(() => {
 }
 
 .filters-body {
-  padding: 0.5rem 1rem 0.75rem;
+  padding: 0.5rem 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;

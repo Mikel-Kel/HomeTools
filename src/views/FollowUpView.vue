@@ -2,17 +2,25 @@
 import { ref, computed, watch } from "vue";
 
 import PageHeader from "@/components/PageHeader.vue";
-import FollowUpChartView from "@/components/followup/FollowUpChart.vue";
+import FollowUpBar from "@/components/followup/FollowUpBar.vue";
 import CategorySheet from "@/components/followup/CategorySheet.vue";
 
 import { useDrive } from "@/composables/useDrive";
 import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
-
 import { useCategories } from "@/composables/useCategories";
 
 /* =========================
-   Follow-Up JSON types
+   Types
 ========================= */
+type RawItem =
+  | {
+      id: string;
+      label: string;
+      amount: number;
+      budget?: number;
+    }
+  | null;
+
 
 interface FollowUpYearItem {
   subCategoryId: number;
@@ -33,53 +41,123 @@ interface FollowUpFile {
   categories: FollowUpCategory[];
 }
 
+interface FollowUpItem {
+  id: string;
+  label: string;
+  amount: number;
+  budget?: number;
+}
+
 /* =========================
-   Header state
+   State
 ========================= */
-
-const year = ref<number>(2026);
-
-/**
- * "*" → toutes les catégories
- * "<id>" → catégorie sélectionnée
- */
-const selectedCategory = ref<string>("*");
+const { driveState } = useDrive();
 const categorySheetOpen = ref(false);
 
-/* =========================
-   Categories (settings/categories.json)
-========================= */
-
+const year = ref<number>(2026);
 const categoriesStore = useCategories();
 
-/* =========================
-   Drive / FollowUp.json (allocations.root)
-========================= */
+const selectedCategory = ref<string>("*");
+const selectedSubCategory = ref<string | null>(null);
 
-const { driveState } = useDrive();
 const followUpRaw = ref<FollowUpFile | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
+  /* =========================
+   Filters (Follow-up)
+========================= */
+const filtersOpen = ref(false);
+
+/* =========================
+   Helpers UI
+========================= */
+function selectAllCategories() {
+  selectedCategory.value = "*";
+  selectedSubCategory.value = null;
+}
+
+function selectCategory(id: number) {
+  selectedCategory.value = String(id);
+  selectedSubCategory.value = null;
+}
+
+function selectSubCategory(id: number) {
+  selectedSubCategory.value = String(id);
+}
+
+const activeCategory = computed(() =>
+  selectedCategory.value === "*"
+    ? null
+    : categoriesStore.getCategory(Number(selectedCategory.value))
+);
+
+const categoryChips = computed(() =>
+  categoriesStore.categories.value
+    .slice()
+    .sort((a, b) => a.seq - b.seq)
+);
+
+const subCategoryChips = computed(() => {
+  if (!activeCategory.value) return [];
+  return activeCategory.value.subcategories
+    .slice()
+    .sort((a, b) => a.seq - b.seq);
+});
+
+const selectedCategoryLabel = computed(() => {
+  if (selectedCategory.value === "*") {
+    return "All categories";
+  }
+
+  const cat = categoriesStore.getCategory(
+    Number(selectedCategory.value)
+  );
+  return cat?.label ?? "Category";
+});
+
+/* =========================
+   Mode
+========================= */
+const mode = computed<"category" | "subcategory">(() =>
+  selectedCategory.value === "*" ? "category" : "subcategory"
+);
+
+/* =========================
+   Available years
+   (from categories.json ONLY)
+========================= */
+const availableYears = computed<number[]>(() => {
+  const years = new Set<number>();
+
+  for (const cat of categoriesStore.categories.value) {
+    for (const b of cat.budgets ?? []) {
+      years.add(b.year);
+    }
+  }
+
+  return Array.from(years).sort((a, b) => a - b);
+});
+
+/* =========================
+   Drive load
+========================= */
 async function loadFollowUp(): Promise<void> {
   loading.value = true;
   error.value = null;
+
   try {
-    const folderId = driveState.value!.folders.allocations.budgetusage;
+    const folderId =
+      driveState.value!.folders.allocations.budgetusage;
+
     const files = await listFilesInFolder(folderId);
     const file = files.find(f => f.name === "FollowUp.json");
 
     if (!file) {
-      throw new Error("FollowUp.json not found in allocations folder");
+      throw new Error("FollowUp.json not found");
     }
 
-    const raw = await readJSON<FollowUpFile>(file.id);
-
-    if (!raw || !Array.isArray(raw.categories)) {
-      throw new Error("Invalid FollowUp.json format");
-    }
-
-    followUpRaw.value = raw;
+    followUpRaw.value = await readJSON<FollowUpFile>(file.id);
   } catch (e: any) {
     error.value = e.message ?? "Unable to load FollowUp.json";
   } finally {
@@ -105,123 +183,51 @@ watch(
 );
 
 /* =========================
-   Categories list for sheet
+   Normalize items (CORE)
 ========================= */
-const categories = computed(() =>
-  categoriesStore.categories.value
-    .slice()
-    .sort((a, b) => a.seq - b.seq)
-    .map(c => ({
-      id: String(c.id),
-      label: c.label,
-    }))
-);
-
-/* =========================
-   Budgets helpers
-   (FROM categories.json ONLY)
-========================= */
-
-function getCategoryBudget(
-  categoryId: number,
-  year: number
-): number | undefined {
-  const cat = categoriesStore.getCategory(categoryId);
-  if (!cat || !("budgets" in cat)) return undefined;
-
-  return cat.budgets
-    ?.find(b => b.year === year)
-    ?.items?.[0]?.budget;
-}
-
-function getSubCategoryBudget(
-  subId: number,
-  year: number
-): number | undefined {
-  for (const cat of categoriesStore.categories.value) {
-    const sub = cat.subcategories.find(s => s.id === subId);
-    if (!sub || !("budgets" in sub)) continue;
-
-    return sub.budgets
-      ?.find(b => b.year === year)
-      ?.items?.[0]?.budget;
-  }
-}
-
-/* =========================
-   Chart items (CORE LOGIC)
-========================= */
-
-const items = computed(() => {
+const items = computed<FollowUpItem[]>(() => {
   if (!followUpRaw.value) return [];
 
   const y = year.value;
 
-  /* ===== MODE : CATEGORIES ===== */
-  if (selectedCategory.value === "*") {
-    return followUpRaw.value.categories
-      .map(cat => {
-        const yearData = cat.years.find(v => v.year === y);
-        if (!yearData) return null;
+  const rawItems: RawItem[] =
+    followUpRaw.value.categories.map(cat => {
+      const yearData = cat.years.find(v => v.year === y);
+      if (!yearData) return null;
 
-        const amount = yearData.items.reduce(
-          (sum, i) => sum + i.amount,
-          0
-        );
+      const meta = categoriesStore.getCategory(cat.categoryId);
+      if (!meta) return null;
 
-        const meta = categoriesStore.getCategory(cat.categoryId);
-        if (!meta) return null;
-
-        return {
-          id: String(cat.categoryId),
-          label: meta.label,
-          amount,
-          budget: getCategoryBudget(cat.categoryId, y),
-        };
-      })
-      .filter(
-        (v): v is NonNullable<typeof v> => v !== null
+      const amount = yearData.items.reduce(
+        (sum, i) => sum + i.amount,
+        0
       );
-  }
 
-  /* ===== MODE : SOUS-CATEGORIES ===== */
-  const catId = Number(selectedCategory.value);
-
-  const catData = followUpRaw.value.categories.find(
-    c => c.categoryId === catId
-  );
-  if (!catData) return [];
-
-  const yearData = catData.years.find(v => v.year === y);
-  if (!yearData) return [];
-
-  const metaCat = categoriesStore.getCategory(catId);
-  if (!metaCat) return [];
-
-  return yearData.items
-    .map(i => {
-      const sub = metaCat.subcategories.find(
-        s => s.id === i.subCategoryId
-      );
-      if (!sub) return null;
+      const budget = meta.budgets
+        ?.find(b => b.year === y)
+        ?.items?.[0]?.budget;
 
       return {
-        id: String(sub.id),
-        label: sub.label,
-        amount: i.amount,
-        budget: getSubCategoryBudget(sub.id, y),
+        id: String(cat.categoryId),
+        label: meta.label,
+        amount,
+        ...(budget !== undefined ? { budget } : {}),
       };
-    })
-    .filter(
-      (v): v is NonNullable<typeof v> => v !== null
-    );
+    });
+
+  return rawItems.filter(
+    (v): v is FollowUpItem => v !== null
+  );
 });
 
 /* =========================
-   Scale (auto)
+   Scale (defensive)
 ========================= */
-
 const scale = computed(() => {
+  if (!items.value.length) {
+    return { min: 0, max: 0 };
+  }
+
   const values = items.value.flatMap(i => [
     i.amount,
     i.budget ?? 0,
@@ -232,126 +238,261 @@ const scale = computed(() => {
     max: Math.max(0, ...values),
   };
 });
-
-/* =========================
-   UI helpers
-========================= */
-
-const selectedCategoryLabel = computed(() => {
-  if (selectedCategory.value === "*") {
-    return "All categories";
-  }
-
-  const cat = categoriesStore.getCategory(
-    Number(selectedCategory.value)
-  );
-  return cat?.label ?? "Category";
-});
-
-const mode = computed<"category" | "subcategory">(() =>
-  selectedCategory.value === "*" ? "category" : "subcategory"
-);
 </script>
 
 <template>
   <PageHeader title="Follow-up" icon="followup" />
 
-  <div class="followup-header">
-    <div class="control">
-      <label>Year</label>
-      <select v-model.number="year">
-        <option :value="year - 1">{{ year - 1 }}</option>
-        <option :value="year">{{ year }}</option>
-        <option :value="year + 1">{{ year + 1 }}</option>
-      </select>
-    </div>
+  <!-- Sticky filters zone -->
+<!-- Sticky zone (Filters) -->
+<div class="sticky-zone">
+  <section class="filters">
+    <header
+      class="filters-header clickable"
+      @click="filtersOpen = !filtersOpen"
+    >
+      <span class="arrow">{{ filtersOpen ? "▼" : "►" }}</span>
+      <h2>Filters</h2>
+    </header>
 
-    <div class="control grow">
-      <label>Category</label>
-      <button
-        class="sheet-trigger"
-        @click="categorySheetOpen = true"
+    <div v-if="filtersOpen" class="filters-body">
+
+      <!-- Year -->
+      <div class="filter-row">
+        <span class="label">Year</span>
+        <select v-model.number="year">
+          <option
+            v-for="y in availableYears"
+            :key="y"
+            :value="y"
+          >
+            {{ y }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Categories -->
+      <div class="filter-row">
+        <span class="label">Category</span>
+
+        <!-- ALL -->
+        <button
+          class="chip status all"
+          :class="{ active: selectedCategory === '*' }"
+          @click="selectAllCategories"
+        >
+          All
+        </button>
+
+        <!-- Categories -->
+        <button
+          v-for="cat in categoryChips"
+          :key="cat.id"
+          class="chip"
+          :class="{ active: selectedCategory === String(cat.id) }"
+          @click="selectCategory(cat.id)"
+        >
+          {{ cat.label }}
+        </button>
+      </div>
+
+      <!-- Sub-categories -->
+      <div
+        v-if="activeCategory"
+        class="filter-row subcats"
       >
-        {{ selectedCategoryLabel }}
-      </button>
-    </div>
-  </div>
+        <span class="label">Sub</span>
 
+        <!-- ALL sub -->
+        <button
+          class="chip status all"
+          :class="{ active: selectedSubCategory === null }"
+          @click="selectedSubCategory = null"
+        >
+          All
+        </button>
+
+        <button
+          v-for="sub in subCategoryChips"
+          :key="sub.id"
+          class="chip"
+          :class="{ active: selectedSubCategory === String(sub.id) }"
+          @click="selectSubCategory(sub.id)"
+        >
+          {{ sub.label }}
+        </button>
+      </div>
+    </div>
+  </section>
+</div>
+<hr class="followup-separator" />
+
+  <!-- Content -->
   <div class="followup-view">
     <div v-if="loading" class="info">Loading…</div>
     <div v-else-if="error" class="error">{{ error }}</div>
 
-    <FollowUpChartView
-      v-else
-      :items="items"
-      :scale="scale"
-      :mode="mode"
-    />
+    <div v-else class="followup-table">
+      <div
+        v-for="item in items"
+        :key="item.id"
+        class="followup-row"
+      >
+        <!-- Label -->
+        <div class="label">
+          {{ item.label }}
+        </div>
+
+        <!-- Chart -->
+        <div class="chart">
+          <FollowUpBar
+            :item="item"
+            :scale="scale"
+          />
+        </div>
+
+        <!-- Budget -->
+        <div class="budget">
+          <span v-if="item.budget !== undefined">
+            {{ item.budget.toLocaleString() }}
+          </span>
+          <span v-else class="muted">—</span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <CategorySheet
     v-model="selectedCategory"
     :open="categorySheetOpen"
-    :categories="categories"
+    :categories="[]"
     @close="categorySheetOpen = false"
   />
 </template>
 
 <style scoped>
-.followup-header {
-  display: flex;
-  gap: 1rem;
-  padding: 0.75rem 1.5rem;
+/* =========================================================
+   Sticky zone (Filters)
+========================================================= */
+.sticky-zone {
+  position: sticky;
+  top: 0;
+  z-index: 200;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
-.control {
+.filters {
+  font-size: var(--font-size-sm);
+  background: var(--bg);
+}
+
+.filters-header {
+  padding: 0.5rem 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filters-header h2 {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.filters-body {
+  padding: 0.5rem 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.6rem;
 }
 
-.control.grow {
-  flex: 1;
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
-.control label {
-  font-size: 0.75rem;
+.label {
+  width: 70px;
+  opacity: 0.7;
+  flex: 0 0 auto;
+}
+
+.filter-row.subcats {
+  padding-left: 1.5rem; /* léger retrait visuel */
+}
+
+.chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   opacity: 0.7;
 }
 
-.control select {
-  font-size: 1rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+.chip.active {
+  opacity: 1;
+  background: var(--primary-soft);
+  border-color: var(--primary);
 }
 
-.sheet-trigger {
-  width: 100%;
-  text-align: left;
-  padding: 0.4rem 0.5rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  font-size: 1rem;
+/* =========================================================
+   Follow-up view
+   ========================================================= */
+.followup-separator {
+  border: none;
+  height: 1px;
+  background: var(--border);
+  margin: 0 1.5rem;
+}
+.followup-table {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.5rem;
+  gap: 10px;
 }
 
-.followup-view {
-  padding: 1.5rem;
-  background: var(--bg);
-  color: var(--text);
+.followup-row {
+  display: grid;
+  grid-template-columns: 220px 1fr 120px;
+  align-items: center;
+  column-gap: 16px;
 }
 
-.info {
-  opacity: 0.6;
+.label {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.error {
-  color: var(--negative);
+.chart {
+  height: 20px;
+}
+
+.budget {
+  text-align: right;
   font-weight: 600;
 }
+
+.muted {
+  opacity: 0.4;
+}
+
+.budgets {
+  text-align: right;
+  font-weight: 600;
+}
+
+.muted {
+  opacity: 0.4;
+}
+
 </style>
