@@ -19,6 +19,16 @@ const delta = computed(() => {
   return props.budget - props.amount;
 });
 
+const showLabel = computed(() => {
+  if (props.budget === undefined) return false;
+  if (props.spreadLimit === undefined) return true;
+
+  return (
+    Math.abs(delta.value) / props.budget >
+    props.spreadLimit / 100
+  );
+});
+
 /* =========================
    Geometry (SVG space)
 ========================= */
@@ -161,7 +171,7 @@ const labelTransform = computed(() => {
 
     <!-- HTML overlay label -->
     <div
-      v-if="barSize > 0"
+      v-if="barSize > 0 && showLabel"
       class="delta-label"
       :style="{
         left: labelX + '%',

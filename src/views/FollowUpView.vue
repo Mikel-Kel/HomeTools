@@ -9,6 +9,9 @@ import { useDrive } from "@/composables/useDrive";
 import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
 import { useCategories } from "@/composables/useCategories";
 
+import { useAppParameters } from "@/composables/useAppParameters";
+const { appParameters, load } = useAppParameters();
+
 /* =========================
    Types
 ========================= */
@@ -67,7 +70,6 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 
 const analysisScope = ref<AnalysisScope>("YTD");
-const followUpSpreadLimit = ref<number>(10);
 
 /* =========================
    Filters
@@ -245,6 +247,7 @@ watch(
   () => driveState.value,
   async state => {
     if (!state) return;
+    await load();
 
     if (!categoriesStore.categories.value.length) {
       await categoriesStore.load();
@@ -258,6 +261,10 @@ watch(
 /* =========================
    Normalize items (CORE)
 ========================= */
+const followUpSpreadLimit = computed(
+  () => appParameters.value?.followUpSpreadLimit ?? 10
+);
+
 const items = computed<FollowUpItem[]>(() => {
   if (!followUpRaw.value) return [];
 
