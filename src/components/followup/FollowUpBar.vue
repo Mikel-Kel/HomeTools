@@ -8,10 +8,11 @@ const props = defineProps<{
   amount: number;
   budget?: number;
   scale: { min: number; max: number };
+  spreadLimit?: number; // %
 }>();
 
 /* =========================
-   Delta (CORE BUSINESS)
+   Delta (business)
 ========================= */
 const delta = computed(() => {
   if (props.budget === undefined) return 0;
@@ -19,86 +20,189 @@ const delta = computed(() => {
 });
 
 /* =========================
-   Geometry
+   Geometry (SVG space)
 ========================= */
-// SVG width = 100 → zero always centered
-const ZERO_X = 50;
+const ZERO_X = 50; // % (center)
 
 /* =========================
-   Bar size (normalized on max |delta|)
+   Ratio (0..1)
 ========================= */
-const barSize = computed(() => {
+const ratio = computed(() => {
   if (!props.scale.max) return 0;
+  return Math.min(Math.abs(delta.value) / props.scale.max, 1);
+});
+
+/* =========================
+   Bar geometry
+========================= */
+const barSize = computed(() => ratio.value * ZERO_X);
+
+const barX = computed(() =>
+  delta.value >= 0
+    ? ZERO_X
+    : ZERO_X - barSize.value
+);
+
+/* =========================
+   Neutral zone (relative)
+========================= */
+const isNeutral = computed(() => {
+  if (
+    props.budget === undefined ||
+    props.budget === 0 ||
+    props.spreadLimit === undefined
+  ) {
+    return false;
+  }
 
   return (
-    Math.min(Math.abs(delta.value) / props.scale.max, 1) *
-    ZERO_X
+    Math.abs(delta.value) / props.budget <=
+    props.spreadLimit / 100
   );
 });
 
 /* =========================
-   Bar position
+   Gradients (CSS-driven)
 ========================= */
-const barX = computed(() => {
+const posStart = computed(() => "var(--delta-pos-soft)");
+const posEnd   = computed(() => "var(--delta-pos-strong)");
+
+const negStart = computed(() => "var(--delta-neg-soft)");
+const negEnd   = computed(() => "var(--delta-neg-strong)");
+
+/* =========================
+   Label (HTML overlay)
+========================= */
+const label = computed(() => {
+  const v = Math.round(delta.value);
+  if (v === 0) return "0";
+
+  const abs = Math.abs(v).toLocaleString();
+  return v < 0 ? `-${abs}` : abs;
+});
+
+/* =========================
+   Label positioning
+========================= */
+const MIN_BAR_FOR_LABEL = 6; // % SVG space
+
+const labelX = computed(() => {
+  // barre trop courte → forcer l’autre côté de l’axe
+  if (barSize.value < MIN_BAR_FOR_LABEL) {
+    return delta.value >= 0
+      ? ZERO_X - 2
+      : ZERO_X + 2;
+  }
+
+  // cas normal : extrémité de la barre
   return delta.value >= 0
-    ? ZERO_X
+    ? ZERO_X + barSize.value
     : ZERO_X - barSize.value;
+});
+
+const labelTransform = computed(() => {
+  if (barSize.value < MIN_BAR_FOR_LABEL) {
+    return delta.value >= 0
+      ? "translate(calc(-100% - 6px), -50%)"
+      : "translate(6px, -50%)";
+  }
+
+  return delta.value >= 0
+    ? "translate(6px, -50%)"
+    : "translate(calc(-100% - 6px), -50%)";
 });
 </script>
 
 <template>
-  <svg
-    class="bar-svg"
-    viewBox="0 0 100 20"
-    preserveAspectRatio="none"
-  >
-    <!-- Zero reference axis -->
-    <line
-      x1="50"
-      y1="0"
-      x2="50"
-      y2="20"
-      class="zero-line"
-    />
+  <div class="bar-wrapper">
+    <!-- SVG layer -->
+    <svg
+      class="bar-svg"
+      viewBox="0 0 100 20"
+      preserveAspectRatio="none"
+    >
+      <defs>
+        <linearGradient id="posGradient" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" :stop-color="posStart" />
+          <stop offset="100%" :stop-color="posEnd" />
+        </linearGradient>
 
-    <!-- Delta bar -->
-    <rect
-      :x="barX"
-      y="5"
-      :width="barSize"
-      height="10"
-      :class="[
-        'delta-bar',
-        delta >= 0 ? 'positive' : 'negative',
-      ]"
-    />
-  </svg>
+        <linearGradient id="negGradient" x1="1" y1="0" x2="0" y2="0">
+          <stop offset="0%" :stop-color="negStart" />
+          <stop offset="100%" :stop-color="negEnd" />
+        </linearGradient>
+      </defs>
+
+      <!-- Zero axis -->
+      <line
+        x1="50"
+        y1="0"
+        x2="50"
+        y2="20"
+        class="zero-line"
+      />
+
+      <!-- Delta bar -->
+      <rect
+        v-if="barSize > 0"
+        :x="barX"
+        y="4"
+        :width="barSize"
+        height="12"
+        :fill="
+          isNeutral
+            ? 'var(--delta-neutral)'
+            : delta >= 0
+            ? 'url(#posGradient)'
+            : 'url(#negGradient)'
+        "
+      />
+    </svg>
+
+    <!-- HTML overlay label -->
+    <div
+      v-if="barSize > 0"
+      class="delta-label"
+      :style="{
+        left: labelX + '%',
+        transform: labelTransform
+      }"
+    >
+      {{ label }}
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.bar-svg {
+.bar-wrapper {
+  position: relative;
   width: 100%;
   height: 20px;
 }
 
-/* Zero axis */
+.bar-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* zero axis */
 .zero-line {
   stroke: var(--border);
   stroke-width: 0.5;
 }
 
-/* Delta bar */
-.delta-bar {
-  rx: 4;
-}
+/* label */
+.delta-label {
+  position: absolute;
+  top: 50%;
 
-/* Positive = budget remaining */
-.delta-bar.positive {
-  fill: var(--positive);
-}
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text);
 
-/* Negative = overspend */
-.delta-bar.negative {
-  fill: var(--negative);
+  white-space: nowrap;
+  pointer-events: none;
 }
 </style>

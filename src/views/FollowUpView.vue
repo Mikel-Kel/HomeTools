@@ -66,12 +66,29 @@ const followUpRaw = ref<FollowUpFile | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
-const analysisScope = ref<AnalysisScope>("FULL");
+const analysisScope = ref<AnalysisScope>("YTD");
+const followUpSpreadLimit = ref<number>(10);
 
 /* =========================
    Filters
 ========================= */
 const filtersOpen = ref(false);
+
+/* =========================
+   Current year / scope validity
+========================= */
+const currentYear = new Date().getFullYear();
+
+const isCurrentYear = computed(() => {
+  return year.value === currentYear;
+});
+
+/* 🔒 Enforce scope rule */
+watch(year, () => {
+  if (!isCurrentYear.value && analysisScope.value !== "FULL") {
+    analysisScope.value = "FULL";
+  }
+});
 
 /* =========================
    Helpers UI + dates
@@ -246,9 +263,6 @@ const items = computed<FollowUpItem[]>(() => {
 
   const y = year.value;
 
-  /* =====================================
-     MODE : ALL CATEGORIES
-  ===================================== */
   if (selectedCategory.value === "*") {
     const rawItems: RawItem[] =
       followUpRaw.value.categories.map(cat => {
@@ -284,11 +298,7 @@ const items = computed<FollowUpItem[]>(() => {
     );
   }
 
-  /* =====================================
-     MODE : ONE CATEGORY → SUB-CATEGORIES
-  ===================================== */
   const catId = Number(selectedCategory.value);
-
   const catData = followUpRaw.value.categories.find(
     c => c.categoryId === catId
   );
@@ -334,26 +344,24 @@ const items = computed<FollowUpItem[]>(() => {
 });
 
 /* =========================
-   Scale for bars (max of amount and budget)
+   Scale for bars (|delta|)
 ========================= */
 const scale = computed(() => {
   if (!items.value.length) {
     return { min: 0, max: 0 };
   }
 
-  const deltas = items.value
-    .map(i => {
-      const budget = displayedBudget.value(i);
-      if (budget === undefined) return 0;
-      return Math.abs(budget - i.amount);
-    });
+  const deltas = items.value.map(i => {
+    const budget = displayedBudget.value(i);
+    if (budget === undefined) return 0;
+    return Math.abs(budget - i.amount);
+  });
 
   return {
     min: 0,
     max: Math.max(0, ...deltas),
   };
 });
-
 </script>
 
 <template>
@@ -375,30 +383,37 @@ const scale = computed(() => {
         <!-- Year -->
         <div class="filter-row">
           <span class="label">Year</span>
-          <select v-model.number="year">
-            <option
+
+          <div class="year-segmented">
+            <button
               v-for="y in availableYears"
               :key="y"
-              :value="y"
+              class="year-segment"
+              :class="{ active: year === y }"
+              @click="year = y"
             >
               {{ y }}
-            </option>
-          </select>
-        </div>
+            </button>
+          </div>
+        </div> 
         <!-- Analysis scope -->
         <div class="filter-row">
           <span class="label">Scope</span>
 
           <div class="scope-selector">
-            <button
-              v-for="s in ['FULL', 'MTD', 'YTD']"
-              :key="s"
-              class="scope-btn"
-              :class="{ active: analysisScope === s }"
-              @click="analysisScope = s as any"
-            >
-              {{ s }}
-            </button>
+          <button
+            v-for="s in ['FULL', 'MTD', 'YTD']"
+            :key="s"
+            class="scope-btn"
+            :class="{
+              active: analysisScope === s,
+              disabled: !isCurrentYear && s !== 'FULL'
+            }"
+            :disabled="!isCurrentYear && s !== 'FULL'"
+            @click="analysisScope = s as AnalysisScope"
+          >
+            {{ s }}
+          </button>
           </div>
         </div>
         <!-- Categories -->
@@ -486,6 +501,7 @@ const scale = computed(() => {
             :amount="item.amount"
             :budget="displayedBudget(item)"
             :scale="scale"
+            :spreadLimit="followUpSpreadLimit"
           />
         </div>
 
@@ -574,34 +590,84 @@ const scale = computed(() => {
   background: var(--primary-soft);
   border-color: var(--primary);
 }
+/* =========================================================
+   Year segmented control (iOS-style)
+========================================================= */
+.year-segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+
+  background: var(--bg-soft);
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.year-segment {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-soft);
+  opacity: 0.6;
+
+  cursor: pointer;
+  user-select: none;
+}
+
+.year-segment.active {
+  background: var(--primary-soft);
+  border: 1px solid var(--primary);
+  color: var(--primary);
+
+  opacity: 1;
+  font-weight: 600;
+
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
 
 /* =========================================================
-   Analysis scope selector
+   Analysis scope selector (enhanced)
 ========================================================= */
 .scope-selector {
   display: inline-flex;
   gap: 4px;
-  padding: 2px;
+  padding: 3px;
   background: var(--bg-soft);
   border-radius: 999px;
 }
 
 .scope-btn {
-  padding: 4px 10px;
+  padding: 6px 14px;
   border-radius: 999px;
-  border: none;
-  background: transparent;
+  border: 1px solid transparent;
+
   font-size: var(--font-size-xs);
   font-weight: 600;
+
   color: var(--text-soft);
-  opacity: 0.7;
+  background: transparent;
+  opacity: 0.6;
+
   cursor: pointer;
+  user-select: none;
 }
 
 .scope-btn.active {
   background: var(--primary-soft);
-  color: var(--text);
+  border-color: var(--primary);
+  color: var(--primary);
   opacity: 1;
+
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.scope-btn.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* =========================================================
@@ -626,18 +692,29 @@ const scale = computed(() => {
 .col-budget {
   text-align: right;
 }
+/* =========================================================
+   Follow-up header band
+========================================================= */
 .followup-header-wrapper {
+  background: var(--bg-soft);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  margin: 0 0.5rem 6px;
 }
 
+/* Header grid */
 .followup-header {
   display: grid;
-  grid-template-columns: 280px 1fr 140px;
-  column-gap: 16px;
+  grid-template-columns: 220px 1fr 120px;
+  align-items: center;
 
-  padding: 6px 0;
+  padding: 10px 12px;
+
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+
+  color: var(--text-soft);
 }
 
 /* =========================================================
