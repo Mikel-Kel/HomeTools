@@ -138,17 +138,17 @@ const categoryChips = computed(() =>
       return {
         id,
         label: meta.label,
+        seq: meta.seq,              // 👈 déjà présent via useCategories
         subcategories: meta.subcategories,
       };
     })
-    .filter(
-      (v): v is {
-        id: number;
-        label: string;
-        subcategories: typeof categoriesStore.categories.value[number]["subcategories"];
-      } => v !== null
-    )
-    .sort((a, b) => a.label.localeCompare(b.label))
+    .filter((v): v is {
+      id: number;
+      label: string;
+      seq: number;
+      subcategories: typeof categoriesStore.categories.value[number]["subcategories"];
+    } => v !== null)
+    .sort((a, b) => a.seq - b.seq)   // ✅ ordre métier
 );
 
 const activeCategory = computed(() => {
@@ -268,41 +268,45 @@ const followUpSpreadLimit = computed(
 const items = computed<FollowUpItem[]>(() => {
   if (!followUpRaw.value) return [];
 
-  const y = year.value;
+    const y = year.value;
 
-  if (selectedCategory.value === "*") {
-    const rawItems: RawItem[] =
-      followUpRaw.value.categories.map(cat => {
-        const yearData = cat.years.find(v => v.year === y);
-        if (!yearData) return null;
+    if (selectedCategory.value === "*") {
+      const rawItems: RawItem[] =
+        followUpRaw.value.categories.map(cat => {
+          const yearData = cat.years.find(v => v.year === y);
+          if (!yearData) return null;
 
-        const meta = categoriesStore.getCategory(cat.categoryId);
-        if (!meta) return null;
+          const meta = categoriesStore.getCategory(cat.categoryId);
+          if (!meta) return null;
 
-        const amount = yearData.items.reduce(
-          (sum, i) =>
-            sum +
-            (analysisScope.value === "MTD"
-              ? i.monthToDate
-              : i.amount),
-          0
-        );
+          const amount = yearData.items.reduce(
+            (sum, i) =>
+              sum +
+              (analysisScope.value === "MTD"
+                ? i.monthToDate
+                : i.amount),
+            0
+          );
 
-        const budget = meta.budgets
-          ?.find(b => b.year === y)
-          ?.items?.[0]?.budget;
+          const budget = meta.budgets
+            ?.find(b => b.year === y)
+            ?.items?.[0]?.budget;
 
-        return {
-          id: String(cat.categoryId),
-          label: meta.label,
-          amount,
-          ...(budget !== undefined ? { budget } : {}),
-        };
-      });
+          return {
+            id: String(cat.categoryId),
+            label: meta.label,
+            amount,
+            ...(budget !== undefined ? { budget } : {}),
+          };
+        });
 
-    return rawItems.filter(
-      (v): v is FollowUpItem => v !== null
-    );
+    return rawItems
+    .filter((v): v is FollowUpItem => v !== null)
+    .sort((a, b) => {
+      const ca = categoriesStore.getCategory(Number(a.id))?.seq ?? 0;
+      const cb = categoriesStore.getCategory(Number(b.id))?.seq ?? 0;
+      return ca - cb;
+    });
   }
 
   const catId = Number(selectedCategory.value);
@@ -344,10 +348,16 @@ const items = computed<FollowUpItem[]>(() => {
       ...(budget !== undefined ? { budget } : {}),
     };
   });
+  return rawItems
+    .filter((v): v is FollowUpItem => v !== null)
+    .sort((a, b) => {
+      const sa =
+        metaCat.subcategories.find(s => s.id === Number(a.id))?.seq ?? 0;
+      const sb =
+        metaCat.subcategories.find(s => s.id === Number(b.id))?.seq ?? 0;
+      return sa - sb;
+    });
 
-  return rawItems.filter(
-    (v): v is FollowUpItem => v !== null
-  );
 });
 
 /* =========================

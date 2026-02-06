@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
+
+import { useAppParameters } from "@/composables/useAppParameters";
+const { load } = useAppParameters();
+
+onMounted(async () => {
+  await load();
+});
 
 import { useTheme } from "@/composables/useTheme";
 import { googleAuthenticated } from "@/services/google/googleInit";
