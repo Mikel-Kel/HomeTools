@@ -2,61 +2,47 @@
 import { computed } from "vue";
 
 /* =========================
-   Types
+   Props
 ========================= */
-export interface FollowUpBarItem {
+const props = defineProps<{
   amount: number;
   budget?: number;
-}
-
-const props = defineProps<{
-  item: FollowUpBarItem;
   scale: { min: number; max: number };
 }>();
 
 /* =========================
-   Geometry
+   Delta (CORE BUSINESS)
 ========================= */
-
-const width = 100; // SVG viewBox width
-
-const zeroX = computed(() => {
-  const { min, max } = props.scale;
-  if (min >= 0) return 0;
-  if (max <= 0) return width;
-  return ((0 - min) / (max - min)) * width;
+const delta = computed(() => {
+  if (props.budget === undefined) return 0;
+  return props.budget - props.amount;
 });
 
-function valueToX(v: number): number {
-  const { min, max } = props.scale;
-  if (max === min) return zeroX.value;
-  return ((v - min) / (max - min)) * width;
-}
+/* =========================
+   Geometry
+========================= */
+// SVG width = 100 → zero always centered
+const ZERO_X = 50;
 
 /* =========================
-   Bar metrics
+   Bar size (normalized on max |delta|)
 ========================= */
+const barSize = computed(() => {
+  if (!props.scale.max) return 0;
 
-const bar = computed(() => {
-  const amountX = valueToX(props.item.amount);
-  const startX = Math.min(zeroX.value, amountX);
-  const amountW = Math.abs(amountX - zeroX.value);
+  return (
+    Math.min(Math.abs(delta.value) / props.scale.max, 1) *
+    ZERO_X
+  );
+});
 
-  let budgetX: number | null = null;
-  let budgetW: number | null = null;
-
-  if (props.item.budget !== undefined) {
-    const bx = valueToX(props.item.budget);
-    budgetX = Math.min(zeroX.value, bx);
-    budgetW = Math.abs(bx - zeroX.value);
-  }
-
-  return {
-    startX,
-    amountW,
-    budgetX,
-    budgetW,
-  };
+/* =========================
+   Bar position
+========================= */
+const barX = computed(() => {
+  return delta.value >= 0
+    ? ZERO_X
+    : ZERO_X - barSize.value;
 });
 </script>
 
@@ -66,34 +52,24 @@ const bar = computed(() => {
     viewBox="0 0 100 20"
     preserveAspectRatio="none"
   >
-    <!-- Zero axis -->
+    <!-- Zero reference axis -->
     <line
-      :x1="zeroX"
+      x1="50"
       y1="0"
-      :x2="zeroX"
+      x2="50"
       y2="20"
       class="zero-line"
     />
 
-    <!-- Budget -->
+    <!-- Delta bar -->
     <rect
-      v-if="bar.budgetW !== null"
-      :x="bar.budgetX!"
-      y="8"
-      :width="bar.budgetW!"
-      height="4"
-      class="budget-bar"
-    />
-
-    <!-- Actual -->
-    <rect
-      :x="bar.startX"
-      y="3"
-      :width="bar.amountW"
-      height="14"
+      :x="barX"
+      y="5"
+      :width="barSize"
+      height="10"
       :class="[
-        'amount-bar',
-        props.item.amount >= 0 ? 'positive' : 'negative',
+        'delta-bar',
+        delta >= 0 ? 'positive' : 'negative',
       ]"
     />
   </svg>
@@ -105,26 +81,24 @@ const bar = computed(() => {
   height: 20px;
 }
 
+/* Zero axis */
 .zero-line {
   stroke: var(--border);
   stroke-width: 0.5;
 }
 
-.amount-bar {
+/* Delta bar */
+.delta-bar {
   rx: 4;
 }
 
-.amount-bar.positive {
+/* Positive = budget remaining */
+.delta-bar.positive {
   fill: var(--positive);
 }
 
-.amount-bar.negative {
+/* Negative = overspend */
+.delta-bar.negative {
   fill: var(--negative);
-}
-
-.budget-bar {
-  fill: var(--primary);
-  opacity: 0.35;
-  rx: 2;
 }
 </style>
