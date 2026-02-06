@@ -15,15 +15,15 @@ export async function loadAppVersion(): Promise<string> {
   const folderId = driveState.value.folders.settings;
   const files = await listFilesInFolder(folderId);
 
-  const file = files.find(f => f.name === "AppVersion.json");
+  const file = files.find(f => f.name === "AppParameters.json");
   if (!file) {
-    throw new Error("AppVersion.json not found in settings");
+    throw new Error("AppParameters.json not found in settings");
   }
 
   const raw = await readJSON<AppVersionFile>(file.id);
 
   if (!raw || typeof raw.version !== "string") {
-    throw new Error("Invalid AppVersion.json format");
+    throw new Error("Invalid AppParameters.json format");
   }
 
   return raw.version;

@@ -86,20 +86,49 @@ function selectSubCategory(id: number) {
   selectedSubCategory.value = String(id);
 }
 
-const activeCategory = computed(() =>
-  selectedCategory.value === "*"
-    ? null
-    : categoriesStore.getCategory(Number(selectedCategory.value))
-);
+/* =========================
+   Categories from FollowUp.json (FILTER SOURCE)
+========================= */
+
+const availableCategoryIds = computed<number[]>(() => {
+  if (!followUpRaw.value) return [];
+
+  return followUpRaw.value.categories.map(c => c.categoryId);
+});
 
 const categoryChips = computed(() =>
-  categoriesStore.categories.value
-    .slice()
-    .sort((a, b) => a.seq - b.seq)
+  availableCategoryIds.value
+    .map(id => {
+      const meta = categoriesStore.getCategory(id);
+      if (!meta) return null;
+
+      return {
+        id,
+        label: meta.label,
+        subcategories: meta.subcategories,
+      };
+    })
+    .filter(
+      (v): v is {
+        id: number;
+        label: string;
+        subcategories: typeof categoriesStore.categories.value[number]["subcategories"];
+      } => v !== null
+    )
+    .sort((a, b) => a.label.localeCompare(b.label))
 );
+
+const activeCategory = computed(() => {
+  if (selectedCategory.value === "*") return null;
+
+  return categoryChips.value.find(
+    c => String(c.id) === selectedCategory.value
+  ) ?? null;
+});
 
 const subCategoryChips = computed(() => {
   if (!activeCategory.value) return [];
+
   return activeCategory.value.subcategories
     .slice()
     .sort((a, b) => a.seq - b.seq);
@@ -185,32 +214,87 @@ watch(
 /* =========================
    Normalize items (CORE)
 ========================= */
+/* =========================
+   Normalize items (CORE)
+========================= */
 const items = computed<FollowUpItem[]>(() => {
   if (!followUpRaw.value) return [];
 
   const y = year.value;
 
-  const rawItems: RawItem[] =
-    followUpRaw.value.categories.map(cat => {
-      const yearData = cat.years.find(v => v.year === y);
-      if (!yearData) return null;
+  /* =====================================
+     MODE : ALL CATEGORIES
+  ===================================== */
+  if (selectedCategory.value === "*") {
+    const rawItems: RawItem[] =
+      followUpRaw.value.categories.map(cat => {
+        const yearData = cat.years.find(v => v.year === y);
+        if (!yearData) return null;
 
-      const meta = categoriesStore.getCategory(cat.categoryId);
-      if (!meta) return null;
+        const meta = categoriesStore.getCategory(cat.categoryId);
+        if (!meta) return null;
 
-      const amount = yearData.items.reduce(
-        (sum, i) => sum + i.amount,
-        0
+        const amount = yearData.items.reduce(
+          (sum, i) => sum + i.amount,
+          0
+        );
+
+        const budget = meta.budgets
+          ?.find(b => b.year === y)
+          ?.items?.[0]?.budget;
+
+        return {
+          id: String(cat.categoryId),
+          label: meta.label,
+          amount,
+          ...(budget !== undefined ? { budget } : {}),
+        };
+      });
+
+    return rawItems.filter(
+      (v): v is FollowUpItem => v !== null
+    );
+  }
+
+  /* =====================================
+     MODE : ONE CATEGORY → SUB-CATEGORIES
+  ===================================== */
+  const catId = Number(selectedCategory.value);
+
+  const catData = followUpRaw.value.categories.find(
+    c => c.categoryId === catId
+  );
+  if (!catData) return [];
+
+  const yearData = catData.years.find(v => v.year === y);
+  if (!yearData) return [];
+
+  const metaCat = categoriesStore.getCategory(catId);
+  if (!metaCat) return [];
+
+  const rawItems: RawItem[] = yearData.items
+    .map(i => {
+      // filtre sous-catégorie si active
+      if (
+        selectedSubCategory.value !== null &&
+        String(i.subCategoryId) !== selectedSubCategory.value
+      ) {
+        return null;
+      }
+
+      const sub = metaCat.subcategories.find(
+        s => s.id === i.subCategoryId
       );
+      if (!sub) return null;
 
-      const budget = meta.budgets
+      const budget = sub.budgets
         ?.find(b => b.year === y)
         ?.items?.[0]?.budget;
 
       return {
-        id: String(cat.categoryId),
-        label: meta.label,
-        amount,
+        id: String(sub.id),
+        label: sub.label,
+        amount: i.amount,
         ...(budget !== undefined ? { budget } : {}),
       };
     });
@@ -219,6 +303,7 @@ const items = computed<FollowUpItem[]>(() => {
     (v): v is FollowUpItem => v !== null
   );
 });
+
 
 /* =========================
    Scale (defensive)
