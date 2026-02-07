@@ -521,44 +521,43 @@ const scale = computed(() => {
             </button>
           </div>
         </div>
-        <!-- Display scope -->
-        <div class="filter-row">
-          <span class="label">More</span>
-
-          <button
-            class="chip"
-            :class="{ active: showSecondaryCategories }"
-            @click="showSecondaryCategories = !showSecondaryCategories"
-            title="Show secondary categories"
-          >
-            …
-          </button>
-        </div>
         <!-- Categories -->
-        <div class="filter-row">
-          <span class="label">Category</span>
+<!-- Categories -->
+<div class="filter-row category-row">
+  <span class="label">Category</span>
 
-          <!-- ALL -->
-          <button
-            class="chip status all"
-            :class="{ active: selectedCategory === '*' }"
-            @click="selectAllCategories"
-          >
-            All
-          </button>
+  <!-- ALL -->
+  <button
+    class="chip status all"
+    :class="{ active: selectedCategory === '*' }"
+    @click="selectAllCategories"
+  >
+    All
+  </button>
 
-          <!-- Categories -->
-          <button
-            v-for="cat in categoryChips"
-            :key="cat.id"
-            class="chip"
-            :class="{ active: selectedCategory === String(cat.id) }"
-            @click="selectCategory(cat.id)"
-          >
-            {{ cat.label }}
-          </button>
-        </div>
+  <!-- Categories -->
+  <button
+    v-for="cat in categoryChips"
+    :key="cat.id"
+    class="chip"
+    :class="{ active: selectedCategory === String(cat.id) }"
+    @click="selectCategory(cat.id)"
+  >
+    {{ cat.label }}
+  </button>
 
+  <!-- Toggle Secondary -->
+  <button
+    class="chip more-toggle"
+    :class="{ active: showSecondaryCategories }"
+    @click="showSecondaryCategories = !showSecondaryCategories"
+    :title="showSecondaryCategories
+      ? 'Hide secondary categories'
+      : 'Show secondary categories'"
+  >
+    {{ showSecondaryCategories ? '←' : '→' }}
+  </button>
+</div>
         <!-- Sub-categories -->
         <div
           v-if="activeCategory"
