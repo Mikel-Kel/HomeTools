@@ -5,6 +5,9 @@ import { useDrive } from "@/composables/useDrive";
 /* =========================
    Types
 ========================= */
+export type CategoryNature = "-" | "I" | "E";
+export type CategoryDisplayScope = "P" | "S" | "X";
+
 export interface SubCategory {
   id: number;
   seq: number;
@@ -16,7 +19,11 @@ export interface Category {
   id: number;
   seq: number;
   label: string;
-  nature: string;
+
+  /* 👇 nouveaux champs métier */
+  nature: CategoryNature;
+  displayScope: CategoryDisplayScope;
+
   subcategories: SubCategory[];
   budgets?: BudgetYear[];
 }
@@ -68,6 +75,7 @@ export function useCategories() {
       throw new Error("Invalid categories.json format");
     }
 
+    /* JSON already matches Category interface */
     categories.value = raw.categories;
   }
 
@@ -84,7 +92,7 @@ export function useCategories() {
   );
 
   return {
-    categories,          // ✅ Ref<Category[]>
+    categories,          // Ref<Category[]>
     load,
     getCategory,
     getSubcategories,

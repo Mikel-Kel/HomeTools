@@ -8,6 +8,10 @@ import CategorySheet from "@/components/followup/CategorySheet.vue";
 import { useDrive } from "@/composables/useDrive";
 import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
 import { useCategories } from "@/composables/useCategories";
+import type {
+  CategoryNature,
+  CategoryDisplayScope,
+} from "@/composables/useCategories";
 
 import { useAppParameters } from "@/composables/useAppParameters";
 const { appParameters, load } = useAppParameters();
@@ -15,6 +19,15 @@ const { appParameters, load } = useAppParameters();
 /* =========================
    Types
 ========================= */
+interface CategoryChip {
+  id: number;
+  label: string;
+  seq: number;
+  nature: CategoryNature;
+  displayScope: CategoryDisplayScope;
+  subcategories: typeof categoriesStore.categories.value[number]["subcategories"];
+}
+
 type RawItem =
   | {
       id: string;
@@ -57,11 +70,11 @@ interface FollowUpItem {
    State
 ========================= */
 const { driveState } = useDrive();
+const categoriesStore = useCategories();
+
 const categorySheetOpen = ref(false);
 
 const year = ref<number>(2026);
-const categoriesStore = useCategories();
-
 const selectedCategory = ref<string>("*");
 const selectedSubCategory = ref<string | null>(null);
 
@@ -76,14 +89,16 @@ const analysisScope = ref<AnalysisScope>("YTD");
 ========================= */
 const filtersOpen = ref(false);
 
+type NatureFilter = "ALL" | "I" | "E";
+/* 👇 défaut = Expenses */
+const natureFilter = ref<NatureFilter>("E");
+
 /* =========================
    Current year / scope validity
 ========================= */
 const currentYear = new Date().getFullYear();
 
-const isCurrentYear = computed(() => {
-  return year.value === currentYear;
-});
+const isCurrentYear = computed(() => year.value === currentYear);
 
 /* 🔒 Enforce scope rule */
 watch(year, () => {
@@ -122,38 +137,43 @@ function daysElapsedInMonth(): number {
 }
 
 /* =========================
-   Categories from FollowUp.json
+   Categories (filtered by Nature)
 ========================= */
-const availableCategoryIds = computed<number[]>(() => {
+const categoryChips = computed<CategoryChip[]>(() => {
   if (!followUpRaw.value) return [];
-  return followUpRaw.value.categories.map(c => c.categoryId);
-});
 
-const categoryChips = computed(() =>
-  availableCategoryIds.value
-    .map(id => {
-      const meta = categoriesStore.getCategory(id);
+  return followUpRaw.value.categories
+    .map(c => {
+      const meta = categoriesStore.getCategory(c.categoryId);
       if (!meta) return null;
 
+      if (
+        natureFilter.value !== "ALL" &&
+        meta.nature !== natureFilter.value
+      ) {
+        return null;
+      }
+
       return {
-        id,
+        id: meta.id,
         label: meta.label,
-        seq: meta.seq,              // 👈 déjà présent via useCategories
+        seq: meta.seq,
+        nature: meta.nature,
+        displayScope: meta.displayScope,
         subcategories: meta.subcategories,
       };
     })
-    .filter((v): v is {
-      id: number;
-      label: string;
-      seq: number;
-      subcategories: typeof categoriesStore.categories.value[number]["subcategories"];
-    } => v !== null)
-    .sort((a, b) => a.seq - b.seq)   // ✅ ordre métier
+    .filter((v): v is CategoryChip => v !== null)
+    .sort((a, b) => a.seq - b.seq);
+});
+
+/* 👉 Source unique pour items */
+const availableCategoryIds = computed<number[]>(() =>
+  categoryChips.value.map(c => c.id)
 );
 
-const activeCategory = computed(() => {
+const activeCategory = computed<CategoryChip | null>(() => {
   if (selectedCategory.value === "*") return null;
-
   return (
     categoryChips.value.find(
       c => String(c.id) === selectedCategory.value
@@ -162,18 +182,21 @@ const activeCategory = computed(() => {
 });
 
 const subCategoryChips = computed(() => {
-  if (!activeCategory.value) return [];
-  return activeCategory.value.subcategories
+  const cat = activeCategory.value;
+  if (!cat) return [];
+
+  return cat.subcategories
     .slice()
     .sort((a, b) => a.seq - b.seq);
 });
 
 /* =========================
-   Mode
+   Reset on Nature change
 ========================= */
-const mode = computed<"category" | "subcategory">(() =>
-  selectedCategory.value === "*" ? "category" : "subcategory"
-);
+watch(natureFilter, () => {
+  selectedCategory.value = "*";
+  selectedSubCategory.value = null;
+});
 
 /* =========================
    Budget display (scope-aware)
@@ -247,6 +270,7 @@ watch(
   () => driveState.value,
   async state => {
     if (!state) return;
+
     await load();
 
     if (!categoriesStore.categories.value.length) {
@@ -268,47 +292,50 @@ const followUpSpreadLimit = computed(
 const items = computed<FollowUpItem[]>(() => {
   if (!followUpRaw.value) return [];
 
-    const y = year.value;
+  const y = year.value;
 
-    if (selectedCategory.value === "*") {
-      const rawItems: RawItem[] =
-        followUpRaw.value.categories.map(cat => {
-          const yearData = cat.years.find(v => v.year === y);
-          if (!yearData) return null;
+  /* CATEGORY MODE */
+  if (selectedCategory.value === "*") {
+    return followUpRaw.value.categories
+      .filter(cat =>
+        availableCategoryIds.value.includes(cat.categoryId)
+      )
+      .map(cat => {
+        const yearData = cat.years.find(v => v.year === y);
+        if (!yearData) return null;
 
-          const meta = categoriesStore.getCategory(cat.categoryId);
-          if (!meta) return null;
+        const meta = categoriesStore.getCategory(cat.categoryId);
+        if (!meta) return null;
 
-          const amount = yearData.items.reduce(
-            (sum, i) =>
-              sum +
-              (analysisScope.value === "MTD"
-                ? i.monthToDate
-                : i.amount),
-            0
-          );
+        const amount = yearData.items.reduce(
+          (sum, i) =>
+            sum +
+            (analysisScope.value === "MTD"
+              ? i.monthToDate
+              : i.amount),
+          0
+        );
 
-          const budget = meta.budgets
-            ?.find(b => b.year === y)
-            ?.items?.[0]?.budget;
+        const budget = meta.budgets
+          ?.find(b => b.year === y)
+          ?.items?.[0]?.budget;
 
-          return {
-            id: String(cat.categoryId),
-            label: meta.label,
-            amount,
-            ...(budget !== undefined ? { budget } : {}),
-          };
-        });
-
-    return rawItems
-    .filter((v): v is FollowUpItem => v !== null)
-    .sort((a, b) => {
-      const ca = categoriesStore.getCategory(Number(a.id))?.seq ?? 0;
-      const cb = categoriesStore.getCategory(Number(b.id))?.seq ?? 0;
-      return ca - cb;
-    });
+        return {
+          id: String(cat.categoryId),
+          label: meta.label,
+          amount,
+          ...(budget !== undefined ? { budget } : {}),
+        };
+      })
+      .filter((v): v is FollowUpItem => v !== null)
+      .sort((a, b) => {
+        const ca = categoriesStore.getCategory(Number(a.id))?.seq ?? 0;
+        const cb = categoriesStore.getCategory(Number(b.id))?.seq ?? 0;
+        return ca - cb;
+      });
   }
 
+  /* SUBCATEGORY MODE */
   const catId = Number(selectedCategory.value);
   const catData = followUpRaw.value.categories.find(
     c => c.categoryId === catId
@@ -321,34 +348,34 @@ const items = computed<FollowUpItem[]>(() => {
   const metaCat = categoriesStore.getCategory(catId);
   if (!metaCat) return [];
 
-  const rawItems: RawItem[] = yearData.items.map(i => {
-    if (
-      selectedSubCategory.value !== null &&
-      String(i.subCategoryId) !== selectedSubCategory.value
-    ) {
-      return null;
-    }
+  return yearData.items
+    .map(i => {
+      if (
+        selectedSubCategory.value !== null &&
+        String(i.subCategoryId) !== selectedSubCategory.value
+      ) {
+        return null;
+      }
 
-    const sub = metaCat.subcategories.find(
-      s => s.id === i.subCategoryId
-    );
-    if (!sub) return null;
+      const sub = metaCat.subcategories.find(
+        s => s.id === i.subCategoryId
+      );
+      if (!sub) return null;
 
-    const budget = sub.budgets
-      ?.find(b => b.year === y)
-      ?.items?.[0]?.budget;
+      const budget = sub.budgets
+        ?.find(b => b.year === y)
+        ?.items?.[0]?.budget;
 
-    return {
-      id: String(sub.id),
-      label: sub.label,
-      amount:
-        analysisScope.value === "MTD"
-          ? i.monthToDate
-          : i.amount,
-      ...(budget !== undefined ? { budget } : {}),
-    };
-  });
-  return rawItems
+      return {
+        id: String(sub.id),
+        label: sub.label,
+        amount:
+          analysisScope.value === "MTD"
+            ? i.monthToDate
+            : i.amount,
+        ...(budget !== undefined ? { budget } : {}),
+      };
+    })
     .filter((v): v is FollowUpItem => v !== null)
     .sort((a, b) => {
       const sa =
@@ -357,19 +384,15 @@ const items = computed<FollowUpItem[]>(() => {
         metaCat.subcategories.find(s => s.id === Number(b.id))?.seq ?? 0;
       return sa - sb;
     });
-
 });
 
 /* =========================
-   Total line (derived from items)
+   Total line
 ========================= */
 const totalItem = computed<FollowUpItem | null>(() => {
   if (!items.value.length) return null;
 
-  const amount = items.value.reduce(
-    (sum, i) => sum + i.amount,
-    0
-  );
+  const amount = items.value.reduce((s, i) => s + i.amount, 0);
 
   const budgets = items.value
     .map(i => displayedBudget.value(i))
@@ -389,7 +412,7 @@ const totalItem = computed<FollowUpItem | null>(() => {
 });
 
 /* =========================
-   Scale for bars (|delta|)
+   Scale for bars
 ========================= */
 const scale = computed(() => {
   if (!items.value.length) {
@@ -398,8 +421,7 @@ const scale = computed(() => {
 
   const deltas = items.value.map(i => {
     const budget = displayedBudget.value(i);
-    if (budget === undefined) return 0;
-    return Math.abs(budget - i.amount);
+    return budget === undefined ? 0 : Math.abs(budget - i.amount);
   });
 
   return {
@@ -408,7 +430,6 @@ const scale = computed(() => {
   };
 });
 </script>
-
 <template>
   <PageHeader title="Follow-up" icon="followup" />
 
@@ -459,6 +480,36 @@ const scale = computed(() => {
           >
             {{ s }}
           </button>
+          </div>
+        </div>
+        <!-- Nature -->
+        <div class="filter-row">
+          <span class="label">Nature</span>
+
+          <div class="scope-selector">
+            <button
+              class="scope-btn"
+              :class="{ active: natureFilter === 'ALL' }"
+              @click="natureFilter = 'ALL'"
+            >
+              All
+            </button>
+
+            <button
+              class="scope-btn"
+              :class="{ active: natureFilter === 'I' }"
+              @click="natureFilter = 'I'"
+            >
+              Income
+            </button>
+
+            <button
+              class="scope-btn"
+              :class="{ active: natureFilter === 'E' }"
+              @click="natureFilter = 'E'"
+            >
+              Expenses
+            </button>
           </div>
         </div>
         <!-- Categories -->
