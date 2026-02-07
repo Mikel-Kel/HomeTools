@@ -25,6 +25,7 @@ export function useCategories() {
             !Array.isArray(raw.categories)) {
             throw new Error("Invalid categories.json format");
         }
+        /* JSON already matches Category interface */
         categories.value = raw.categories;
     }
     function getCategory(id) {
@@ -35,7 +36,7 @@ export function useCategories() {
     }
     const allSubcategories = computed(() => categories.value.flatMap(c => c.subcategories));
     return {
-        categories, // ✅ Ref<Category[]>
+        categories, // Ref<Category[]>
         load,
         getCategory,
         getSubcategories,

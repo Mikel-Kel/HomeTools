@@ -90,17 +90,18 @@ const analysisScope = ref<AnalysisScope>("YTD");
 const filtersOpen = ref(false);
 
 type NatureFilter = "ALL" | "I" | "E";
-/* 👇 défaut = Expenses */
+/* défaut = Expenses */
 const natureFilter = ref<NatureFilter>("E");
+
+/* displayScope */
+const showSecondaryCategories = ref(false);
 
 /* =========================
    Current year / scope validity
 ========================= */
 const currentYear = new Date().getFullYear();
-
 const isCurrentYear = computed(() => year.value === currentYear);
 
-/* 🔒 Enforce scope rule */
 watch(year, () => {
   if (!isCurrentYear.value && analysisScope.value !== "FULL") {
     analysisScope.value = "FULL";
@@ -137,41 +138,53 @@ function daysElapsedInMonth(): number {
 }
 
 /* =========================
-   Categories (filtered by Nature)
+   CATEGORY CHIPS (vérité métier)
 ========================= */
 const categoryChips = computed<CategoryChip[]>(() => {
   if (!followUpRaw.value) return [];
 
-  return followUpRaw.value.categories
-    .map(c => {
-      const meta = categoriesStore.getCategory(c.categoryId);
-      if (!meta) return null;
+  const chips: CategoryChip[] = [];
 
-      if (
-        natureFilter.value !== "ALL" &&
-        meta.nature !== natureFilter.value
-      ) {
-        return null;
-      }
+  for (const c of followUpRaw.value.categories) {
+    const meta = categoriesStore.getCategory(c.categoryId);
+    if (!meta) continue;
 
-      return {
-        id: meta.id,
-        label: meta.label,
-        seq: meta.seq,
-        nature: meta.nature,
-        displayScope: meta.displayScope,
-        subcategories: meta.subcategories,
-      };
-    })
-    .filter((v): v is CategoryChip => v !== null)
-    .sort((a, b) => a.seq - b.seq);
+    /* Nature */
+    if (
+      natureFilter.value !== "ALL" &&
+      meta.nature !== natureFilter.value
+    ) {
+      continue;
+    }
+
+    /* DisplayScope strict */
+    switch (meta.displayScope) {
+      case "P":
+        break;
+      case "S":
+        if (!showSecondaryCategories.value) continue;
+        break;
+      case "X":
+      default:
+        continue;
+    }
+
+    chips.push({
+      id: meta.id,
+      label: meta.label,
+      seq: meta.seq,
+      nature: meta.nature,
+      displayScope: meta.displayScope,
+      subcategories: meta.subcategories,
+    });
+  }
+
+  return chips.sort((a, b) => a.seq - b.seq);
 });
 
-/* 👉 Source unique pour items */
-const availableCategoryIds = computed<number[]>(() =>
-  categoryChips.value.map(c => c.id)
-);
-
+/* =========================
+   Active category / subs
+========================= */
 const activeCategory = computed<CategoryChip | null>(() => {
   if (selectedCategory.value === "*") return null;
   return (
@@ -184,16 +197,13 @@ const activeCategory = computed<CategoryChip | null>(() => {
 const subCategoryChips = computed(() => {
   const cat = activeCategory.value;
   if (!cat) return [];
-
-  return cat.subcategories
-    .slice()
-    .sort((a, b) => a.seq - b.seq);
+  return cat.subcategories.slice().sort((a, b) => a.seq - b.seq);
 });
 
 /* =========================
-   Reset on Nature change
+   Reset on filter change
 ========================= */
-watch(natureFilter, () => {
+watch([natureFilter, showSecondaryCategories], () => {
   selectedCategory.value = "*";
   selectedSubCategory.value = null;
 });
@@ -230,13 +240,11 @@ const displayedBudget = computed(() => {
 ========================= */
 const availableYears = computed<number[]>(() => {
   const years = new Set<number>();
-
   for (const cat of categoriesStore.categories.value) {
     for (const b of cat.budgets ?? []) {
       years.add(b.year);
     }
   }
-
   return Array.from(years).sort((a, b) => a - b);
 });
 
@@ -272,18 +280,16 @@ watch(
     if (!state) return;
 
     await load();
-
     if (!categoriesStore.categories.value.length) {
       await categoriesStore.load();
     }
-
     await loadFollowUp();
   },
   { immediate: true }
 );
 
 /* =========================
-   Normalize items (CORE)
+   ITEMS (basés UNIQUEMENT sur categoryChips)
 ========================= */
 const followUpSpreadLimit = computed(
   () => appParameters.value?.followUpSpreadLimit ?? 10
@@ -296,11 +302,13 @@ const items = computed<FollowUpItem[]>(() => {
 
   /* CATEGORY MODE */
   if (selectedCategory.value === "*") {
-    return followUpRaw.value.categories
-      .filter(cat =>
-        availableCategoryIds.value.includes(cat.categoryId)
-      )
-      .map(cat => {
+    return categoryChips.value
+      .map(chip => {
+        const cat = followUpRaw.value!.categories.find(
+          c => c.categoryId === chip.id
+        );
+        if (!cat) return null;
+
         const yearData = cat.years.find(v => v.year === y);
         if (!yearData) return null;
 
@@ -387,7 +395,7 @@ const items = computed<FollowUpItem[]>(() => {
 });
 
 /* =========================
-   Total line
+   TOTAL
 ========================= */
 const totalItem = computed<FollowUpItem | null>(() => {
   if (!items.value.length) return null;
@@ -412,7 +420,7 @@ const totalItem = computed<FollowUpItem | null>(() => {
 });
 
 /* =========================
-   Scale for bars
+   SCALE
 ========================= */
 const scale = computed(() => {
   if (!items.value.length) {
@@ -430,6 +438,7 @@ const scale = computed(() => {
   };
 });
 </script>
+
 <template>
   <PageHeader title="Follow-up" icon="followup" />
 
@@ -511,6 +520,19 @@ const scale = computed(() => {
               Expenses
             </button>
           </div>
+        </div>
+        <!-- Display scope -->
+        <div class="filter-row">
+          <span class="label">More</span>
+
+          <button
+            class="chip"
+            :class="{ active: showSecondaryCategories }"
+            @click="showSecondaryCategories = !showSecondaryCategories"
+            title="Show secondary categories"
+          >
+            …
+          </button>
         </div>
         <!-- Categories -->
         <div class="filter-row">
