@@ -19,6 +19,12 @@ const { appParameters, load } = useAppParameters();
 /* =========================
    Types
 ========================= */
+interface FollowUpFile {
+  version: number;
+  updatedAt: string; // ISO string, ex: 2026-02-07T10:05:29Z
+  categories: FollowUpCategory[];
+}
+
 interface CategoryChip {
   id: number;
   label: string;
@@ -135,6 +141,18 @@ function daysInMonth(year: number, month: number): number {
 
 function daysElapsedInMonth(): number {
   return new Date().getDate();
+}
+
+function formatDate(d: Date): string {
+  return d.toLocaleDateString("fr-CH", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function endOfPreviousMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 0);
 }
 
 /* =========================
@@ -437,6 +455,31 @@ const scale = computed(() => {
     max: Math.max(0, ...deltas),
   };
 });
+
+const statusAsOfLabel = computed<string>(() => {
+  if (!followUpRaw.value?.updatedAt) {
+    return "As of —";
+  }
+
+  const updatedAt = new Date(followUpRaw.value.updatedAt);
+
+  let effectiveDate: Date;
+
+  switch (analysisScope.value) {
+    case "MTD":
+      effectiveDate = endOfPreviousMonth(updatedAt);
+      break;
+
+    case "FULL":
+    case "YTD":
+    default:
+      effectiveDate = updatedAt;
+      break;
+  }
+
+  return `As of ${formatDate(effectiveDate)}`;
+});
+
 </script>
 
 <template>
@@ -584,7 +627,11 @@ const scale = computed(() => {
   <div class="followup-header-wrapper">
     <div class="followup-header">
       <div class="col-label">Categories</div>
-      <div class="col-chart centered">Spending status</div>
+      <div class="col-chart centered">
+        <span class="status-pill">
+          {{ statusAsOfLabel }}
+        </span>
+      </div>
       <div class="col-budget">Budget</div>
     </div>
   </div>
@@ -854,6 +901,27 @@ const scale = computed(() => {
 
   color: var(--text-soft);
 }
+
+/* =========================================================
+   Status "as of" pill
+========================================================= */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+
+  border-radius: 999px; /* pill / rounded rectangle */
+  border: 1px solid var(--border);
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary);
+
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
 /* =========================================================
    Primary filters row (Year / Scope / Nature)
 ========================================================= */
