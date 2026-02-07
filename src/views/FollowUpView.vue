@@ -455,10 +455,10 @@ const scale = computed(() => {
 
       <div v-if="filtersOpen" class="filters-body">
 
-        <!-- Year -->
-        <div class="filter-row">
-          <span class="label">Year</span>
+        <!-- 🔹 PRIMARY FILTERS : Year / Scope / Nature -->
+        <div class="filter-row primary">
 
+          <!-- Year -->
           <div class="year-segmented">
             <button
               v-for="y in availableYears"
@@ -470,31 +470,25 @@ const scale = computed(() => {
               {{ y }}
             </button>
           </div>
-        </div> 
-        <!-- Analysis scope -->
-        <div class="filter-row">
-          <span class="label">Scope</span>
 
+          <!-- Scope -->
           <div class="scope-selector">
-          <button
-            v-for="s in ['FULL', 'MTD', 'YTD']"
-            :key="s"
-            class="scope-btn"
-            :class="{
-              active: analysisScope === s,
-              disabled: !isCurrentYear && s !== 'FULL'
-            }"
-            :disabled="!isCurrentYear && s !== 'FULL'"
-            @click="analysisScope = s as AnalysisScope"
-          >
-            {{ s }}
-          </button>
+            <button
+              v-for="s in ['FULL', 'MTD', 'YTD']"
+              :key="s"
+              class="scope-btn"
+              :class="{
+                active: analysisScope === s,
+                disabled: !isCurrentYear && s !== 'FULL'
+              }"
+              :disabled="!isCurrentYear && s !== 'FULL'"
+              @click="analysisScope = s as AnalysisScope"
+            >
+              {{ s }}
+            </button>
           </div>
-        </div>
-        <!-- Nature -->
-        <div class="filter-row">
-          <span class="label">Nature</span>
 
+          <!-- Nature -->
           <div class="scope-selector">
             <button
               class="scope-btn"
@@ -520,52 +514,51 @@ const scale = computed(() => {
               Expenses
             </button>
           </div>
+
         </div>
-        <!-- Categories -->
-<!-- Categories -->
-<div class="filter-row category-row">
-  <span class="label">Category</span>
 
-  <!-- ALL -->
-  <button
-    class="chip status all"
-    :class="{ active: selectedCategory === '*' }"
-    @click="selectAllCategories"
-  >
-    All
-  </button>
+        <!-- 🔹 Categories -->
+        <div class="filter-row category-row">
+          <span class="label">Category</span>
 
-  <!-- Categories -->
-  <button
-    v-for="cat in categoryChips"
-    :key="cat.id"
-    class="chip"
-    :class="{ active: selectedCategory === String(cat.id) }"
-    @click="selectCategory(cat.id)"
-  >
-    {{ cat.label }}
-  </button>
+          <button
+            class="chip status all"
+            :class="{ active: selectedCategory === '*' }"
+            @click="selectAllCategories"
+          >
+            All
+          </button>
 
-  <!-- Toggle Secondary -->
-  <button
-    class="chip more-toggle"
-    :class="{ active: showSecondaryCategories }"
-    @click="showSecondaryCategories = !showSecondaryCategories"
-    :title="showSecondaryCategories
-      ? 'Hide secondary categories'
-      : 'Show secondary categories'"
-  >
-    {{ showSecondaryCategories ? '←' : '→' }}
-  </button>
-</div>
-        <!-- Sub-categories -->
+          <button
+            v-for="cat in categoryChips"
+            :key="cat.id"
+            class="chip"
+            :class="{ active: selectedCategory === String(cat.id) }"
+            @click="selectCategory(cat.id)"
+          >
+            {{ cat.label }}
+          </button>
+
+          <!-- Toggle Secondary -->
+          <button
+            class="chip more-toggle"
+            :class="{ active: showSecondaryCategories }"
+            @click="showSecondaryCategories = !showSecondaryCategories"
+            :title="showSecondaryCategories
+              ? 'Hide secondary categories'
+              : 'Show secondary categories'"
+          >
+            {{ showSecondaryCategories ? '←' : '→' }}
+          </button>
+        </div>
+
+        <!-- 🔹 Sub-categories -->
         <div
           v-if="activeCategory"
           class="filter-row subcats"
         >
           <span class="label">Sub</span>
 
-          <!-- ALL sub -->
           <button
             class="chip status all"
             :class="{ active: selectedSubCategory === null }"
@@ -584,10 +577,10 @@ const scale = computed(() => {
             {{ sub.label }}
           </button>
         </div>
+
       </div>
     </section>
   </div>
-
   <div class="followup-header-wrapper">
     <div class="followup-header">
       <div class="col-label">Categories</div>
@@ -860,6 +853,26 @@ const scale = computed(() => {
   text-transform: uppercase;
 
   color: var(--text-soft);
+}
+/* =========================================================
+   Primary filters row (Year / Scope / Nature)
+========================================================= */
+.filter-row.primary {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Make primary selectors visually balanced */
+.filter-row.primary > * {
+  flex-shrink: 0;
+}
+
+/* Slight tightening */
+.filter-row.primary .scope-selector,
+.filter-row.primary .year-segmented {
+  margin: 0;
 }
 
 /* =========================================================
