@@ -15,7 +15,7 @@ export function useDriveWatcher({
   fileName,
   lastKnownModified,
   onChanged,
-  intervalMs = 10_000,
+  intervalMs = 5_000,
 }: DriveWatcherOptions) {
   const timer = ref<number | null>(null);
   const paused = ref(false);

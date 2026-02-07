@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { useDriveWatcher } from "@/composables/useDriveWatcher";
 
 import PageHeader from "@/components/PageHeader.vue";
 import FollowUpBar from "@/components/followup/FollowUpBar.vue";
@@ -89,6 +90,18 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 
 const analysisScope = ref<AnalysisScope>("YTD");
+
+/* =========================
+   Drive watcher state
+========================= */
+const followUpLastModified = ref<string | null>(null);
+
+useDriveWatcher({
+  folderId: driveState.value!.folders.allocations.budgetusage,
+  fileName: "FollowUp.json",
+  lastKnownModified: followUpLastModified,
+  onChanged: loadFollowUp,
+});
 
 /* =========================
    Filters
