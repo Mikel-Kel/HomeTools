@@ -511,7 +511,7 @@ const statusAsOfLabel = computed<string>(() => {
 
       <div v-if="filtersOpen" class="filters-body">
 
-        <!-- 🔹 PRIMARY FILTERS : Year / Scope / Nature -->
+        <!-- PRIMARY FILTERS -->
         <div class="filter-row primary">
 
           <!-- Year -->
@@ -553,7 +553,6 @@ const statusAsOfLabel = computed<string>(() => {
             >
               All
             </button>
-
             <button
               class="scope-btn"
               :class="{ active: natureFilter === 'I' }"
@@ -561,7 +560,6 @@ const statusAsOfLabel = computed<string>(() => {
             >
               Income
             </button>
-
             <button
               class="scope-btn"
               :class="{ active: natureFilter === 'E' }"
@@ -573,12 +571,12 @@ const statusAsOfLabel = computed<string>(() => {
 
         </div>
 
-        <!-- 🔹 Categories -->
-        <div class="filter-row category-row">
+        <!-- Categories -->
+        <div class="filter-row">
           <span class="label">Category</span>
 
           <button
-            class="chip status all"
+            class="chip"
             :class="{ active: selectedCategory === '*' }"
             @click="selectAllCategories"
           >
@@ -594,21 +592,9 @@ const statusAsOfLabel = computed<string>(() => {
           >
             {{ cat.label }}
           </button>
-
-          <!-- Toggle Secondary -->
-          <button
-            class="chip more-toggle"
-            :class="{ active: showSecondaryCategories }"
-            @click="showSecondaryCategories = !showSecondaryCategories"
-            :title="showSecondaryCategories
-              ? 'Hide secondary categories'
-              : 'Show secondary categories'"
-          >
-            {{ showSecondaryCategories ? '←' : '→' }}
-          </button>
         </div>
 
-        <!-- 🔹 Sub-categories -->
+        <!-- Subcategories -->
         <div
           v-if="activeCategory"
           class="filter-row subcats"
@@ -616,7 +602,7 @@ const statusAsOfLabel = computed<string>(() => {
           <span class="label">Sub</span>
 
           <button
-            class="chip status all"
+            class="chip"
             :class="{ active: selectedSubCategory === null }"
             @click="selectedSubCategory = null"
           >
@@ -637,81 +623,79 @@ const statusAsOfLabel = computed<string>(() => {
       </div>
     </section>
   </div>
+
+  <!-- HEADER -->
   <div class="followup-header-wrapper">
-    <div class="followup-header">
+    <div class="followup-grid followup-header">
       <div class="col-label">Categories</div>
+
       <div class="col-chart centered">
         <span class="status-pill">
           {{ statusAsOfLabel }}
         </span>
       </div>
+
+      <div class="col-allocated">Alloc.</div>
       <div class="col-budget">Budget</div>
     </div>
   </div>
 
-  <!-- Content -->
-  <div class="followup-view">
-    <div v-if="loading" class="info">Loading…</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
+  <!-- CONTENT -->
+  <div class="followup-table">
 
-    <div v-else class="followup-table">
-      <!-- TOTAL ROW -->
-      <div
-        v-if="totalItem"
-        class="followup-row total"
-      >
-        <div class="label">
-          {{ totalItem.label }}
-        </div>
+    <!-- TOTAL -->
+    <div
+      v-if="totalItem"
+      class="followup-grid followup-row total"
+    >
+      <div class="label">{{ totalItem.label }}</div>
 
-        <div class="chart">
-          <FollowUpBar
-            :amount="totalItem.amount"
-            :budget="totalItem.budget"
-            :scale="scale"
-            :spreadLimit="followUpSpreadLimit"
-          />
-        </div>
-
-        <div class="budget">
-          <span v-if="totalItem.budget !== undefined">
-            {{ totalItem.budget.toLocaleString() }}
-          </span>
-          <span v-else class="muted">—</span>
-        </div>
+      <div class="chart">
+        <FollowUpBar
+          :amount="totalItem.amount"
+          :budget="totalItem.budget"
+          :scale="scale"
+          :spreadLimit="followUpSpreadLimit"
+        />
       </div>
 
-      <!-- ITEMS -->
-      <div
-        v-for="item in items"
-        :key="item.id"
-        class="followup-row"
-      >
+      <div class="allocated">—</div>
 
-        <!-- Label -->
-        <div class="label">
-          {{ item.label }}
-        </div>
-
-        <!-- Chart -->
-        <div class="chart">
-          <FollowUpBar
-            :amount="item.amount"
-            :budget="displayedBudget(item)"
-            :scale="scale"
-            :spreadLimit="followUpSpreadLimit"
-          />
-        </div>
-
-        <!-- Budget -->
-        <div class="budget">
-          <span v-if="displayedBudget(item) !== undefined">
-            {{ displayedBudget(item)!.toLocaleString() }}
-          </span>
-          <span v-else class="muted">—</span>
-        </div>
+      <div class="budget">
+        <span v-if="totalItem.budget !== undefined">
+          {{ totalItem.budget.toLocaleString() }}
+        </span>
+        <span v-else class="muted">—</span>
       </div>
     </div>
+
+    <!-- ITEMS -->
+    <div
+      v-for="item in items"
+      :key="item.id"
+      class="followup-grid followup-row"
+    >
+      <div class="label">{{ item.label }}</div>
+
+      <div class="chart">
+        <FollowUpBar
+          :amount="item.amount"
+          :budget="displayedBudget(item)"
+          :scale="scale"
+          :spreadLimit="followUpSpreadLimit"
+        />
+      </div>
+
+      <div class="allocated">—</div>
+
+      <div class="budget">
+        <span v-if="displayedBudget(item) !== undefined">
+          {{ displayedBudget(item)!.toLocaleString() }}
+        </span>
+        <span v-else class="muted">—</span>
+      </div>
+    </div>
+
   </div>
 
   <CategorySheet
@@ -724,7 +708,7 @@ const statusAsOfLabel = computed<string>(() => {
 
 <style scoped>
 /* =========================================================
-   Sticky zone (Filters)
+   Sticky zone
 ========================================================= */
 .sticky-zone {
   position: sticky;
@@ -736,28 +720,20 @@ const statusAsOfLabel = computed<string>(() => {
 
 .filters {
   font-size: var(--font-size-sm);
-  background: var(--bg);
 }
 
 .filters-header {
-  padding: 0.5rem 0.5rem;
+  padding: 0.5rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.filters-header h2 {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-soft);
-}
-
 .filters-body {
-  padding: 0.5rem 0.5rem 0.75rem;
+  padding: 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.75rem;
 }
 
 .filter-row {
@@ -768,26 +744,24 @@ const statusAsOfLabel = computed<string>(() => {
 }
 
 .filter-row.subcats {
-  padding-left: 1.5rem; /* léger retrait visuel */
+  padding-left: 1.5rem;
 }
 
-.chip {
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  cursor: pointer;
-  user-select: none;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  opacity: 0.7;
+/* =========================================================
+   Primary filters row (Year / Scope / Nature)
+========================================================= */
+.filter-row.primary {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.chip.active {
-  opacity: 1;
-  background: var(--primary-soft);
-  border-color: var(--primary);
+/* Empêche l’écrasement visuel */
+.filter-row.primary > * {
+  flex-shrink: 0;
 }
+
 /* =========================================================
    Year segmented control (iOS-style)
 ========================================================= */
@@ -822,18 +796,17 @@ const statusAsOfLabel = computed<string>(() => {
   color: var(--primary);
 
   opacity: 1;
-  font-weight: 600;
-
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 /* =========================================================
-   Analysis scope selector (enhanced)
+   Scope selector (FULL / MTD / YTD / Nature)
 ========================================================= */
 .scope-selector {
   display: inline-flex;
   gap: 4px;
   padding: 3px;
+
   background: var(--bg-soft);
   border-radius: 999px;
 }
@@ -845,8 +818,8 @@ const statusAsOfLabel = computed<string>(() => {
 
   font-size: var(--font-size-xs);
   font-weight: 600;
-
   color: var(--text-soft);
+
   background: transparent;
   opacity: 0.6;
 
@@ -858,8 +831,8 @@ const statusAsOfLabel = computed<string>(() => {
   background: var(--primary-soft);
   border-color: var(--primary);
   color: var(--primary);
-  opacity: 1;
 
+  opacity: 1;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
@@ -869,116 +842,96 @@ const statusAsOfLabel = computed<string>(() => {
 }
 
 /* =========================================================
-   Follow-up header
+   Chips
 ========================================================= */
-.followup-header {
-  display: grid;
-  grid-template-columns: 280px 1fr 140px;
-  column-gap: 16px;
-  padding: 8px 0;
-  align-items: center;
-  margin-bottom: 4px;
-
+.chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
   font-size: var(--font-size-xs);
   font-weight: 600;
-  color: var(--text-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  opacity: 0.7;
+  cursor: pointer;
 }
 
-
-.col-budget {
-  text-align: right;
+.chip.active {
+  opacity: 1;
+  background: var(--primary-soft);
+  border-color: var(--primary);
 }
+
 /* =========================================================
-   Follow-up header band
+   Header band
 ========================================================= */
 .followup-header-wrapper {
   background: var(--bg-soft);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-}
-
-/* Header grid */
-.followup-header {
-  display: grid;
-  grid-template-columns: 220px 1fr 120px;
-  align-items: center;
-
-  padding: 10px 12px;
-
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-
-  color: var(--text-soft);
+  padding: 0 12px;
 }
 
 /* =========================================================
-   Status "as of" pill
+   🔑 CANONICAL GRID (HEADER + ROWS)
+========================================================= */
+.followup-grid {
+  display: grid;
+  grid-template-columns:
+    220px   /* label */
+    1fr     /* bar */
+    110px   /* allocated */
+    110px;  /* budget */
+  align-items: center;
+  column-gap: 16px;
+}
+
+/* =========================================================
+   Header
+========================================================= */
+.followup-header {
+  padding: 10px 0;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+}
+
+.col-chart.centered {
+  text-align: center;
+}
+
+.col-allocated,
+.col-budget {
+  text-align: right;
+}
+
+/* =========================================================
+   Status pill
 ========================================================= */
 .status-pill {
   display: inline-flex;
   align-items: center;
   padding: 4px 12px;
-
-  border-radius: 999px; /* pill / rounded rectangle */
-  border: 1px solid var(--border);
+  border-radius: 999px;
+  border: 1px solid var(--primary);
   background: var(--primary-soft);
   color: var(--primary);
-  border-color: var(--primary);
-
   font-size: var(--font-size-xs);
   font-weight: 600;
-
   white-space: nowrap;
 }
 
 /* =========================================================
-   Primary filters row (Year / Scope / Nature)
+   Table
 ========================================================= */
-.filter-row.primary {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-/* Make primary selectors visually balanced */
-.filter-row.primary > * {
-  flex-shrink: 0;
-}
-
-/* Slight tightening */
-.filter-row.primary .scope-selector,
-.filter-row.primary .year-segmented {
-  margin: 0;
-}
-
-/* =========================================================
-   Follow-up view
-   ========================================================= */
-.followup-separator {
-  border: none;
-  height: 1px;
-  background: var(--border);
-  margin: 0 1.5rem;
-}
-
 .followup-table {
+  padding: 0 12px;
   display: flex;
   flex-direction: column;
-  padding: 0.5rem 0.5rem;
   gap: 10px;
 }
 
-.followup-row {
-  display: grid;
-  grid-template-columns: 190px 1fr 140px;
-  align-items: center;
-  column-gap: 16px;
-}
 .followup-row.total {
   font-weight: 700;
   border-bottom: 1px solid var(--border);
@@ -991,6 +944,9 @@ const statusAsOfLabel = computed<string>(() => {
   letter-spacing: 0.04em;
 }
 
+/* =========================================================
+   Cells
+========================================================= */
 .label {
   font-size: 0.85rem;
   font-weight: 500;
@@ -1003,23 +959,12 @@ const statusAsOfLabel = computed<string>(() => {
   height: 20px;
 }
 
-.col-chart.centered {
-  text-align: center;
-}
-
+.allocated,
 .budget {
   text-align: right;
   font-size: 0.85rem;
   font-weight: 600;
-}
-
-.muted {
-  opacity: 0.4;
-}
-
-.budgets {
-  text-align: right;
-  font-weight: 600;
+  white-space: nowrap;
 }
 
 .muted {
