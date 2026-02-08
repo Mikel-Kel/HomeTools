@@ -127,9 +127,9 @@ watch(year, () => {
   }
 });
 
-/* =========================
-   Helpers UI + dates
-========================= */
+/* =============================
+   Helpers UI + dates + decimals
+================================ */
 function selectAllCategories() {
   selectedCategory.value = "*";
   selectedSubCategory.value = null;
@@ -166,6 +166,10 @@ function formatDate(d: Date): string {
 
 function endOfPreviousMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 0);
+}
+
+function fmt(n: number): string {
+  return Math.round(n).toLocaleString();
 }
 
 /* =========================
@@ -256,9 +260,36 @@ const allocatedColumnLabel = computed(() => {
 /* =========================
    Displayed allocated (no decimals)
 ========================= */
-const displayedAllocated = computed(() => {
+/*const displayedAllocated = computed(() => {
   return (item: FollowUpItem): number => item.amount;
 });
+*/
+
+function allocatedValue(item: FollowUpItem): number {
+  if (natureFilter.value === "E") {
+    // Spent = somme des dépenses positives
+    return Math.max(0, item.amount);
+  }
+  // Income
+  return Math.max(0, item.amount);
+}
+
+function totalAllocatedValue(): number {
+  if (!items.value.length) return 0;
+
+  if (natureFilter.value === "E") {
+    return items.value.reduce(
+      (s, i) => s + Math.max(0, i.amount),
+      0
+    );
+  }
+
+  return items.value.reduce(
+    (s, i) => s + Math.max(0, i.amount),
+    0
+  );
+}
+
 
 /* =========================
    Reset on filter change
@@ -294,6 +325,24 @@ const displayedBudget = computed(() => {
     return Math.round(mtdBudget + prorata);
   };
 });
+
+function allocatedClass(
+  allocated: number,
+  budget?: number
+): string {
+  if (budget === undefined) return "allocated-nobudget";
+
+  if (natureFilter.value === "E") {
+    return allocated > budget
+      ? "allocated-bad"
+      : "allocated-good";
+  }
+
+  // Income
+  return allocated < budget
+    ? "allocated-bad"
+    : "allocated-good";
+}
 
 /* =========================
    Available years
@@ -460,6 +509,36 @@ const items = computed<FollowUpItem[]>(() => {
 const totalItem = computed<FollowUpItem | null>(() => {
   if (!items.value.length) return null;
 
+  const isExpense = natureFilter.value === "E";
+
+  const amount = items.value.reduce((sum, i) => {
+    if (isExpense) {
+      return sum + Math.abs(i.amount);
+    }
+    return sum + i.amount;
+  }, 0);
+
+  const budgets = items.value
+    .map(i => displayedBudget.value(i))
+    .filter((b): b is number => b !== undefined);
+
+  const budget =
+    budgets.length > 0
+      ? budgets.reduce((s, b) => s + b, 0)
+      : undefined;
+
+  return {
+    id: "__total__",
+    label: "Total",
+    amount,
+    ...(budget !== undefined ? { budget } : {}),
+  };
+});
+
+/*
+const totalItem = computed<FollowUpItem | null>(() => {
+  if (!items.value.length) return null;
+
   const amount = items.value.reduce((s, i) => s + i.amount, 0);
 
   const budgets = items.value
@@ -478,6 +557,7 @@ const totalItem = computed<FollowUpItem | null>(() => {
     ...(budget !== undefined ? { budget } : {}),
   };
 });
+*/
 
 /* =========================
    SCALE
@@ -702,15 +782,19 @@ const statusAsOfLabel = computed<string>(() => {
           :spreadLimit="followUpSpreadLimit"
         />
       </div>
-
-      <!-- ✅ Amount from JSON (no decimals) -->
-      <div class="allocated">
-        {{ Math.round(displayedAllocated(totalItem)).toLocaleString() }}
+      <div
+        class="allocated"
+        :class="allocatedClass(
+          totalAllocatedValue(),
+          totalItem.budget
+        )"
+      >
+        {{ fmt(totalAllocatedValue()) }}
       </div>
 
       <div class="budget">
         <span v-if="totalItem.budget !== undefined">
-          {{ totalItem.budget.toLocaleString() }}
+          {{ fmt(totalItem.budget) }}
         </span>
         <span v-else class="muted">—</span>
       </div>
@@ -732,15 +816,19 @@ const statusAsOfLabel = computed<string>(() => {
           :spreadLimit="followUpSpreadLimit"
         />
       </div>
-
-      <!-- ✅ Amount from JSON (no decimals) -->
-      <div class="allocated">
-        {{ Math.round(displayedAllocated(item)).toLocaleString() }}
+      <div
+        class="allocated"
+        :class="allocatedClass(
+          allocatedValue(item),
+          displayedBudget(item)
+        )"
+      >
+        {{ fmt(allocatedValue(item)) }}
       </div>
 
       <div class="budget">
         <span v-if="displayedBudget(item) !== undefined">
-          {{ displayedBudget(item)!.toLocaleString() }}
+          {{ fmt(displayedBudget(item)!) }}
         </span>
         <span v-else class="muted">—</span>
       </div>
@@ -1019,6 +1107,22 @@ const statusAsOfLabel = computed<string>(() => {
 
 .muted {
   opacity: 0.4;
+}
+
+/* =========================================================
+   Allocated states
+========================================================= */
+.allocated-good {
+  color: var(--success, #1f9d55);
+}
+
+.allocated-bad {
+  color: var(--danger, #d64545);
+  font-weight: 700;
+}
+
+.allocated-neutral {
+  color: var(--primary, #1e40af); /* bleu foncé */
 }
 
 </style>
