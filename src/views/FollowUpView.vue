@@ -232,6 +232,35 @@ const subCategoryChips = computed(() => {
 });
 
 /* =========================
+   Column label (Received / Spent)
+========================= */
+const currentNature = computed<CategoryNature | null>(() => {
+  // Si une catégorie est sélectionnée, on prend sa nature
+  if (activeCategory.value) return activeCategory.value.nature;
+
+  // Sinon, si le filtre nature est fixé (Income/Expenses), on l’utilise
+  if (natureFilter.value === "I" || natureFilter.value === "E") {
+    return natureFilter.value;
+  }
+
+  // Sinon (ALL + All categories), pas de nature unique
+  return null;
+});
+
+const allocatedColumnLabel = computed(() => {
+  if (currentNature.value === "I") return "Received";
+  if (currentNature.value === "E") return "Spent";
+  return "Alloc.";
+});
+
+/* =========================
+   Displayed allocated (no decimals)
+========================= */
+const displayedAllocated = computed(() => {
+  return (item: FollowUpItem): number => item.amount;
+});
+
+/* =========================
    Reset on filter change
 ========================= */
 watch([natureFilter, showSecondaryCategories], () => {
@@ -568,7 +597,6 @@ const statusAsOfLabel = computed<string>(() => {
               Expenses
             </button>
           </div>
-
         </div>
 
         <!-- Categories -->
@@ -591,6 +619,18 @@ const statusAsOfLabel = computed<string>(() => {
             @click="selectCategory(cat.id)"
           >
             {{ cat.label }}
+          </button>
+
+          <!-- 🔁 Toggle secondary categories -->
+          <button
+            class="chip more-toggle"
+            :class="{ active: showSecondaryCategories }"
+            @click="showSecondaryCategories = !showSecondaryCategories"
+            :title="showSecondaryCategories
+              ? 'Hide secondary categories'
+              : 'Show secondary categories'"
+          >
+            {{ showSecondaryCategories ? '←' : '→' }}
           </button>
         </div>
 
@@ -635,7 +675,11 @@ const statusAsOfLabel = computed<string>(() => {
         </span>
       </div>
 
-      <div class="col-allocated">Alloc.</div>
+      <!-- ✅ Dynamic title -->
+      <div class="col-allocated">
+        {{ allocatedColumnLabel }}
+      </div>
+
       <div class="col-budget">Budget</div>
     </div>
   </div>
@@ -659,7 +703,10 @@ const statusAsOfLabel = computed<string>(() => {
         />
       </div>
 
-      <div class="allocated">—</div>
+      <!-- ✅ Amount from JSON (no decimals) -->
+      <div class="allocated">
+        {{ Math.round(displayedAllocated(totalItem)).toLocaleString() }}
+      </div>
 
       <div class="budget">
         <span v-if="totalItem.budget !== undefined">
@@ -686,7 +733,10 @@ const statusAsOfLabel = computed<string>(() => {
         />
       </div>
 
-      <div class="allocated">—</div>
+      <!-- ✅ Amount from JSON (no decimals) -->
+      <div class="allocated">
+        {{ Math.round(displayedAllocated(item)).toLocaleString() }}
+      </div>
 
       <div class="budget">
         <span v-if="displayedBudget(item) !== undefined">
@@ -879,8 +929,8 @@ const statusAsOfLabel = computed<string>(() => {
   grid-template-columns:
     220px   /* label */
     1fr     /* bar */
-    110px   /* allocated */
-    110px;  /* budget */
+    90px   /* allocated */
+    90px;  /* budget */
   align-items: center;
   column-gap: 16px;
 }
