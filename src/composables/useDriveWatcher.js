@@ -1,6 +1,6 @@
 import { onMounted, onBeforeUnmount, ref } from "vue";
 import { getFileMetadataByName } from "@/services/google/googleDrive";
-export function useDriveWatcher({ folderId, fileName, lastKnownModified, onChanged, intervalMs = 10_000, }) {
+export function useDriveWatcher({ folderId, fileName, lastKnownModified, onChanged, intervalMs = 5_000, }) {
     const timer = ref(null);
     const paused = ref(false);
     const running = ref(false);
