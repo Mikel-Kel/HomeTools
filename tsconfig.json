@@ -2,11 +2,12 @@
   "compilerOptions": {
     "target": "esnext",
     "module": "esnext",
-    "types": ["node"],
+    "types": ["vite/client"],
     "moduleResolution": "bundler",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "lib": ["ES2023", "DOM"],
     "forceConsistentCasingInFileNames": true,
     "jsx": "preserve",
     "resolveJsonModule": true,
