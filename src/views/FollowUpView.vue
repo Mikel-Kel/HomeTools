@@ -107,6 +107,11 @@ const natureFilter = ref<NatureFilter>("E");
 
 const showSecondaryCategories = ref(false);
 
+watch(natureFilter, () => {
+  selectedCategory.value = "*";
+  selectedSubCategory.value = null;
+});
+
 /* =========================
    Year / scope validity
 ========================= */
