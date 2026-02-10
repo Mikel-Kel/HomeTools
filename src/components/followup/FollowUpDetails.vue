@@ -48,6 +48,11 @@ const error = ref<string | null>(null);
    Load JSON
 ========================= */
 async function loadDetails() {
+  if (props.subCategoryId === null) {
+    raw.value = null;
+    return;
+  }
+
   loading.value = true;
   error.value = null;
 
@@ -83,13 +88,6 @@ watch(
 /* =========================
    Helpers
 ========================= */
-function categoryLabel(categoryId: number): string {
-  return (
-    categoriesStore.getCategory(categoryId)?.label ??
-    `#${categoryId}`
-  );
-}
-
 function subCategoryLabel(
   categoryId: number,
   subCategoryId: number
@@ -102,7 +100,7 @@ function subCategoryLabel(
 }
 
 function fmt(n: number): string {
-  return n.toLocaleString("fr-CH", {
+  return n.toLocaleString("en-GB", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -112,7 +110,7 @@ function fmt(n: number): string {
    Filtered items
 ========================= */
 const items = computed<FollowUpDetailItem[]>(() => {
-  if (!raw.value) return [];
+  if (!raw.value || props.subCategoryId === null) return [];
 
   return raw.value.items
     .filter(it => {
@@ -122,15 +120,7 @@ const items = computed<FollowUpDetailItem[]>(() => {
       ) {
         return false;
       }
-
-      if (
-        props.subCategoryId !== null &&
-        it.subCategoryId !== props.subCategoryId
-      ) {
-        return false;
-      }
-
-      return true;
+      return it.subCategoryId === props.subCategoryId;
     })
     .sort((a, b) =>
       b.allocationDate.localeCompare(a.allocationDate)
@@ -139,40 +129,42 @@ const items = computed<FollowUpDetailItem[]>(() => {
 </script>
 
 <template>
-  <section class="details">
-
-    <h3 class="title">Allocations details</h3>
-
+  <section
+    v-if="props.subCategoryId !== null"
+    class="details"
+  >
     <div v-if="loading" class="muted">Loading…</div>
     <div v-else-if="error" class="error">{{ error }}</div>
 
     <div v-else class="table">
 
+      <!-- HEADER -->
+
+      <!-- ROWS -->
       <div
         v-for="(it, idx) in items"
         :key="idx"
-        class="row"
+        class="grid row"
       >
-        <div class="date">
+        <div class="col-label date">
           {{ it.allocationDate }}
         </div>
 
-        <div class="labels">
-          <div class="sub">
+        <div class="col-bar">
+          <div class="desc">
+            {{ it.description || "—" }}
+          </div>
+          <div class="sub muted">
             {{ subCategoryLabel(it.categoryId, it.subCategoryId) }}
           </div>
-          <div class="cat muted">
-            {{ categoryLabel(it.categoryId) }}
-          </div>
         </div>
 
-        <div class="desc muted">
-          {{ it.description || "—" }}
-        </div>
-
-        <div class="amount">
+        <div class="col-spent amount">
           {{ fmt(it.amount) }}
         </div>
+
+        <!-- 🔑 COLUMN FANTÔME -->
+        <div class="col-budget"></div>
       </div>
 
       <div v-if="!items.length" class="muted empty">
@@ -185,55 +177,64 @@ const items = computed<FollowUpDetailItem[]>(() => {
 
 <style scoped>
 .details {
-  margin-top: 24px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+  margin-top: 0px;
+  padding-top: 2px;
 }
 
-.title {
-  font-size: 0.9rem;
-  font-weight: 700;
-  margin-bottom: 10px;
-}
-
-.table {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.row {
+/* =========================================================
+   SAME GRID AS FOLLOWUPVIEW (CRITICAL)
+========================================================= */
+.grid {
   display: grid;
   grid-template-columns:
-    90px
-    180px
-    1fr
-    80px;
-  gap: 12px;
+    220px   /* label */
+    1fr     /* bar / description */
+    100px    /* spent */
+    80px;   /* budget (ghost) */
+  column-gap: 16px;
   align-items: center;
 }
 
+/* =========================================================
+   Header
+========================================================= */
+.header {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+
+.col-spent {
+  text-align: right;
+}
+
+/* =========================================================
+   Rows
+========================================================= */
+.row {
+  padding: 3px 0;
+}
+
 .date {
-  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: right;
+  font-size: 0.8rem;
   color: var(--text-soft);
 }
 
-.labels {
-  display: flex;
-  flex-direction: column;
-}
-
 .sub {
-  font-weight: 600;
-  font-size: 0.8rem;
-}
-
-.cat {
-  font-size: 0.7rem;
+  font-weight: 400;
+  font-size: 0.75rem;
 }
 
 .desc {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -242,11 +243,16 @@ const items = computed<FollowUpDetailItem[]>(() => {
 .amount {
   text-align: right;
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-budget {
+  /* intentionally empty */
 }
 
 .muted {
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .error {

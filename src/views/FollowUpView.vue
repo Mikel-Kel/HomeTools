@@ -530,7 +530,7 @@ const allocationSubCategoryId = computed<number | null>(() => {
 });
 
 const showAllocationsDetail = computed(() => {
-  return allocationCategoryIds.value.length > 0;
+  return allocationSubCategoryId.value !== null;
 });
 
 /* =========================
@@ -753,8 +753,9 @@ watch(
     <div
       v-for="item in items"
       :key="item.id"
+      v-if="selectedSubCategory === null"
       class="followup-grid followup-row"
-    >
+    > 
       <div class="label">{{ item.label }}</div>
 
       <div class="chart">
