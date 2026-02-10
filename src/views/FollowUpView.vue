@@ -11,6 +11,8 @@ import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
 import { useCategories } from "@/composables/useCategories";
 import type { CategoryNature } from "@/composables/useCategories";
 
+import FollowUpDetails from "@/components/followup/FollowUpDetails.vue";
+
 import { useAppParameters } from "@/composables/useAppParameters";
 const { appParameters, load } = useAppParameters();
 
@@ -515,6 +517,22 @@ async function loadBudget() {
   budgetRaw.value = await readJSON<BudgetFile>(file.id);
 }
 
+const allocationCategoryIds = computed<number[]>(() =>
+  selectedCategory.value === "*"
+    ? []
+    : [Number(selectedCategory.value)].filter(Number.isFinite)
+);
+
+const allocationSubCategoryId = computed<number | null>(() => {
+  return selectedSubCategory.value
+    ? Number(selectedSubCategory.value)
+    : null;
+});
+
+const showAllocationsDetail = computed(() => {
+  return allocationCategoryIds.value.length > 0;
+});
+
 /* =========================
    Init
 ========================= */
@@ -772,6 +790,16 @@ watch(
     :open="categorySheetOpen"
     :categories="[]"
     @close="categorySheetOpen = false"
+  />
+
+  <!-- =========================
+      DETAILS (ALLOCATIONS)
+  ========================= -->
+  <FollowUpDetails
+    v-if="showAllocationsDetail"
+    :year="year"
+    :category-ids="allocationCategoryIds"
+    :sub-category-id="allocationSubCategoryId"
   />
 </template>
 
