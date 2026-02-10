@@ -91,7 +91,7 @@ const analysisScope = ref<AnalysisScope>("YTD");
 const followUpLastModified = ref<string | null>(null);
 
 useDriveWatcher({
-  folderId: driveState.value!.folders.allocations.budgetusage,
+  folderId: driveState.value!.folders.allocations.budget,
   fileName: "FollowUp.json",
   lastKnownModified: followUpLastModified,
   onChanged: loadFollowUp,
@@ -457,14 +457,15 @@ const scale = computed(() => {
 
 /* =========================
    Available years
+   (from budget.json ONLY)
 ========================= */
 const availableYears = computed<number[]>(() => {
+  if (!budgetRaw.value) return [];
+
   const years = new Set<number>();
 
-  for (const cat of categoriesStore.categories.value) {
-    for (const b of cat.budgets ?? []) {
-      years.add(b.year);
-    }
+  for (const m of budgetRaw.value.budgets) {
+    years.add(m.year);
   }
 
   return Array.from(years).sort((a, b) => a - b);
@@ -494,7 +495,7 @@ const statusAsOfLabel = computed(() => {
 ========================= */
 async function loadFollowUp() {
   const folderId =
-    driveState.value!.folders.allocations.budgetusage;
+    driveState.value!.folders.allocations.budget;
 
   const files = await listFilesInFolder(folderId);
   const file = files.find(f => f.name === "FollowUp.json");
@@ -505,7 +506,7 @@ async function loadFollowUp() {
 
 async function loadBudget() {
   const folderId =
-    driveState.value!.folders.allocations.budgetusage;
+    driveState.value!.folders.allocations.budget;
 
   const files = await listFilesInFolder(folderId);
   const file = files.find(f => f.name === "budget.json");
