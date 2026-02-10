@@ -1,5 +1,3 @@
-import { arch } from "node:os";
-
 /* =========================
    Drive root
 ========================= */
@@ -15,7 +13,7 @@ export const DRIVE_FOLDERS = {
   settings: "settings",
 
   allocations: {
-    root: "allocations",
+    budget: "budget",
     drafts: "drafts",
     released: "released",
     archived: "archived",
