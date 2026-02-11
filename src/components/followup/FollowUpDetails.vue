@@ -126,6 +126,78 @@ const items = computed<FollowUpDetailItem[]>(() => {
       b.allocationDate.localeCompare(a.allocationDate)
     );
 });
+
+/* =========================
+   Monthly aggregation
+========================= */
+
+interface MonthGroup {
+  key: string;           // "2026-02"
+  label: string;         // "February 2026"
+  total: number;
+  items: FollowUpDetailItem[];
+}
+
+function monthKey(date: string): string {
+  return date.slice(0, 7); // YYYY-MM
+}
+
+function monthLabel(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1).toLocaleDateString("en-GB", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+const monthlyGroups = computed<MonthGroup[]>(() => {
+  const map = new Map<string, FollowUpDetailItem[]>();
+
+  for (const it of items.value) {
+    const key = monthKey(it.allocationDate);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(it);
+  }
+
+  const groups: MonthGroup[] = [];
+
+  for (const [key, list] of map.entries()) {
+    groups.push({
+      key,
+      label: monthLabel(key),
+      total: list.reduce((s, i) => s + i.amount, 0),
+      items: list.sort((a, b) =>
+        b.allocationDate.localeCompare(a.allocationDate)
+      ),
+    });
+  }
+
+  // most recent month first
+  return groups.sort((a, b) => b.key.localeCompare(a.key));
+});
+
+/* =========================
+   Collapse state
+========================= */
+
+const openMonths = ref<Set<string>>(new Set());
+
+watch(monthlyGroups, groups => {
+  if (!groups.length) return;
+
+  // open only the most recent month by default
+  const newest = groups[0].key;
+  openMonths.value = new Set([newest]);
+});
+
+function toggleMonth(key: string) {
+  if (openMonths.value.has(key)) {
+    openMonths.value.delete(key);
+  } else {
+    openMonths.value.add(key);
+  }
+}
+
 </script>
 
 <template>
@@ -140,33 +212,63 @@ const items = computed<FollowUpDetailItem[]>(() => {
 
       <!-- HEADER -->
 
-      <!-- ROWS -->
+      <!-- MONTH GROUPS -->
       <div
-        v-for="(it, idx) in items"
-        :key="idx"
-        class="grid row"
+        v-for="group in monthlyGroups"
+        :key="group.key"
+        class="month-block"
       >
-        <div class="col-label date">
-          {{ it.allocationDate }}
-        </div>
 
-        <div class="col-bar">
-          <div class="desc">
-            {{ it.description || "—" }}
+        <!-- MONTH HEADER -->
+        <div
+          class="grid month-header"
+          @click="toggleMonth(group.key)"
+        >
+          <div class="col-label month-toggle">
+            <span class="arrow">
+              {{ openMonths.has(group.key) ? "▼" : "►" }}
+            </span>
+            {{ group.label }}
           </div>
-          <div class="sub muted">
-            {{ subCategoryLabel(it.categoryId, it.subCategoryId) }}
+
+          <div></div>
+
+          <div class="col-spent amount">
+            {{ fmt(group.total) }}
+          </div>
+
+          <div></div>
+        </div>
+
+        <!-- MONTH ROWS -->
+        <div v-if="openMonths.has(group.key)">
+          <div
+            v-for="(it, idx) in group.items"
+            :key="idx"
+            class="grid row"
+          >
+            <div class="col-label date">
+              {{ it.allocationDate }}
+            </div>
+
+            <div class="col-bar">
+              <div class="desc">
+                {{ it.description || "—" }}
+              </div>
+              <div class="sub muted">
+                {{ subCategoryLabel(it.categoryId, it.subCategoryId) }}
+              </div>
+            </div>
+
+            <div class="col-spent amount">
+              {{ fmt(it.amount) }}
+            </div>
+
+            <div class="col-budget"></div>
           </div>
         </div>
 
-        <div class="col-spent amount">
-          {{ fmt(it.amount) }}
-        </div>
-
-        <!-- 🔑 COLUMN FANTÔME -->
-        <div class="col-budget"></div>
       </div>
-
       <div v-if="!items.length" class="muted empty">
         No allocations for this selection
       </div>
@@ -214,6 +316,28 @@ const items = computed<FollowUpDetailItem[]>(() => {
 }
 
 /* =========================================================
+   Month blocks
+========================================================= */
+
+.month-header {
+  cursor: pointer;
+  font-weight: 700;
+  border-top: 1px solid var(--border);
+  padding: 6px 0;
+  font-size: 0.8rem;
+}
+
+.month-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.month-header:hover {
+  background: rgba(0,0,0,0.03);
+}
+
+/* =========================================================
    Rows
 ========================================================= */
 .row {
@@ -245,10 +369,6 @@ const items = computed<FollowUpDetailItem[]>(() => {
   font-weight: 700;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
-}
-
-.col-budget {
-  /* intentionally empty */
 }
 
 .muted {
