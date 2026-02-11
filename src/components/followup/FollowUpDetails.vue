@@ -210,8 +210,6 @@ function toggleMonth(key: string) {
 
     <div v-else class="table">
 
-      <!-- HEADER -->
-
       <!-- MONTH GROUPS -->
       <div
         v-for="group in monthlyGroups"
@@ -219,7 +217,7 @@ function toggleMonth(key: string) {
         class="month-block"
       >
 
-        <!-- MONTH HEADER -->
+        <!-- MONTH HEADER (SUBTOTAL) -->
         <div
           class="grid month-header"
           @click="toggleMonth(group.key)"
@@ -269,6 +267,7 @@ function toggleMonth(key: string) {
         </div>
 
       </div>
+
       <div v-if="!items.length" class="muted empty">
         No allocations for this selection
       </div>
@@ -291,28 +290,10 @@ function toggleMonth(key: string) {
   grid-template-columns:
     220px   /* label */
     1fr     /* bar / description */
-    100px    /* spent */
+    100px   /* spent */
     80px;   /* budget (ghost) */
   column-gap: 16px;
   align-items: center;
-}
-
-/* =========================================================
-   Header
-========================================================= */
-.header {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-soft);
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 6px;
-  margin-bottom: 6px;
-}
-
-.col-spent {
-  text-align: right;
 }
 
 /* =========================================================
@@ -324,7 +305,12 @@ function toggleMonth(key: string) {
   font-weight: 700;
   border-top: 1px solid var(--border);
   padding: 6px 0;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
+
+  /* 🔑 Subtotal styling */
+  font-style: italic;
+  color: var(--primary);
+  opacity: 0.85;
 }
 
 .month-toggle {
@@ -337,8 +323,16 @@ function toggleMonth(key: string) {
   background: rgba(0,0,0,0.03);
 }
 
+/* 🔑 Ensure subtotal amount also italic */
+.month-header .amount {
+  font-style: italic;
+  font-size: 0.8rem;
+  color: var(--primary);
+  opacity: 0.85;
+}
+
 /* =========================================================
-   Rows
+   Rows (detail lines)
 ========================================================= */
 .row {
   padding: 3px 0;
