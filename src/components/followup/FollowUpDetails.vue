@@ -340,13 +340,20 @@ function monthStatusClass(key: string, total: number) {
   gap: 6px;
 }
 
-/* Budget state */
-.month-header .amount.over {
-  color: var(--danger);
+/* =========================================================
+   Month header – budget status override
+========================================================= */
+
+.month-header .col-spent.amount.over {
+  color: var(--danger, #d64545);
 }
 
-.month-header .amount.under {
-  color: var(--success);
+.month-header .col-spent.amount.under {
+  color: var(--success, #1f9d55);
+}
+
+.month-header .col-spent.amount.neutral {
+  color: inherit;
 }
 
 /* =========================================================
