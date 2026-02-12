@@ -565,21 +565,10 @@ const detailsMonthlyBudgetMap = computed<Record<string, number>>(() => {
   return map;
 });
 
-/* DEBUG */
-watch(detailsMonthlyBudgetMap, map => {
-  console.log("==== DETAILS MONTHLY BUDGET MAP ====");
-  console.log(map);
-});
-
 const detailsNature = computed<"E" | "I" | null>(() => {
   if (!activeCategory.value) return null;
   const n = activeCategory.value.nature;
   return n === "E" || n === "I" ? n : null;
-});
-
-/* DEBUG */
-watch(detailsNature, n => {
-  console.log("==== DETAILS NATURE ====", n);
 });
 
 const showAllocationsDetail = computed(() => {

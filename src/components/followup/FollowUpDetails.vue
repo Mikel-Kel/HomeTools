@@ -94,11 +94,21 @@ function subCategoryLabel(categoryId: number, subCategoryId: number): string {
   );
 }
 
+function monthlyBudgetFor(key: string): number | null {
+  if (!props.monthlyBudgetMap) return null;
+  const b = props.monthlyBudgetMap[key];
+  return b ?? null;
+}
+
 function fmt(n: number): string {
   return n.toLocaleString("en-GB", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function fmtInt(n: number): string {
+  return Math.round(n).toLocaleString("en-GB");
 }
 
 /* =========================
@@ -236,6 +246,7 @@ function monthStatusClass(key: string, total: number): string {
 
         <div></div>
 
+        <!-- TOTAL -->
         <div
           class="col-spent amount"
           :class="monthStatusClass(group.key, group.total)"
@@ -243,7 +254,13 @@ function monthStatusClass(key: string, total: number): string {
           {{ fmt(group.total) }}
         </div>
 
-        <div></div>
+        <!-- 🔑 MONTHLY BUDGET -->
+        <div class="col-budget amount muted">
+          <span v-if="monthlyBudgetFor(group.key) !== null">
+            {{ fmtInt(monthlyBudgetFor(group.key)!) }}
+          </span>
+          <span v-else>—</span>
+        </div>
       </div>
 
       <!-- DETAILS -->
@@ -301,6 +318,9 @@ function monthStatusClass(key: string, total: number): string {
   padding: 6px 0;
   font-size: 0.8rem;
   font-style: italic;
+}
+.month-header .col-budget {
+  padding-right: 12px;
 }
 
 .month-toggle {
