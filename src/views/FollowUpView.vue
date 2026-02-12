@@ -598,8 +598,12 @@ watch(
 <template>
   <PageHeader title="Follow-up" icon="followup" />
 
-  <!-- Sticky filters zone -->
-  <div class="sticky-zone">
+  <!-- =========================
+      STICKY STACK (Filters + Header + Total)
+  ========================= -->
+  <div class="sticky-stack">
+
+    <!-- Filters -->
     <section class="filters">
       <header
         class="filters-header clickable"
@@ -610,7 +614,6 @@ watch(
       </header>
 
       <div v-if="filtersOpen" class="filters-body">
-
         <!-- PRIMARY FILTERS -->
         <div class="primary-group">
           <!-- Year -->
@@ -672,6 +675,7 @@ watch(
         <!-- Categories -->
         <div class="filter-row with-label">
           <span class="filter-label">Category</span>
+
           <button
             class="chip"
             :class="{ active: selectedCategory === '*' }"
@@ -690,7 +694,6 @@ watch(
             {{ cat.label }}
           </button>
 
-          <!-- 🔁 Toggle secondary categories -->
           <button
             class="chip more-toggle"
             :class="{ active: showSecondaryCategories }"
@@ -704,11 +707,8 @@ watch(
         </div>
 
         <!-- Subcategories -->
-        <div
-          v-if="activeCategory"
-          class="filter-row with-label"
-        >
-          <span class="filter-label"></span> 
+        <div v-if="activeCategory" class="filter-row with-label">
+          <span class="filter-label"></span>
           <button
             class="chip"
             :class="{ active: selectedSubCategory === null }"
@@ -727,74 +727,73 @@ watch(
             {{ sub.label }}
           </button>
         </div>
-
       </div>
     </section>
-  </div>
 
-  <!-- HEADER -->
-  <div class="followup-header-wrapper">
-    <div class="followup-grid followup-header">
-      <div class="col-label">Categories</div>
+    <!-- Header band -->
+    <div class="followup-header-wrapper">
+      <div class="followup-grid followup-header">
+        <div class="col-label">Categories</div>
 
-      <div class="col-chart centered">
-        <span class="status-pill">
-          {{ statusAsOfLabel }}
-        </span>
+        <div class="col-chart centered">
+          <span class="status-pill">
+            {{ statusAsOfLabel }}
+          </span>
+        </div>
+
+        <div class="col-allocated">
+          {{ allocatedColumnLabel }}
+        </div>
+
+        <div class="col-budget">Budget</div>
       </div>
-
-      <!-- ✅ Dynamic title -->
-      <div class="col-allocated">
-        {{ allocatedColumnLabel }}
-      </div>
-
-      <div class="col-budget">Budget</div>
     </div>
+
+    <!-- Total row (sticky as part of the stack) -->
+    <div v-if="totalItem" class="followup-total-wrapper">
+      <div class="followup-grid followup-row total">
+        <div class="label">{{ totalItem.label }}</div>
+
+        <div class="chart">
+          <FollowUpBar
+            :amount="totalItem.amount"
+            :budget="totalItem.budget"
+            :scale="scale"
+            :spreadLimit="followUpSpreadLimit"
+          />
+        </div>
+
+        <div
+          class="allocated"
+          :class="allocatedClass(
+            totalAllocatedValue(),
+            totalItem.budget
+          )"
+        >
+          {{ fmt(totalAllocatedValue()) }}
+        </div>
+
+        <div class="budget">
+          <span v-if="totalItem.budget !== undefined">
+            {{ fmt(totalItem.budget) }}
+          </span>
+          <span v-else class="muted">—</span>
+        </div>
+      </div>
+    </div>
+
   </div>
 
-  <!-- CONTENT -->
+  <!-- =========================
+      CONTENT (scrolls under sticky stack)
+  ========================= -->
   <div class="followup-table">
-
-    <!-- TOTAL -->
-    <div
-      v-if="totalItem"
-      class="followup-grid followup-row total"
-    >
-      <div class="label">{{ totalItem.label }}</div>
-
-      <div class="chart">
-        <FollowUpBar
-          :amount="totalItem.amount"
-          :budget="totalItem.budget"
-          :scale="scale"
-          :spreadLimit="followUpSpreadLimit"
-        />
-      </div>
-      <div
-        class="allocated"
-        :class="allocatedClass(
-          totalAllocatedValue(),
-          totalItem.budget
-        )"
-      >
-        {{ fmt(totalAllocatedValue()) }}
-      </div>
-
-      <div class="budget">
-        <span v-if="totalItem.budget !== undefined">
-          {{ fmt(totalItem.budget) }}
-        </span>
-        <span v-else class="muted">—</span>
-      </div>
-    </div>
-
-    <!-- ITEMS -->
     <div
       v-for="item in items"
       :key="item.id"
       v-if="selectedSubCategory === null"
       class="followup-grid followup-row"
-    > 
+    >
       <div class="label">{{ item.label }}</div>
 
       <div class="chart">
@@ -805,6 +804,7 @@ watch(
           :spreadLimit="followUpSpreadLimit"
         />
       </div>
+
       <div
         class="allocated"
         :class="allocatedClass(
@@ -822,9 +822,9 @@ watch(
         <span v-else class="muted">—</span>
       </div>
     </div>
-
   </div>
 
+  <!-- le reste inchangé -->
   <CategorySheet
     v-model="selectedCategory"
     :open="categorySheetOpen"
@@ -832,9 +832,6 @@ watch(
     @close="categorySheetOpen = false"
   />
 
-  <!-- =========================
-      DETAILS (ALLOCATIONS)
-  ========================= -->
   <FollowUpDetails
     v-if="showAllocationsDetail"
     :year="year"
@@ -847,15 +844,19 @@ watch(
 
 <style scoped>
 /* =========================================================
-   Sticky zone
+   1️⃣ STICKY STACK (Filters + Header + Total)
 ========================================================= */
-.sticky-zone {
+.sticky-stack {
   position: sticky;
   top: 0;
   z-index: 200;
   background: var(--bg);
 }
 
+
+/* =========================================================
+   2️⃣ FILTERS
+========================================================= */
 .filters {
   font-size: var(--font-size-sm);
 }
@@ -864,59 +865,145 @@ watch(
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 4px 8px;      /* contrôle réel */
+  padding: 4px 8px;
 }
 
 .filters-header h2 {
-  margin: 0;             /* 🔥 supprime les marges par défaut */
-  font-size: 0.95rem;    /* légèrement réduit */
+  margin: 0;
+  font-size: 0.95rem;
   font-weight: 600;
-  line-height: 1.2;      /* réduit hauteur visuelle */
+  line-height: 1.2;
 }
 
-.filter-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-top: 4px;
+.filters-body {
+  padding: 0 8px 10px 8px;
 }
 
+/* Filter rows with aligned labels */
 .filter-row.with-label {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+  margin-top: 6px;
 }
 
 .filter-label {
-  width: 90px;     /* 🔥 largeur fixe pour alignement */
+  width: 90px;              /* Align Category & Sub rows */
   font-size: 0.85rem;
   font-weight: 500;
   opacity: 0.8;
 }
 
-/* =========================================================
-   Primary group (Year / Scope / Nature)
-========================================================= */
+/* Primary group (Year / Scope / Nature) */
 .primary-group {
   display: flex;
   align-items: center;
   gap: 1.5rem;
   flex-wrap: wrap;
-
   padding: 8px 0;
 }
 
 
 /* =========================================================
-   Year segmented control (iOS-style)
+   3️⃣ HEADER BAND (Categories / Spent / Budget)
 ========================================================= */
+.followup-header-wrapper {
+  background: var(--bg-soft);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+  margin-top: 10px;
+}
+
+.followup-header {
+  padding: 10px 0;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+}
+
+
+/* =========================================================
+   4️⃣ TOTAL (part of sticky stack)
+========================================================= */
+.followup-total-wrapper {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.followup-row.total {
+  font-weight: 700;
+  padding: 10px 12px;
+  margin: 0;
+}
+
+
+/* =========================================================
+   5️⃣ TABLE & GRID
+========================================================= */
+.followup-table {
+  padding: 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Canonical grid structure */
+.followup-grid {
+  display: grid;
+  grid-template-columns:
+    220px   /* label */
+    1fr     /* bar */
+    90px    /* allocated */
+    90px;   /* budget */
+  align-items: center;
+  column-gap: 16px;
+}
+
+/* Cells */
+.label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chart {
+  height: 20px;
+}
+
+.col-chart.centered {
+  text-align: center;
+}
+
+.col-allocated,
+.col-budget,
+.allocated,
+.budget {
+  text-align: right;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.muted {
+  opacity: 0.4;
+}
+
+
+/* =========================================================
+   6️⃣ CONTROLS (Segmented & Chips)
+========================================================= */
+
+/* Year segmented */
 .year-segmented {
   display: inline-flex;
   padding: 2px;
   gap: 2px;
-
   background: var(--bg-soft);
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -927,12 +1014,10 @@ watch(
   border-radius: 999px;
   border: none;
   background: transparent;
-
   font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-soft);
   opacity: 0.6;
-
   cursor: pointer;
   user-select: none;
 }
@@ -941,19 +1026,16 @@ watch(
   background: var(--primary-soft);
   border: 1px solid var(--primary);
   color: var(--primary);
-
   opacity: 1;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
-/* =========================================================
-   Scope selector (FULL / MTD / YTD / Nature)
-========================================================= */
+
+/* Scope selector */
 .scope-selector {
   display: inline-flex;
   gap: 4px;
   padding: 2px;
-
   background: var(--bg-soft);
   border-radius: 999px;
 }
@@ -962,14 +1044,11 @@ watch(
   padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid transparent;
-
   font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-soft);
-
   background: transparent;
   opacity: 0.6;
-
   cursor: pointer;
   user-select: none;
 }
@@ -978,7 +1057,6 @@ watch(
   background: var(--primary-soft);
   border-color: var(--primary);
   color: var(--primary);
-
   opacity: 1;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
@@ -988,11 +1066,10 @@ watch(
   cursor: not-allowed;
 }
 
-/* =========================================================
-   Chips
-========================================================= */
+
+/* Chips */
 .chip {
-  padding: 8px 8px;
+  padding: 8px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -1008,54 +1085,9 @@ watch(
   border-color: var(--primary);
 }
 
-/* =========================================================
-   Header band
-========================================================= */
-.followup-header-wrapper {
-  background: var(--bg-soft);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  padding: 0 12px;
-  margin-top: 10px;
-}
 
 /* =========================================================
-   🔑 CANONICAL GRID (HEADER + ROWS)
-========================================================= */
-.followup-grid {
-  display: grid;
-  grid-template-columns:
-    220px   /* label */
-    1fr     /* bar */
-    90px   /* allocated */
-    90px;  /* budget */
-  align-items: center;
-  column-gap: 16px;
-}
-
-/* =========================================================
-   Header
-========================================================= */
-.followup-header {
-  padding: 10px 0;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-soft);
-}
-
-.col-chart.centered {
-  text-align: center;
-}
-
-.col-allocated,
-.col-budget {
-  text-align: right;
-}
-
-/* =========================================================
-   Status pill
+   7️⃣ STATUS & STATES
 ========================================================= */
 .status-pill {
   display: inline-flex;
@@ -1070,58 +1102,6 @@ watch(
   white-space: nowrap;
 }
 
-/* =========================================================
-   Table
-========================================================= */
-.followup-table {
-  padding: 0 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.followup-row.total {
-  font-weight: 700;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 6px;
-  margin-bottom: 6px;
-}
-
-.followup-row.total .label {
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-/* =========================================================
-   Cells
-========================================================= */
-.label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.chart {
-  height: 20px;
-}
-
-.allocated,
-.budget {
-  text-align: right;
-  font-size: 0.85rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.muted {
-  opacity: 0.4;
-}
-
-/* =========================================================
-   Allocated states
-========================================================= */
 .allocated-good {
   color: var(--success, #1f9d55);
 }
@@ -1132,7 +1112,6 @@ watch(
 }
 
 .allocated-neutral {
-  color: var(--primary, #1e40af); /* bleu foncé */
+  color: var(--primary, #1e40af);
 }
-
 </style>
