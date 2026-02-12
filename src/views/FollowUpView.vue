@@ -158,6 +158,22 @@ function formatDate(d: Date): string {
 function endOfPreviousMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 0);
 }
+const detailsMaxMonth = computed<number | null>(() => {
+  if (analysisScope.value === "FULL") return null;
+
+  const currentMonth = new Date().getMonth() + 1;
+
+  if (analysisScope.value === "YTD") {
+    return currentMonth;
+  }
+
+  // MTD → fin du mois précédent
+  if (analysisScope.value === "MTD") {
+    return currentMonth - 1;
+  }
+
+  return null;
+});
 
 function fmt(n: number): string {
   return Math.round(n).toLocaleString();
@@ -839,6 +855,7 @@ watch(
     :sub-category-id="allocationSubCategoryId"
     :monthly-budget-map="detailsMonthlyBudgetMap"
     :nature="detailsNature"
+    :max-month="detailsMaxMonth"
   />
 </template>
 
@@ -859,20 +876,21 @@ watch(
 ========================================================= */
 .filters {
   font-size: var(--font-size-sm);
+  background: var(--bg);
 }
 
 .filters-header {
+  padding: 0.5rem 0.5rem;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 4px 8px;
+  gap: 0.5rem;
 }
 
 .filters-header h2 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
   font-weight: 600;
-  line-height: 1.2;
+  color: var(--text-soft);
 }
 
 .filters-body {
