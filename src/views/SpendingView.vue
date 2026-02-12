@@ -161,8 +161,10 @@ const absRemainingAmount = computed(() =>
   Math.abs(remainingAmount.value)
 );
 
-function openArchives() {
-  router.push({ name: "allocationsArchive" });
+function openFollowUp() {
+  router.push({
+    name: "followup",
+  });
 }
 
 /* =========================
@@ -317,11 +319,11 @@ onBeforeUnmount(() => {
         <!-- Groupe navigation -->
         <div class="header-group">
           <AppIcon
-            name="book"
+            name="followup"
             :size="32"
             class="header-icon"
-            title="Archives"
-            @click="openArchives"
+            title="Follow up"
+            @click="openFollowUp"
           />
         </div>
 

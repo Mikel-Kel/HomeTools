@@ -102,7 +102,7 @@ useDriveWatcher({
 /* =========================
    Filters
 ========================= */
-const filtersOpen = ref(false);
+const filtersOpen = ref(true);
 
 type NatureFilter = "ALL" | "I" | "E";
 const natureFilter = ref<NatureFilter>("E");
@@ -612,8 +612,7 @@ watch(
       <div v-if="filtersOpen" class="filters-body">
 
         <!-- PRIMARY FILTERS -->
-        <div class="filter-row primary">
-
+        <div class="primary-group">
           <!-- Year -->
           <div class="year-segmented">
             <button
@@ -671,9 +670,8 @@ watch(
         </div>
 
         <!-- Categories -->
-        <div class="filter-row">
-          <span class="label">Category</span>
-
+        <div class="filter-row with-label">
+          <span class="filter-label">Category</span>
           <button
             class="chip"
             :class="{ active: selectedCategory === '*' }"
@@ -708,10 +706,9 @@ watch(
         <!-- Subcategories -->
         <div
           v-if="activeCategory"
-          class="filter-row subcats"
+          class="filter-row with-label"
         >
-          <span class="label">Sub</span>
-
+          <span class="filter-label"></span> 
           <button
             class="chip"
             :class="{ active: selectedSubCategory === null }"
@@ -857,7 +854,6 @@ watch(
   top: 0;
   z-index: 200;
   background: var(--bg);
-  border-bottom: 1px solid var(--border);
 }
 
 .filters {
@@ -865,17 +861,17 @@ watch(
 }
 
 .filters-header {
-  padding: 0.5rem;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  padding: 4px 8px;      /* contrôle réel */
 }
 
-.filters-body {
-  padding: 0.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.filters-header h2 {
+  margin: 0;             /* 🔥 supprime les marges par défaut */
+  font-size: 0.95rem;    /* légèrement réduit */
+  font-weight: 600;
+  line-height: 1.2;      /* réduit hauteur visuelle */
 }
 
 .filter-row {
@@ -883,33 +879,42 @@ watch(
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+  margin-top: 4px;
 }
 
-.filter-row.subcats {
-  padding-left: 1.5rem;
-}
-
-/* =========================================================
-   Primary filters row (Year / Scope / Nature)
-========================================================= */
-.filter-row.primary {
+.filter-row.with-label {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
-/* Empêche l’écrasement visuel */
-.filter-row.primary > * {
-  flex-shrink: 0;
+.filter-label {
+  width: 90px;     /* 🔥 largeur fixe pour alignement */
+  font-size: 0.85rem;
+  font-weight: 500;
+  opacity: 0.8;
 }
+
+/* =========================================================
+   Primary group (Year / Scope / Nature)
+========================================================= */
+.primary-group {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+
+  padding: 8px 0;
+}
+
 
 /* =========================================================
    Year segmented control (iOS-style)
 ========================================================= */
 .year-segmented {
   display: inline-flex;
-  padding: 3px;
+  padding: 2px;
   gap: 2px;
 
   background: var(--bg-soft);
@@ -947,7 +952,7 @@ watch(
 .scope-selector {
   display: inline-flex;
   gap: 4px;
-  padding: 3px;
+  padding: 2px;
 
   background: var(--bg-soft);
   border-radius: 999px;
@@ -987,7 +992,7 @@ watch(
    Chips
 ========================================================= */
 .chip {
-  padding: 4px 10px;
+  padding: 8px 8px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -1011,6 +1016,7 @@ watch(
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   padding: 0 12px;
+  margin-top: 10px;
 }
 
 /* =========================================================

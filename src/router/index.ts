@@ -6,7 +6,6 @@ import HomeView from "../views/HomeView.vue";
 import AuthenticationView from "../views/AuthenticationView.vue";
 import SpendingView from "../views/SpendingView.vue";
 import AllocationView from "../views/AllocationView.vue";
-import AllocationsArchiveView from "../views/AllocationsArchiveView.vue";
 import FollowUpView from "../views/FollowUpView.vue";
 import DocumentsArchiveView from "../views/DocumentsArchiveView.vue";
 import EventLogView from "../views/devtools/EventLogView.vue";
@@ -38,12 +37,6 @@ const router = createRouter({
       component: AllocationView,
       props: true,
       meta: { level: 2, title: "Allocation", requiresDrive: true },
-    },
-    {
-      path: "/allocationsArchive",
-      name: "allocationsArchive",
-      component: AllocationsArchiveView,
-      meta: { level: 2, title: "Allocation Archives", requiresDrive: true },
     },
     {
       path: "/follow-up",
