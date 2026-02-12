@@ -254,8 +254,8 @@ function monthStatusClass(key: string, total: number): string {
           {{ fmt(group.total) }}
         </div>
 
-        <!-- 🔑 MONTHLY BUDGET -->
-        <div class="col-budget amount muted">
+        <!-- MONTHLY BUDGET -->
+        <div class="col-budget amount">
           <span v-if="monthlyBudgetFor(group.key) !== null">
             {{ fmtInt(monthlyBudgetFor(group.key)!) }}
           </span>
@@ -318,31 +318,43 @@ function monthStatusClass(key: string, total: number): string {
   padding: 6px 0;
   font-size: 0.8rem;
   font-style: italic;
+  color: var(--primary); /* couleur différenciante par défaut */
+  opacity: 0.85;
+}
+
+/* 🔥 Override uniquement le montant */
+/* 🔥 Override uniquement le montant TOTAL */
+.month-header .col-spent.amount.over {
+  color: var(--danger, #d64545);
+  opacity: 1;
+}
+
+.month-header .col-spent.amount.under {
+  color: var(--success, #1f9d55);
+  opacity: 1;
+}
+
+.month-header .col-spent.amount.neutral {
+  color: inherit; /* reprend la couleur de la ligne */
+}
+
+/* Uniformise toute la ligne mensuelle */
+.month-header .amount,
+.month-header .col-budget {
+  font-size: 0.8rem;
 }
 .month-header .col-budget {
   padding-right: 12px;
-}
-
-.month-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .month-header:hover {
   background: rgba(0,0,0,0.03);
 }
 
-.month-header .amount.over {
-  color: #d64545;
-}
-
-.month-header .amount.under {
-  color: #2e8b57;
-}
-
-.month-header .amount.neutral {
-  color: var(--text-soft);
+.month-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .row { padding: 3px 0; }
