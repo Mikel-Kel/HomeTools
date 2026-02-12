@@ -529,6 +529,59 @@ const allocationSubCategoryId = computed<number | null>(() => {
     : null;
 });
 
+/* =========================
+   Monthly budget map for Details
+========================= */
+const detailsMonthlyBudgetMap = computed<Record<string, number>>(() => {
+  if (
+    !budgetRaw.value ||
+    selectedCategory.value === "*" ||
+    !selectedSubCategory.value
+  ) {
+    return {};
+  }
+
+  const catId = Number(selectedCategory.value);
+  const subId = Number(selectedSubCategory.value);
+
+  const map: Record<string, number> = {};
+
+  for (const m of budgetRaw.value.budgets) {
+    if (m.year !== year.value) continue;
+
+    const budget = m.items
+      .filter(
+        it =>
+          it.categoryId === catId &&
+          it.subCategoryId === subId
+      )
+      .reduce((s, it) => s + it.amount, 0);
+
+    const key = `${m.year}-${String(m.month).padStart(2, "0")}`;
+
+    map[key] = budget;
+  }
+
+  return map;
+});
+
+/* DEBUG */
+watch(detailsMonthlyBudgetMap, map => {
+  console.log("==== DETAILS MONTHLY BUDGET MAP ====");
+  console.log(map);
+});
+
+const detailsNature = computed<"E" | "I" | null>(() => {
+  if (!activeCategory.value) return null;
+  const n = activeCategory.value.nature;
+  return n === "E" || n === "I" ? n : null;
+});
+
+/* DEBUG */
+watch(detailsNature, n => {
+  console.log("==== DETAILS NATURE ====", n);
+});
+
 const showAllocationsDetail = computed(() => {
   return allocationSubCategoryId.value !== null;
 });
@@ -801,6 +854,8 @@ watch(
     :year="year"
     :category-ids="allocationCategoryIds"
     :sub-category-id="allocationSubCategoryId"
+    :monthly-budget-map="detailsMonthlyBudgetMap"
+    :nature="detailsNature"
   />
 </template>
 
