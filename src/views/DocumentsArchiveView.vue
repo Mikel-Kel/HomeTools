@@ -47,6 +47,7 @@ const archive = ref<ArchiveItem[]>([]);
 const filtersOpen = ref(true);
 const selectedFolder = ref<string | null>(null);
 const searchText = ref("");
+const withDTAOnly = ref(false);
 
 /* =========================
    Load from Drive
@@ -87,7 +88,13 @@ const folders = computed(() =>
 const filteredItems = computed(() => {
   return archive.value
     .filter(item => {
-      if (selectedFolder.value && item.folder !== selectedFolder.value)
+      if (
+        selectedFolder.value &&
+        item.folder !== selectedFolder.value
+      )
+        return false;
+
+      if (withDTAOnly.value && item.indicatorDTA !== 1)
         return false;
 
       if (searchText.value) {
@@ -106,6 +113,10 @@ const filteredItems = computed(() => {
       b.documentDate.localeCompare(a.documentDate)
     );
 });
+
+const resultCount = computed(
+  () => filteredItems.value.length
+);
 
 /* =========================
    Formatting helpers
@@ -150,22 +161,53 @@ onMounted(loadArchive);
 
       <div v-if="filtersOpen" class="filters-body">
 
-        <div class="filter-row">
-          <label>Folder</label>
-          <select v-model="selectedFolder">
-            <option :value="null">All</option>
-            <option
-              v-for="f in folders"
-              :key="f"
-              :value="f"
-            >
-              {{ f }}
-            </option>
-          </select>
+        <!-- Folder Chips -->
+        <div class="filter-row with-label">
+          <span class="filter-label">Folder</span>
+
+          <button
+            class="chip"
+            :class="{ active: selectedFolder === null }"
+            @click="selectedFolder = null"
+          >
+            All
+          </button>
+
+          <button
+            v-for="f in folders"
+            :key="f"
+            class="chip"
+            :class="{ active: selectedFolder === f }"
+            @click="selectedFolder = f"
+          >
+            {{ f }}
+          </button>
         </div>
 
-        <div class="filter-row">
-          <label>Search</label>
+        <!-- DTA Filter -->
+        <div class="filter-row with-label">
+          <span class="filter-label">DTA</span>
+
+          <button
+            class="chip"
+            :class="{ active: !withDTAOnly }"
+            @click="withDTAOnly = false"
+          >
+            All
+          </button>
+
+          <button
+            class="chip"
+            :class="{ active: withDTAOnly }"
+            @click="withDTAOnly = true"
+          >
+            With DTA
+          </button>
+        </div>
+
+        <!-- Search -->
+        <div class="filter-row with-label">
+          <span class="filter-label">Search</span>
           <input
             v-model="searchText"
             type="text"
@@ -177,6 +219,10 @@ onMounted(loadArchive);
     </section>
 
     <div class="archive-separator"></div>
+
+    <div class="archive-counter">
+      {{ resultCount }} document<span v-if="resultCount !== 1">s</span>
+    </div>
 
   </div>
 
@@ -290,19 +336,39 @@ onMounted(loadArchive);
   gap: 10px;
 }
 
-.filter-row {
+.filter-row.with-label {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
-.filter-row label {
+.filter-label {
   width: 80px;
   font-size: 0.85rem;
+  font-weight: 500;
   opacity: 0.8;
 }
 
-.filter-row select,
+/* Chips */
+.chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.chip.active {
+  opacity: 1;
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+/* Search input */
 .filter-row input {
   padding: 6px 10px;
   border-radius: 6px;
@@ -313,11 +379,17 @@ onMounted(loadArchive);
 }
 
 /* =========================================================
-   SEPARATOR
+   SEPARATOR & COUNTER
 ========================================================= */
 .archive-separator {
   height: 1px;
   background: var(--border);
+}
+
+.archive-counter {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  opacity: 0.6;
 }
 
 /* =========================================================
