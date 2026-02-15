@@ -8,6 +8,7 @@ export type HomeToolsDriveState = {
     events: string;
     logs: string;
     settings: string;
+    archive: string;
     allocations: {
       budget: string;
       drafts: string;
@@ -25,6 +26,7 @@ export const DRIVE_STATE = {
     events: "1sNbv4M97biaKBGWbYhQHnE490cKqFe30",
     logs: "1dz-ro5UYug3CRbtd5UOzshykRtkA0MuE",
     settings: "18pvl799XuGspqwAo8WFGhLS9bLgljpK2",
+    archive: "1g8ojw5rmzx7mGrSM9zSyR5wgTMst5t2v",
 
     allocations: {
       budget: "1Uaedb7UHrO1G6CnrHrSN_1LKzHV3ADh3",
