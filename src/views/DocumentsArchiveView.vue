@@ -44,6 +44,7 @@ const archive = ref<ArchiveItem[]>([]);
 /* =========================
    Filters
 ========================= */
+const filtersOpen = ref(true);
 const selectedFolder = ref<string | null>(null);
 const searchText = ref("");
 
@@ -131,33 +132,59 @@ onMounted(loadArchive);
 <template>
   <PageHeader title="Documents archives" icon="bookshelf" />
 
-  <div class="archives-view">
+  <!-- =========================
+      STICKY STACK (Filters)
+  ========================= -->
+  <div class="sticky-stack">
 
-    <!-- =========================
-         FILTERS
-    ========================= -->
     <section class="filters">
-      <select v-model="selectedFolder">
-        <option :value="null">All folders</option>
-        <option
-          v-for="f in folders"
-          :key="f"
-          :value="f"
-        >
-          {{ f }}
-        </option>
-      </select>
+      <header
+        class="filters-header clickable"
+        @click="filtersOpen = !filtersOpen"
+      >
+        <span class="arrow">
+          {{ filtersOpen ? "▼" : "►" }}
+        </span>
+        <h2>Filters</h2>
+      </header>
 
-      <input
-        v-model="searchText"
-        type="text"
-        placeholder="Search info..."
-      />
+      <div v-if="filtersOpen" class="filters-body">
+
+        <div class="filter-row">
+          <label>Folder</label>
+          <select v-model="selectedFolder">
+            <option :value="null">All</option>
+            <option
+              v-for="f in folders"
+              :key="f"
+              :value="f"
+            >
+              {{ f }}
+            </option>
+          </select>
+        </div>
+
+        <div class="filter-row">
+          <label>Search</label>
+          <input
+            v-model="searchText"
+            type="text"
+            placeholder="Search info..."
+          />
+        </div>
+
+      </div>
     </section>
 
-    <!-- =========================
-         CONTENT
-    ========================= -->
+    <div class="archive-separator"></div>
+
+  </div>
+
+  <!-- =========================
+      CONTENT
+  ========================= -->
+  <div class="archives-view">
+
     <div v-if="loading" class="muted">
       Loading…
     </div>
@@ -215,18 +242,69 @@ onMounted(loadArchive);
   color: var(--text);
 }
 
-/* =========================
-   Filters
-========================= */
-.filters {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+/* =========================================================
+   STICKY STACK
+========================================================= */
+.sticky-stack {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: var(--bg);
 }
 
-.filters select,
-.filters input {
-  padding: 0.4rem 0.6rem;
+/* =========================================================
+   FILTERS
+========================================================= */
+.filters {
+  font-size: var(--font-size-sm);
+  background: var(--bg);
+}
+
+.filters-header {
+  padding: 0.5rem 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filters-header h2 {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.arrow {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.filters-body {
+  padding: 8px 12px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-row label {
+  width: 80px;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.filter-row select,
+.filter-row input {
+  padding: 6px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg-soft);
@@ -234,9 +312,17 @@ onMounted(loadArchive);
   font-size: 0.85rem;
 }
 
-/* =========================
-   Table
-========================= */
+/* =========================================================
+   SEPARATOR
+========================================================= */
+.archive-separator {
+  height: 1px;
+  background: var(--border);
+}
+
+/* =========================================================
+   TABLE
+========================================================= */
 .archive-table {
   width: 100%;
   border-collapse: collapse;
@@ -259,9 +345,6 @@ onMounted(loadArchive);
   font-variant-numeric: tabular-nums;
 }
 
-/* =========================
-   DTA badge
-========================= */
 .dta-badge {
   padding: 2px 6px;
   border-radius: 6px;
@@ -269,9 +352,6 @@ onMounted(loadArchive);
   font-size: 0.75rem;
 }
 
-/* =========================
-   States
-========================= */
 .muted {
   opacity: 0.6;
 }
