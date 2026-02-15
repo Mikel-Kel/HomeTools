@@ -6,7 +6,7 @@ import { useDrive } from "@/composables/useDrive";
 import { loadJSONFromFolder } from "@/services/google/driveRepository";
 
 /* =========================
-   Types (REAL JSON STRUCTURE)
+   Types
 ========================= */
 interface ArchiveItem {
   tocid: number;
@@ -48,6 +48,15 @@ const filtersOpen = ref(true);
 const selectedFolder = ref<string | null>(null);
 const searchText = ref("");
 const withDTAOnly = ref(false);
+
+/* =========================
+   Open Drive file (macOS + iOS)
+========================= */
+function openDriveFile(fileId: string) {
+  if (!fileId) return;
+  const url = `https://drive.google.com/file/d/${fileId}/view`;
+  window.open(url, "_blank", "noopener");
+}
 
 /* =========================
    Load from Drive
@@ -258,6 +267,8 @@ onMounted(loadArchive);
         <tr
           v-for="item in filteredItems"
           :key="item.tocid"
+          class="clickable-row"
+          @click="openDriveFile(item.googleFileId)"
         >
           <td>{{ formatDate(item.documentDate) }}</td>
           <td>{{ item.folder }}</td>
@@ -424,6 +435,21 @@ onMounted(loadArchive);
   font-size: 0.75rem;
 }
 
+/* =========================================================
+   CLICKABLE ROW (open Drive)
+========================================================= */
+.clickable-row {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.clickable-row:hover {
+  background: var(--primary-soft);
+}
+
+/* =========================================================
+   STATES
+========================================================= */
 .muted {
   opacity: 0.6;
 }
