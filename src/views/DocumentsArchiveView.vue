@@ -50,12 +50,48 @@ const searchText = ref("");
 const withDTAOnly = ref(false);
 
 /* =========================
-   Open Drive file (macOS + iOS)
+   Platform detection
 ========================= */
-function openDriveFile(fileId: string) {
-  if (!fileId) return;
-  const url = `https://drive.google.com/file/d/${fileId}/view`;
-  window.open(url, "_blank", "noopener");
+const isMac = navigator.platform
+  .toUpperCase()
+  .includes("MAC");
+
+const isIOS =
+  /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+/* =========================
+   Open document
+========================= */
+function isRealMacDesktop(): boolean {
+  const ua = navigator.userAgent;
+  const isMacUA = ua.includes("Macintosh");
+  const isTouch = navigator.maxTouchPoints > 1;
+
+  return isMacUA && !isTouch;
+}
+
+function openDocument(item: ArchiveItem) {
+  if (isRealMacDesktop()) {
+
+    // physicalName = chemin relatif complet correct
+    const relativePath = item.physicalName;
+
+    console.log("Opening (macOS):", relativePath);
+
+    const url =
+      `hometools://open?file=${encodeURIComponent(relativePath)}`;
+
+    window.location.href = url;
+    return;
+  }
+
+  // iPad / iOS → Drive
+  if (item.googleFileId) {
+    const driveUrl =
+      `https://drive.google.com/file/d/${item.googleFileId}/view`;
+
+    window.open(driveUrl, "_blank", "noopener");
+  }
 }
 
 /* =========================
@@ -268,7 +304,7 @@ onMounted(loadArchive);
           v-for="item in filteredItems"
           :key="item.tocid"
           class="clickable-row"
-          @click="openDriveFile(item.googleFileId)"
+          @click="openDocument(item)"
         >
           <td>{{ formatDate(item.documentDate) }}</td>
           <td>{{ item.folder }}</td>
