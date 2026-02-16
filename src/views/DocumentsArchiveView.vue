@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from "vue";
 import PageHeader from "@/components/PageHeader.vue";
 
 import { useDrive } from "@/composables/useDrive";
+import { useAppParameters } from "@/composables/useAppParameters";
 import { loadJSONFromFolder } from "@/services/google/driveRepository";
 
 /* =========================
@@ -29,10 +30,24 @@ interface ArchiveFile {
   items: ArchiveItem[];
 }
 
+interface ArchiveFolderConfig {
+  id: number;
+  source: string;
+  label: string;
+  order: number;
+}
+
+interface FolderView {
+  source: string;
+  label: string;
+  order: number;
+}
+
 /* =========================
-   Drive
+   Drive & Parameters
 ========================= */
 const { driveState } = useDrive();
+const { appParameters } = useAppParameters();
 
 /* =========================
    State
@@ -52,31 +67,19 @@ const withDTAOnly = ref(false);
 /* =========================
    Platform detection
 ========================= */
-const isMac = navigator.platform
-  .toUpperCase()
-  .includes("MAC");
-
-const isIOS =
-  /iPad|iPhone|iPod/.test(navigator.userAgent);
-
-/* =========================
-   Open document
-========================= */
 function isRealMacDesktop(): boolean {
   const ua = navigator.userAgent;
   const isMacUA = ua.includes("Macintosh");
   const isTouch = navigator.maxTouchPoints > 1;
-
   return isMacUA && !isTouch;
 }
 
+/* =========================
+   Open document
+========================= */
 function openDocument(item: ArchiveItem) {
   if (isRealMacDesktop()) {
-
-    // physicalName = chemin relatif complet correct
     const relativePath = item.physicalName;
-
-    console.log("Opening (macOS):", relativePath);
 
     const url =
       `hometools://open?file=${encodeURIComponent(relativePath)}`;
@@ -121,11 +124,41 @@ async function loadArchive() {
 }
 
 /* =========================
+   Folder configuration map
+========================= */
+const folderConfigMap = computed(() => {
+  const map = new Map<string, { label: string; order: number }>();
+
+  const configs =
+    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? [];
+
+  for (const f of configs) {
+    map.set(f.source, {
+      label: f.label,
+      order: f.order
+    });
+  }
+
+  return map;
+});
+
+/* =========================
    Derived folder list
 ========================= */
-const folders = computed(() =>
-  [...new Set(archive.value.map(i => i.folder))].sort()
-);
+const folders = computed<FolderView[]>(() => {
+  const unique = [...new Set(archive.value.map(i => i.folder))];
+
+  return unique
+    .map((f): FolderView => {
+      const cfg = folderConfigMap.value.get(f);
+      return {
+        source: f,
+        label: cfg?.label ?? f,
+        order: cfg?.order ?? 999
+      };
+    })
+    .sort((a, b) => a.order - b.order);
+});
 
 /* =========================
    Filtering logic
@@ -184,7 +217,6 @@ function formatAmount(a: number) {
 ========================= */
 onMounted(loadArchive);
 </script>
-
 <template>
   <PageHeader title="Documents archives" icon="bookshelf" />
 
@@ -208,7 +240,7 @@ onMounted(loadArchive);
 
         <!-- Folder Chips -->
         <div class="filter-row with-label">
-          <span class="filter-label">Folder</span>
+          <span class="filter-label">Documents</span>
 
           <button
             class="chip"
@@ -217,15 +249,14 @@ onMounted(loadArchive);
           >
             All
           </button>
-
           <button
             v-for="f in folders"
-            :key="f"
+            :key="f.source"
             class="chip"
-            :class="{ active: selectedFolder === f }"
-            @click="selectedFolder = f"
+            :class="{ active: selectedFolder === f.source }"
+            @click="selectedFolder = f.source"
           >
-            {{ f }}
+            {{ f.label }}
           </button>
         </div>
 

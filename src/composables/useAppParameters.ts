@@ -3,9 +3,17 @@ import { ref } from "vue";
 import { useDrive } from "@/composables/useDrive";
 import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
 
+export interface ArchiveFolderConfig {
+  id: number;
+  source: string;
+  label: string;
+  order: number;
+}
+
 export interface AppParameters {
   version?: string;
-  followUpSpreadLimit?: number; // %
+  followUpSpreadLimit?: number;
+  archiveFolders?: ArchiveFolderConfig[];
 }
 
 const appParameters = ref<AppParameters | null>(null);
