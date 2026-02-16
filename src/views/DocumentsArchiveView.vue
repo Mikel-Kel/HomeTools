@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import PageHeader from "@/components/PageHeader.vue";
 
 import { useDrive } from "@/composables/useDrive";
@@ -61,8 +61,8 @@ const archive = ref<ArchiveItem[]>([]);
 ========================= */
 const filtersOpen = ref(true);
 const selectedFolder = ref<string | null>(null);
+const selectedDTADate = ref<string | null>(null); // Pay date
 const searchText = ref("");
-const withDTAOnly = ref(false);
 
 /* =========================
    Platform detection
@@ -79,26 +79,20 @@ function isRealMacDesktop(): boolean {
 ========================= */
 function openDocument(item: ArchiveItem) {
   if (isRealMacDesktop()) {
-    const relativePath = item.physicalName;
-
-    const url =
-      `hometools://open?file=${encodeURIComponent(relativePath)}`;
-
+    const fullPath = item.physicalName; // déjà chemin complet
+    const url = `hometools://open?file=${encodeURIComponent(fullPath)}`;
     window.location.href = url;
     return;
   }
 
-  // iPad / iOS → Drive
   if (item.googleFileId) {
-    const driveUrl =
-      `https://drive.google.com/file/d/${item.googleFileId}/view`;
-
+    const driveUrl = `https://drive.google.com/file/d/${item.googleFileId}/view`;
     window.open(driveUrl, "_blank", "noopener");
   }
 }
 
 /* =========================
-   Load from Drive
+   Load
 ========================= */
 async function loadArchive() {
   if (!driveState.value) return;
@@ -113,9 +107,13 @@ async function loadArchive() {
       folderId,
       "archivetoc.json"
     );
+
     if (!raw) return;
 
     archive.value = raw.items ?? [];
+
+    // sélection par défaut: trimestre courant + prochaine pay date
+    selectDefaultPayDateForQuarter();
   } catch (err: any) {
     error.value = err.message ?? "Failed to load archive";
   } finally {
@@ -124,7 +122,7 @@ async function loadArchive() {
 }
 
 /* =========================
-   Folder configuration map
+   Folder config map
 ========================= */
 const folderConfigMap = computed(() => {
   const map = new Map<string, { label: string; order: number }>();
@@ -133,17 +131,14 @@ const folderConfigMap = computed(() => {
     (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? [];
 
   for (const f of configs) {
-    map.set(f.source, {
-      label: f.label,
-      order: f.order
-    });
+    map.set(f.source, { label: f.label, order: f.order });
   }
 
   return map;
 });
 
 /* =========================
-   Derived folder list
+   Folder chips
 ========================= */
 const folders = computed<FolderView[]>(() => {
   const unique = [...new Set(archive.value.map(i => i.folder))];
@@ -161,19 +156,197 @@ const folders = computed<FolderView[]>(() => {
 });
 
 /* =========================
-   Filtering logic
+   Pay Date (DTA) quarters
+========================= */
+
+const selectedQuarterOffset = ref(0);
+// 0 = trimestre courant, -1 = précédent, +1 = suivant
+
+function getQuarter(dateStr: string) {
+  const [y, m] = dateStr.split("-").map(Number);
+  const quarter = Math.floor((m - 1) / 3) + 1;
+  return { year: y, quarter };
+}
+
+function getQuarterKey(dateStr: string) {
+  const { year, quarter } = getQuarter(dateStr);
+  return `${year} Q${quarter}`; // sans tiret
+}
+
+function getCurrentQuarterKey() {
+  const now = new Date();
+  const quarter = Math.floor(now.getMonth() / 3) + 1;
+  return `${now.getFullYear()} Q${quarter}`;
+}
+
+/* =========================
+   All pay dates grouped
+========================= */
+const payDatesByQuarter = computed(() => {
+  const map = new Map<string, string[]>();
+
+  for (const item of archive.value) {
+    if (!item.dtaDate) continue;
+
+    const key = getQuarterKey(item.dtaDate);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item.dtaDate);
+  }
+
+  // unique + tri décroissant (confort lecture)
+  for (const [k, arr] of map) {
+    const unique = [...new Set(arr)];
+    unique.sort((a, b) => b.localeCompare(a)); // DESC
+    map.set(k, unique);
+  }
+
+  return map;
+});
+
+/* =========================
+   Available quarters sorted
+========================= */
+const availableQuarters = computed(() => {
+  // tri DESC lexicographique ok (YYYY Qn)
+  return [...payDatesByQuarter.value.keys()].sort().reverse();
+});
+
+/* =========================
+   Active quarter
+========================= */
+const activeQuarterIndex = computed(() => {
+  if (!availableQuarters.value.length) return -1;
+
+  const current = getCurrentQuarterKey();
+  const idx = availableQuarters.value.indexOf(current);
+
+  // si pas trouvé: prendre le plus récent
+  return idx === -1 ? 0 : idx;
+});
+
+const activeQuarterKey = computed(() => {
+  if (!availableQuarters.value.length) return null;
+
+  const baseIdx = activeQuarterIndex.value;
+  if (baseIdx < 0) return null;
+
+  const shifted = baseIdx + selectedQuarterOffset.value;
+
+  if (shifted < 0 || shifted >= availableQuarters.value.length) {
+    return availableQuarters.value[baseIdx];
+  }
+  return availableQuarters.value[shifted];
+});
+
+const payDatesInActiveQuarter = computed(() => {
+  if (!activeQuarterKey.value) return [];
+  return payDatesByQuarter.value.get(activeQuarterKey.value) ?? [];
+});
+
+// version ASC pour auto-select “prochaine date”
+const payDatesInActiveQuarterAsc = computed(() => {
+  return [...payDatesInActiveQuarter.value].sort((a, b) => a.localeCompare(b));
+});
+
+/* =========================
+   Quarter navigation
+========================= */
+
+
+
+const canPrevQuarter = computed(() => {
+  if (!availableQuarters.value.length) return false;
+  const baseIdx = activeQuarterIndex.value;
+  const shifted = baseIdx + selectedQuarterOffset.value;
+  return shifted + 1 < availableQuarters.value.length;
+});
+
+const canNextQuarter = computed(() => {
+  if (!availableQuarters.value.length) return false;
+  const baseIdx = activeQuarterIndex.value;
+  const shifted = baseIdx + selectedQuarterOffset.value;
+  return shifted - 1 >= 0;
+});
+
+function prevQuarter() {
+  if (!canPrevQuarter.value) return;
+  selectedQuarterOffset.value += 1;
+}
+
+function nextQuarter() {
+  if (!canNextQuarter.value) return;
+  selectedQuarterOffset.value -= 1;
+}
+
+/* =========================
+   Auto-select pay date (in active quarter)
+========================= */
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function selectDefaultPayDateForQuarter() {
+  const quarter = activeQuarterKey.value;
+  if (!quarter) {
+    selectedDTADate.value = null;
+    return;
+  }
+
+  const datesDesc =
+    payDatesByQuarter.value.get(quarter) ?? [];
+
+  if (!datesDesc.length) {
+    selectedDTADate.value = null;
+    return;
+  }
+
+  const currentQuarter = getCurrentQuarterKey();
+
+  // ✅ trimestre courant
+  if (quarter === currentQuarter) {
+    const today = todayISO();
+
+    const asc = [...datesDesc].sort((a, b) =>
+      a.localeCompare(b)
+    );
+
+    const next = asc.find(d => d >= today);
+
+    selectedDTADate.value =
+      next ?? asc[asc.length - 1];
+
+    return;
+  }
+
+  // ✅ autre trimestre
+  // datesDesc est déjà trié DESC
+  selectedDTADate.value = datesDesc[0];
+}
+
+
+/* =========================
+   DTA distinct list (si tu en as encore besoin ailleurs)
+========================= */
+const dtaDates = computed(() => {
+  const unique = [
+    ...new Set(
+      archive.value
+        .filter(i => i.dtaDate)
+        .map(i => i.dtaDate as string)
+    )
+  ];
+  return unique.sort((a, b) => b.localeCompare(a));
+});
+
+/* =========================
+   Filtering
 ========================= */
 const filteredItems = computed(() => {
   return archive.value
     .filter(item => {
-      if (
-        selectedFolder.value &&
-        item.folder !== selectedFolder.value
-      )
-        return false;
+      if (selectedFolder.value && item.folder !== selectedFolder.value) return false;
 
-      if (withDTAOnly.value && item.indicatorDTA !== 1)
-        return false;
+      if (selectedDTADate.value && item.dtaDate !== selectedDTADate.value) return false;
 
       if (searchText.value) {
         const t = searchText.value.toLowerCase();
@@ -181,23 +354,18 @@ const filteredItems = computed(() => {
           item.info1?.toLowerCase().includes(t) ||
           item.info2?.toLowerCase().includes(t) ||
           item.physicalName?.toLowerCase().includes(t);
-
         if (!match) return false;
       }
 
       return true;
     })
-    .sort((a, b) =>
-      b.documentDate.localeCompare(a.documentDate)
-    );
+    .sort((a, b) => b.documentDate.localeCompare(a.documentDate));
 });
 
-const resultCount = computed(
-  () => filteredItems.value.length
-);
+const resultCount = computed(() => filteredItems.value.length);
 
 /* =========================
-   Formatting helpers
+   Formatting
 ========================= */
 function formatDate(d: string | null) {
   if (!d) return "";
@@ -215,14 +383,16 @@ function formatAmount(a: number) {
 /* =========================
    Lifecycle
 ========================= */
+
+watch(activeQuarterKey, () => {
+  selectDefaultPayDateForQuarter();
+});
+
 onMounted(loadArchive);
 </script>
 <template>
   <PageHeader title="Documents archives" icon="bookshelf" />
 
-  <!-- =========================
-      STICKY STACK (Filters)
-  ========================= -->
   <div class="sticky-stack">
 
     <section class="filters">
@@ -238,7 +408,7 @@ onMounted(loadArchive);
 
       <div v-if="filtersOpen" class="filters-body">
 
-        <!-- Folder Chips -->
+        <!-- Folder -->
         <div class="filter-row with-label">
           <span class="filter-label">Documents</span>
 
@@ -249,6 +419,7 @@ onMounted(loadArchive);
           >
             All
           </button>
+
           <button
             v-for="f in folders"
             :key="f.source"
@@ -260,25 +431,50 @@ onMounted(loadArchive);
           </button>
         </div>
 
-        <!-- DTA Filter -->
-        <div class="filter-row with-label">
-          <span class="filter-label">DTA</span>
+        <!-- Pay Date (Quarter Navigation) -->
+        <div class="filter-row paydate-row">
 
-          <button
-            class="chip"
-            :class="{ active: !withDTAOnly }"
-            @click="withDTAOnly = false"
-          >
-            All
-          </button>
+          <span class="filter-label">
+            Pay date
+          </span>
 
-          <button
-            class="chip"
-            :class="{ active: withDTAOnly }"
-            @click="withDTAOnly = true"
-          >
-            With DTA
-          </button>
+          <div class="quarter-capsule">
+
+            <span
+              class="arrow-nav"
+              @click="selectedQuarterOffset--"
+            >
+              ‹
+            </span>
+
+            <span class="quarter-title">
+              {{ activeQuarterKey }}
+            </span>
+
+            <span
+              class="arrow-nav"
+              @click="selectedQuarterOffset++"
+            >
+              ›
+            </span>
+
+          </div>
+
+
+          <div class="chip-scroll">
+
+            <button
+              v-for="d in payDatesInActiveQuarter"
+              :key="d"
+              class="chip"
+              :class="{ active: selectedDTADate === d }"
+              @click="selectedDTADate = d"
+            >
+              {{ formatDate(d) }}
+            </button>
+
+          </div>
+
         </div>
 
         <!-- Search -->
@@ -299,26 +495,13 @@ onMounted(loadArchive);
     <div class="archive-counter">
       {{ resultCount }} document<span v-if="resultCount !== 1">s</span>
     </div>
-
   </div>
 
-  <!-- =========================
-      CONTENT
-  ========================= -->
   <div class="archives-view">
+    <div v-if="loading" class="muted">Loading…</div>
+    <div v-else-if="error" class="error">{{ error }}</div>
 
-    <div v-if="loading" class="muted">
-      Loading…
-    </div>
-
-    <div v-else-if="error" class="error">
-      {{ error }}
-    </div>
-
-    <table
-      v-else
-      class="archive-table"
-    >
+    <table v-else class="archive-table">
       <thead>
         <tr>
           <th>Date</th>
@@ -355,7 +538,6 @@ onMounted(loadArchive);
         </tr>
       </tbody>
     </table>
-
   </div>
 </template>
 
@@ -366,9 +548,6 @@ onMounted(loadArchive);
   color: var(--text);
 }
 
-/* =========================================================
-   STICKY STACK
-========================================================= */
 .sticky-stack {
   position: sticky;
   top: 0;
@@ -376,42 +555,11 @@ onMounted(loadArchive);
   background: var(--bg);
 }
 
-/* =========================================================
-   FILTERS
-========================================================= */
-.filters {
-  font-size: var(--font-size-sm);
-  background: var(--bg);
-}
-
-.filters-header {
-  padding: 0.5rem 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.filters-header h2 {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-soft);
-}
-
-.clickable {
-  cursor: pointer;
-}
-
-.arrow {
-  font-size: 0.75rem;
-  opacity: 0.6;
-}
-
 .filters-body {
-  padding: 8px 12px 12px 12px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .filter-row.with-label {
@@ -422,22 +570,22 @@ onMounted(loadArchive);
 }
 
 .filter-label {
-  width: 80px;
+  width: 90px;
   font-size: 0.85rem;
   font-weight: 500;
   opacity: 0.8;
 }
 
-/* Chips */
 .chip {
   padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
-  font-size: var(--font-size-xs);
+  font-size: 0.75rem;
   font-weight: 600;
   opacity: 0.7;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .chip.active {
@@ -446,33 +594,20 @@ onMounted(loadArchive);
   border-color: var(--primary);
 }
 
-/* Search input */
-.filter-row input {
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-soft);
-  color: var(--text);
-  font-size: 0.85rem;
+/* DTA scroll area */
+.chip-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  scrollbar-width: none;
 }
 
-/* =========================================================
-   SEPARATOR & COUNTER
-========================================================= */
-.archive-separator {
-  height: 1px;
-  background: var(--border);
+.chip-scroll::-webkit-scrollbar {
+  display: none;
 }
 
-.archive-counter {
-  padding: 6px 12px;
-  font-size: 0.8rem;
-  opacity: 0.6;
-}
-
-/* =========================================================
-   TABLE
-========================================================= */
 .archive-table {
   width: 100%;
   border-collapse: collapse;
@@ -485,14 +620,17 @@ onMounted(loadArchive);
   border-bottom: 1px solid var(--border);
 }
 
-.archive-table th {
-  text-align: left;
-  font-weight: 600;
-}
-
 .amount {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  background: var(--primary-soft);
 }
 
 .dta-badge {
@@ -502,26 +640,57 @@ onMounted(loadArchive);
   font-size: 0.75rem;
 }
 
-/* =========================================================
-   CLICKABLE ROW (open Drive)
-========================================================= */
-.clickable-row {
-  cursor: pointer;
-  transition: background 0.15s ease;
+.paydate-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
 }
 
-.clickable-row:hover {
+
+/* Capsule trimestre = même base que .chip */
+.quarter-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 6px 10px;
+  border-radius: 999px;
+
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+
+  border: 1px solid var(--border);
   background: var(--primary-soft);
 }
 
-/* =========================================================
-   STATES
-========================================================= */
-.muted {
+/* Flèches identiques aux chips */
+.arrow-nav {
   opacity: 0.6;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 2px;
 }
 
-.error {
-  color: var(--danger);
+.arrow-nav:hover {
+  opacity: 1;
+}
+
+/* Libellé trimestre */
+.quarter-title {
+  font-weight: 600;
+}
+
+.chip-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  scrollbar-width: none;
+}
+
+.chip-scroll::-webkit-scrollbar {
+  display: none;
 }
 </style>
