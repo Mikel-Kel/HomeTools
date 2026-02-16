@@ -50,19 +50,46 @@ const { driveState } = useDrive();
 const { appParameters } = useAppParameters();
 
 /* =========================
+   Constants
+========================= */
+const BILLS_FOLDER = "Factures";
+
+/* =========================
    State
 ========================= */
 const loading = ref(false);
 const error = ref<string | null>(null);
 const archive = ref<ArchiveItem[]>([]);
 
-/* =========================
-   Filters
-========================= */
 const filtersOpen = ref(true);
 const selectedFolder = ref<string | null>(null);
-const selectedDTADate = ref<string | null>(null); // Pay date
+const selectedDTADate = ref<string | null>(null);
 const searchText = ref("");
+
+/* =========================
+   DTA activation rule
+========================= */
+const isPayDateVisible = computed(() => {
+  return selectedFolder.value === BILLS_FOLDER;
+});
+
+/* =========================
+   Watch rules
+========================= */
+
+// Si on change de famille → désactiver Pay date
+watch(selectedFolder, (val) => {
+  if (val !== BILLS_FOLDER) {
+    selectedDTADate.value = null;
+  }
+});
+
+// Si on choisit une pay date → forcer famille Bills
+watch(selectedDTADate, (val) => {
+  if (val && selectedFolder.value !== BILLS_FOLDER) {
+    selectedFolder.value = BILLS_FOLDER;
+  }
+});
 
 /* =========================
    Platform detection
@@ -79,14 +106,15 @@ function isRealMacDesktop(): boolean {
 ========================= */
 function openDocument(item: ArchiveItem) {
   if (isRealMacDesktop()) {
-    const fullPath = item.physicalName; // déjà chemin complet
-    const url = `hometools://open?file=${encodeURIComponent(fullPath)}`;
+    const url =
+      `hometools://open?file=${encodeURIComponent(item.physicalName)}`;
     window.location.href = url;
     return;
   }
 
   if (item.googleFileId) {
-    const driveUrl = `https://drive.google.com/file/d/${item.googleFileId}/view`;
+    const driveUrl =
+      `https://drive.google.com/file/d/${item.googleFileId}/view`;
     window.open(driveUrl, "_blank", "noopener");
   }
 }
@@ -102,7 +130,6 @@ async function loadArchive() {
 
   try {
     const folderId = driveState.value.folders.archive;
-
     const raw = await loadJSONFromFolder<ArchiveFile>(
       folderId,
       "archivetoc.json"
@@ -111,8 +138,6 @@ async function loadArchive() {
     if (!raw) return;
 
     archive.value = raw.items ?? [];
-
-    // sélection par défaut: trimestre courant + prochaine pay date
     selectDefaultPayDateForQuarter();
   } catch (err: any) {
     error.value = err.message ?? "Failed to load archive";
@@ -126,20 +151,15 @@ async function loadArchive() {
 ========================= */
 const folderConfigMap = computed(() => {
   const map = new Map<string, { label: string; order: number }>();
-
   const configs =
     (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? [];
 
   for (const f of configs) {
     map.set(f.source, { label: f.label, order: f.order });
   }
-
   return map;
 });
 
-/* =========================
-   Folder chips
-========================= */
 const folders = computed<FolderView[]>(() => {
   const unique = [...new Set(archive.value.map(i => i.folder))];
 
@@ -156,32 +176,22 @@ const folders = computed<FolderView[]>(() => {
 });
 
 /* =========================
-   Pay Date (DTA) quarters
+   Quarter logic
 ========================= */
-
 const selectedQuarterOffset = ref(0);
-// 0 = trimestre courant, -1 = précédent, +1 = suivant
-
-function getQuarter(dateStr: string) {
-  const [y, m] = dateStr.split("-").map(Number);
-  const quarter = Math.floor((m - 1) / 3) + 1;
-  return { year: y, quarter };
-}
 
 function getQuarterKey(dateStr: string) {
-  const { year, quarter } = getQuarter(dateStr);
-  return `${year} Q${quarter}`; // sans tiret
+  const [y, m] = dateStr.split("-").map(Number);
+  const quarter = Math.floor((m - 1) / 3) + 1;
+  return `${y} Q${quarter}`;
 }
 
 function getCurrentQuarterKey() {
   const now = new Date();
-  const quarter = Math.floor(now.getMonth() / 3) + 1;
-  return `${now.getFullYear()} Q${quarter}`;
+  const q = Math.floor(now.getMonth() / 3) + 1;
+  return `${now.getFullYear()} Q${q}`;
 }
 
-/* =========================
-   All pay dates grouped
-========================= */
 const payDatesByQuarter = computed(() => {
   const map = new Map<string, string[]>();
 
@@ -193,48 +203,34 @@ const payDatesByQuarter = computed(() => {
     map.get(key)!.push(item.dtaDate);
   }
 
-  // unique + tri décroissant (confort lecture)
   for (const [k, arr] of map) {
     const unique = [...new Set(arr)];
-    unique.sort((a, b) => b.localeCompare(a)); // DESC
+    unique.sort((a, b) => b.localeCompare(a));
     map.set(k, unique);
   }
 
   return map;
 });
 
-/* =========================
-   Available quarters sorted
-========================= */
-const availableQuarters = computed(() => {
-  // tri DESC lexicographique ok (YYYY Qn)
-  return [...payDatesByQuarter.value.keys()].sort().reverse();
-});
+const availableQuarters = computed(() =>
+  [...payDatesByQuarter.value.keys()].sort().reverse()
+);
 
-/* =========================
-   Active quarter
-========================= */
 const activeQuarterIndex = computed(() => {
   if (!availableQuarters.value.length) return -1;
-
-  const current = getCurrentQuarterKey();
-  const idx = availableQuarters.value.indexOf(current);
-
-  // si pas trouvé: prendre le plus récent
+  const idx = availableQuarters.value.indexOf(getCurrentQuarterKey());
   return idx === -1 ? 0 : idx;
 });
 
 const activeQuarterKey = computed(() => {
   if (!availableQuarters.value.length) return null;
 
-  const baseIdx = activeQuarterIndex.value;
-  if (baseIdx < 0) return null;
+  const base = activeQuarterIndex.value;
+  const shifted = base + selectedQuarterOffset.value;
 
-  const shifted = baseIdx + selectedQuarterOffset.value;
+  if (shifted < 0 || shifted >= availableQuarters.value.length)
+    return availableQuarters.value[base];
 
-  if (shifted < 0 || shifted >= availableQuarters.value.length) {
-    return availableQuarters.value[baseIdx];
-  }
   return availableQuarters.value[shifted];
 });
 
@@ -243,100 +239,34 @@ const payDatesInActiveQuarter = computed(() => {
   return payDatesByQuarter.value.get(activeQuarterKey.value) ?? [];
 });
 
-// version ASC pour auto-select “prochaine date”
-const payDatesInActiveQuarterAsc = computed(() => {
-  return [...payDatesInActiveQuarter.value].sort((a, b) => a.localeCompare(b));
+watch(activeQuarterKey, () => {
+  selectDefaultPayDateForQuarter();
 });
 
-/* =========================
-   Quarter navigation
-========================= */
-
-
-
-const canPrevQuarter = computed(() => {
-  if (!availableQuarters.value.length) return false;
-  const baseIdx = activeQuarterIndex.value;
-  const shifted = baseIdx + selectedQuarterOffset.value;
-  return shifted + 1 < availableQuarters.value.length;
-});
-
-const canNextQuarter = computed(() => {
-  if (!availableQuarters.value.length) return false;
-  const baseIdx = activeQuarterIndex.value;
-  const shifted = baseIdx + selectedQuarterOffset.value;
-  return shifted - 1 >= 0;
-});
-
-function prevQuarter() {
-  if (!canPrevQuarter.value) return;
-  selectedQuarterOffset.value += 1;
-}
-
-function nextQuarter() {
-  if (!canNextQuarter.value) return;
-  selectedQuarterOffset.value -= 1;
-}
-
-/* =========================
-   Auto-select pay date (in active quarter)
-========================= */
-function todayISO(): string {
+function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
 function selectDefaultPayDateForQuarter() {
   const quarter = activeQuarterKey.value;
-  if (!quarter) {
-    selectedDTADate.value = null;
-    return;
-  }
+  if (!quarter) return;
 
-  const datesDesc =
+  const dates =
     payDatesByQuarter.value.get(quarter) ?? [];
 
-  if (!datesDesc.length) {
-    selectedDTADate.value = null;
-    return;
-  }
+  if (!dates.length) return;
 
-  const currentQuarter = getCurrentQuarterKey();
-
-  // ✅ trimestre courant
-  if (quarter === currentQuarter) {
-    const today = todayISO();
-
-    const asc = [...datesDesc].sort((a, b) =>
+  if (quarter === getCurrentQuarterKey()) {
+    const asc = [...dates].sort((a, b) =>
       a.localeCompare(b)
     );
-
-    const next = asc.find(d => d >= today);
-
+    const next = asc.find(d => d >= todayISO());
     selectedDTADate.value =
       next ?? asc[asc.length - 1];
-
-    return;
+  } else {
+    selectedDTADate.value = dates[0];
   }
-
-  // ✅ autre trimestre
-  // datesDesc est déjà trié DESC
-  selectedDTADate.value = datesDesc[0];
 }
-
-
-/* =========================
-   DTA distinct list (si tu en as encore besoin ailleurs)
-========================= */
-const dtaDates = computed(() => {
-  const unique = [
-    ...new Set(
-      archive.value
-        .filter(i => i.dtaDate)
-        .map(i => i.dtaDate as string)
-    )
-  ];
-  return unique.sort((a, b) => b.localeCompare(a));
-});
 
 /* =========================
    Filtering
@@ -344,9 +274,15 @@ const dtaDates = computed(() => {
 const filteredItems = computed(() => {
   return archive.value
     .filter(item => {
-      if (selectedFolder.value && item.folder !== selectedFolder.value) return false;
+      if (selectedFolder.value && item.folder !== selectedFolder.value)
+        return false;
 
-      if (selectedDTADate.value && item.dtaDate !== selectedDTADate.value) return false;
+      if (
+        isPayDateVisible.value &&
+        selectedDTADate.value &&
+        item.dtaDate !== selectedDTADate.value
+      )
+        return false;
 
       if (searchText.value) {
         const t = searchText.value.toLowerCase();
@@ -359,7 +295,9 @@ const filteredItems = computed(() => {
 
       return true;
     })
-    .sort((a, b) => b.documentDate.localeCompare(a.documentDate));
+    .sort((a, b) =>
+      b.documentDate.localeCompare(a.documentDate)
+    );
 });
 
 const resultCount = computed(() => filteredItems.value.length);
@@ -380,16 +318,9 @@ function formatAmount(a: number) {
   });
 }
 
-/* =========================
-   Lifecycle
-========================= */
-
-watch(activeQuarterKey, () => {
-  selectDefaultPayDateForQuarter();
-});
-
 onMounted(loadArchive);
 </script>
+
 <template>
   <PageHeader title="Documents archives" icon="bookshelf" />
 
@@ -431,21 +362,21 @@ onMounted(loadArchive);
           </button>
         </div>
 
-        <!-- Pay Date (Quarter Navigation) -->
-        <div class="filter-row paydate-row">
+        <!-- Pay Date visible uniquement pour Bills -->
+        <div
+          v-if="isPayDateVisible"
+          class="filter-row paydate-row"
+        >
 
           <span class="filter-label">
             Pay date
           </span>
 
           <div class="quarter-capsule">
-
             <span
               class="arrow-nav"
               @click="selectedQuarterOffset--"
-            >
-              ‹
-            </span>
+            >‹</span>
 
             <span class="quarter-title">
               {{ activeQuarterKey }}
@@ -454,15 +385,10 @@ onMounted(loadArchive);
             <span
               class="arrow-nav"
               @click="selectedQuarterOffset++"
-            >
-              ›
-            </span>
-
+            >›</span>
           </div>
 
-
           <div class="chip-scroll">
-
             <button
               v-for="d in payDatesInActiveQuarter"
               :key="d"
@@ -472,7 +398,6 @@ onMounted(loadArchive);
             >
               {{ formatDate(d) }}
             </button>
-
           </div>
 
         </div>
