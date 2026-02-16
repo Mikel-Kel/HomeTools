@@ -318,6 +318,14 @@ function formatAmount(a: number) {
   });
 }
 
+/* =========================
+   Header label (Documents count)
+========================= */
+const headerCountLabel = computed(() => {
+  const n = resultCount.value;
+  return `${n} document${n !== 1 ? "s" : ""}`;
+});
+
 onMounted(loadArchive);
 </script>
 
@@ -414,12 +422,25 @@ onMounted(loadArchive);
 
       </div>
     </section>
+    <!-- Header band (like FollowUp) -->
+    <div class="archive-header-wrapper">
+      <div class="archive-grid archive-header">
 
-    <div class="archive-separator"></div>
+        <div class="col-label">
+          Documents
+        </div>
 
-    <div class="archive-counter">
-      {{ resultCount }} document<span v-if="resultCount !== 1">s</span>
+        <div class="col-center">
+          <span class="status-pill">
+            {{ headerCountLabel }}
+          </span>
+        </div>
+
+        <div class="col-empty"></div>
+
+      </div>
     </div>
+
   </div>
 
   <div class="archives-view">
@@ -531,6 +552,54 @@ onMounted(loadArchive);
 
 .chip-scroll::-webkit-scrollbar {
   display: none;
+}
+
+/* =========================================================
+   HEADER BAND (like FollowUp)
+========================================================= */
+
+.archive-header-wrapper {
+  background: var(--bg-soft);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+  margin-top: 6px;   /* réduit l’espace */
+}
+
+.archive-header {
+  padding: 8px 0;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+}
+
+.archive-grid {
+  display: grid;
+  grid-template-columns:
+    1fr     /* label */
+    auto    /* pill */
+    120px;  /* empty align with amount column */
+  align-items: center;
+  column-gap: 16px;
+}
+
+.col-center {
+  text-align: center;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .archive-table {
