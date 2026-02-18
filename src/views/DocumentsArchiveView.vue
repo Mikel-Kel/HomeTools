@@ -30,6 +30,17 @@ interface ArchiveFile {
   items: ArchiveItem[];
 }
 
+interface Party {
+  id: number;
+  label: string;
+}
+
+interface PartyFile {
+  version: number;
+  updatedAt: string;
+  parties: Party[];
+}
+
 interface ArchiveFolderConfig {
   id: number;
   source: string;
@@ -60,11 +71,27 @@ const BILLS_FOLDER = "Factures";
 const loading = ref(false);
 const error = ref<string | null>(null);
 const archive = ref<ArchiveItem[]>([]);
+const parties = ref<Party[]>([]);
 
 const filtersOpen = ref(true);
 const selectedFolder = ref<string | null>(null);
 const selectedDTADate = ref<string | null>(null);
 const searchText = ref("");
+
+/* =========================
+   Party Map (NEW)
+========================= */
+const partyMap = computed(() => {
+  const map = new Map<number, string>();
+  for (const p of parties.value) {
+    map.set(p.id, p.label);
+  }
+  return map;
+});
+
+function getPartyLabel(partyID: number): string {
+  return partyMap.value.get(partyID) ?? `#${partyID}`;
+}
 
 /* =========================
    DTA activation rule
@@ -77,24 +104,16 @@ const isPayDateVisible = computed(() => {
    Watch rules
 ========================= */
 
-// Si on change de famille → désactiver Pay date
-watch(selectedFolder, (val, prev) => {
-  // Quitte Bills → Pay date inopérante
+watch(selectedFolder, (val) => {
   if (val !== BILLS_FOLDER) {
     selectedDTADate.value = null;
     return;
   }
 
-  // Entre dans Bills → réinitialiser sur le trimestre courant + défaut
-  // (utile quand on venait d'une autre famille)
   selectedQuarterOffset.value = 0;
-
-  // (re)choisir une pay date par défaut
-  // Même si selectedDTADate est déjà null, on force car c'est précisément le cas qui t'embête
   selectDefaultPayDateForQuarter();
 });
 
-// Si on choisit une pay date → forcer famille Bills
 watch(selectedDTADate, (val) => {
   if (val && selectedFolder.value !== BILLS_FOLDER) {
     selectedFolder.value = BILLS_FOLDER;
@@ -140,6 +159,7 @@ async function loadArchive() {
 
   try {
     const folderId = driveState.value.folders.archive;
+
     const raw = await loadJSONFromFolder<ArchiveFile>(
       folderId,
       "archivetoc.json"
@@ -153,6 +173,25 @@ async function loadArchive() {
     error.value = err.message ?? "Failed to load archive";
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadParty() {
+  if (!driveState.value) return;
+
+  try {
+    const folderId = driveState.value.folders.settings;
+
+    const raw = await loadJSONFromFolder<PartyFile>(
+      folderId,
+      "party.json"
+    );
+
+    if (!raw) return;
+
+    parties.value = raw.parties ?? [];
+  } catch (err: any) {
+    console.error("Failed to load party.json", err);
   }
 }
 
@@ -328,15 +367,18 @@ function formatAmount(a: number) {
   });
 }
 
-/* =========================
-   Header label (Documents count)
-========================= */
 const headerCountLabel = computed(() => {
   const n = resultCount.value;
   return `${n} document${n !== 1 ? "s" : ""}`;
 });
 
-onMounted(loadArchive);
+/* =========================
+   Init
+========================= */
+onMounted(async () => {
+  await loadArchive();
+  await loadParty();
+});
 </script>
 
 <template>
@@ -451,7 +493,7 @@ onMounted(loadArchive);
       <thead>
         <tr>
           <th>Date</th>
-          <th>Folder</th>
+          <th>Party</th>
           <th>Info1</th>
           <th>Info2</th>
           <th>DTA</th>
@@ -467,7 +509,7 @@ onMounted(loadArchive);
           @click="openDocument(item)"
         >
           <td>{{ formatDate(item.documentDate) }}</td>
-          <td>{{ item.folder }}</td>
+          <td>{{ getPartyLabel(item.partyID) }}</td>
           <td>{{ item.info1 }}</td>
           <td>{{ item.info2 }}</td>
           <td>
