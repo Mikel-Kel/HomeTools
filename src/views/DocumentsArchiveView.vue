@@ -78,10 +78,20 @@ const isPayDateVisible = computed(() => {
 ========================= */
 
 // Si on change de famille → désactiver Pay date
-watch(selectedFolder, (val) => {
+watch(selectedFolder, (val, prev) => {
+  // Quitte Bills → Pay date inopérante
   if (val !== BILLS_FOLDER) {
     selectedDTADate.value = null;
+    return;
   }
+
+  // Entre dans Bills → réinitialiser sur le trimestre courant + défaut
+  // (utile quand on venait d'une autre famille)
+  selectedQuarterOffset.value = 0;
+
+  // (re)choisir une pay date par défaut
+  // Même si selectedDTADate est déjà null, on force car c'est précisément le cas qui t'embête
+  selectDefaultPayDateForQuarter();
 });
 
 // Si on choisit une pay date → forcer famille Bills
@@ -332,6 +342,9 @@ onMounted(loadArchive);
 <template>
   <PageHeader title="Documents archives" icon="bookshelf" />
 
+  <!-- =========================
+       STICKY STACK
+  ========================= -->
   <div class="sticky-stack">
 
     <section class="filters">
@@ -342,7 +355,7 @@ onMounted(loadArchive);
         <span class="arrow">
           {{ filtersOpen ? "▼" : "►" }}
         </span>
-        <h2>Filters</h2>
+        <span class="filters-title">Filters</span>
       </header>
 
       <div v-if="filtersOpen" class="filters-body">
@@ -370,30 +383,21 @@ onMounted(loadArchive);
           </button>
         </div>
 
-        <!-- Pay Date visible uniquement pour Bills -->
+        <!-- Pay Date -->
         <div
           v-if="isPayDateVisible"
           class="filter-row paydate-row"
         >
-
           <span class="filter-label">
             Pay date
           </span>
 
           <div class="quarter-capsule">
-            <span
-              class="arrow-nav"
-              @click="selectedQuarterOffset--"
-            >‹</span>
-
+            <span class="arrow-nav" @click="selectedQuarterOffset--">‹</span>
             <span class="quarter-title">
               {{ activeQuarterKey }}
             </span>
-
-            <span
-              class="arrow-nav"
-              @click="selectedQuarterOffset++"
-            >›</span>
+            <span class="arrow-nav" @click="selectedQuarterOffset++">›</span>
           </div>
 
           <div class="chip-scroll">
@@ -407,7 +411,6 @@ onMounted(loadArchive);
               {{ formatDate(d) }}
             </button>
           </div>
-
         </div>
 
         <!-- Search -->
@@ -422,32 +425,29 @@ onMounted(loadArchive);
 
       </div>
     </section>
-    <!-- Header band (like FollowUp) -->
-    <div class="archive-header-wrapper">
-      <div class="archive-grid archive-header">
 
-        <div class="col-label">
-          Documents
-        </div>
+    <!-- Counter with separators -->
+    <div class="archive-counter-wrapper">
+      <div class="archive-separator"></div>
 
-        <div class="col-center">
-          <span class="status-pill">
-            {{ headerCountLabel }}
-          </span>
-        </div>
-
-        <div class="col-empty"></div>
-
+      <div class="archive-counter">
+        <span class="status-pill">
+          {{ headerCountLabel }}
+        </span>
       </div>
+
+      <div class="archive-separator"></div>
     </div>
 
   </div>
 
-  <div class="archives-view">
-    <div v-if="loading" class="muted">Loading…</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
+  <!-- =========================
+       SCROLLABLE TABLE AREA
+  ========================= -->
+  <div class="archives-table-wrapper">
 
-    <table v-else class="archive-table">
+    <table v-if="!loading && !error" class="archive-table">
+
       <thead>
         <tr>
           <th>Date</th>
@@ -484,15 +484,22 @@ onMounted(loadArchive);
         </tr>
       </tbody>
     </table>
+
+    <div v-if="loading" class="archives-view muted">
+      Loading…
+    </div>
+
+    <div v-else-if="error" class="archives-view error">
+      {{ error }}
+    </div>
+
   </div>
 </template>
 
 <style scoped>
-.archives-view {
-  padding: 1.5rem;
-  background: var(--bg);
-  color: var(--text);
-}
+/* =========================================================
+   BASE LAYOUT
+========================================================= */
 
 .sticky-stack {
   position: sticky;
@@ -501,11 +508,25 @@ onMounted(loadArchive);
   background: var(--bg);
 }
 
+/* =========================================================
+   FILTERS
+========================================================= */
+
+.filters-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
 .filters-body {
-  padding: 10px 12px;
+  padding: 6px 12px 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .filter-row.with-label {
@@ -521,6 +542,10 @@ onMounted(loadArchive);
   font-weight: 500;
   opacity: 0.8;
 }
+
+/* =========================================================
+   CHIPS
+========================================================= */
 
 .chip {
   padding: 6px 10px;
@@ -540,72 +565,102 @@ onMounted(loadArchive);
   border-color: var(--primary);
 }
 
-/* DTA scroll area */
-.chip-scroll {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  max-width: 100%;
-  scrollbar-width: none;
-}
-
-.chip-scroll::-webkit-scrollbar {
-  display: none;
-}
-
 /* =========================================================
-   HEADER BAND (like FollowUp)
+   PAY DATE
 ========================================================= */
 
-.archive-header-wrapper {
-  background: var(--bg-soft);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  padding: 0 12px;
-  margin-top: 6px;   /* réduit l’espace */
-}
-
-.archive-header {
-  padding: 8px 0;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-soft);
-}
-
-.archive-grid {
-  display: grid;
-  grid-template-columns:
-    1fr     /* label */
-    auto    /* pill */
-    120px;  /* empty align with amount column */
+.paydate-row {
+  display: flex;
   align-items: center;
-  column-gap: 16px;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
 }
 
-.col-center {
-  text-align: center;
-}
-
-.status-pill {
+.quarter-capsule {
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
+  gap: 6px;
+  padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--primary);
   background: var(--primary-soft);
   color: var(--primary);
   font-size: var(--font-size-xs);
   font-weight: 600;
-  white-space: nowrap;
 }
+
+.arrow-nav {
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.arrow-nav:hover {
+  opacity: 1;
+}
+
+.chip-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  flex: 1;
+}
+
+/* =========================================================
+   COUNTER (NO GREY BAND)
+========================================================= */
+
+.archive-counter-wrapper {
+  margin-top: 4px;
+}
+
+.archive-separator {
+  height: 1px;
+  background: var(--border);
+}
+
+.archive-counter {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.status-pill {
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+/* =========================================================
+   TABLE WRAPPER (KEY FIX)
+========================================================= */
+
+.archives-table-wrapper {
+  height: calc(100vh - 220px); /* adapte si nécessaire */
+  overflow-y: auto;
+  padding: 0 1.5rem 1.5rem 1rem;
+}
+
+/* =========================================================
+   TABLE
+========================================================= */
 
 .archive-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+}
+
+.archive-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 50;
+  border-bottom: 1px solid var(--border);
 }
 
 .archive-table th,
@@ -634,57 +689,15 @@ onMounted(loadArchive);
   font-size: 0.75rem;
 }
 
-.paydate-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: nowrap;
-}
+/* =========================================================
+   STATES
+========================================================= */
 
-
-/* Capsule trimestre = même base que .chip */
-.quarter-capsule {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-
-  padding: 6px 10px;
-  border-radius: 999px;
-
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-
-  border: 1px solid var(--border);
-  background: var(--primary-soft);
-}
-
-/* Flèches identiques aux chips */
-.arrow-nav {
+.muted {
   opacity: 0.6;
-  cursor: pointer;
-  user-select: none;
-  padding: 0 2px;
 }
 
-.arrow-nav:hover {
-  opacity: 1;
-}
-
-/* Libellé trimestre */
-.quarter-title {
-  font-weight: 600;
-}
-
-.chip-scroll {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  flex: 1;
-  scrollbar-width: none;
-}
-
-.chip-scroll::-webkit-scrollbar {
-  display: none;
+.error {
+  color: var(--danger);
 }
 </style>
