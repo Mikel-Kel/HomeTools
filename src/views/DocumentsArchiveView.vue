@@ -337,12 +337,18 @@ const filteredItems = computed(() => {
       )
         return false;
 
-      if (searchText.value) {
-        const t = searchText.value.toLowerCase();
+      if (searchText.value.trim()) {
+        const t = searchText.value.trim().toLowerCase();
+
+        const partyLabel = getPartyLabel(item.partyID).toLowerCase();
+        const info1 = item.info1?.toLowerCase() ?? "";
+        const info2 = item.info2?.toLowerCase() ?? "";
+
         const match =
-          item.info1?.toLowerCase().includes(t) ||
-          item.info2?.toLowerCase().includes(t) ||
-          item.physicalName?.toLowerCase().includes(t);
+          partyLabel.includes(t) ||
+          info1.includes(t) ||
+          info2.includes(t);
+
         if (!match) return false;
       }
 
