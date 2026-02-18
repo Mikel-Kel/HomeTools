@@ -377,6 +377,22 @@ function formatAmount(a: number) {
   });
 }
 
+function escapeRegExp(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function highlight(text: string | null | undefined): string {
+  if (!text) return "";
+
+  const query = searchText.value?.trim();
+  if (!query) return text;
+
+  const safeQuery = escapeRegExp(query);
+  const regex = new RegExp(`(${safeQuery})`, "gi");
+
+  return text.replace(regex, `<mark>$1</mark>`);
+}
+
 const headerCountLabel = computed(() => {
   const n = resultCount.value;
   return `${n} document${n !== 1 ? "s" : ""}`;
@@ -519,9 +535,9 @@ onMounted(async () => {
           @click="openDocument(item)"
         >
           <td>{{ formatDate(item.documentDate) }}</td>
-          <td>{{ getPartyLabel(item.partyID) }}</td>
-          <td>{{ item.info1 }}</td>
-          <td>{{ item.info2 }}</td>
+          <td v-html="highlight(getPartyLabel(item.partyID))"></td>
+          <td v-html="highlight(item.info1)"></td>
+          <td v-html="highlight(item.info2)"></td>
           <td v-if="isBillsSelected">
             <span
               v-if="item.indicatorDTA === 1"
@@ -739,6 +755,12 @@ onMounted(async () => {
   border-radius: 6px;
   background: var(--primary-soft);
   font-size: 0.75rem;
+}
+mark {
+  background: var(--primary-soft);
+  color: var(--primary);
+  padding: 0 2px;
+  border-radius: 3px;
 }
 
 /* =========================================================
