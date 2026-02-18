@@ -100,6 +100,10 @@ const isPayDateVisible = computed(() => {
   return selectedFolder.value === BILLS_FOLDER;
 });
 
+const isBillsSelected = computed(() => {
+  return selectedFolder.value === BILLS_FOLDER;
+});
+
 /* =========================
    Watch rules
 ========================= */
@@ -496,8 +500,8 @@ onMounted(async () => {
           <th>Party</th>
           <th>Info1</th>
           <th>Info2</th>
-          <th>DTA</th>
-          <th class="amount">Amount</th>
+          <th v-if="isBillsSelected">DTA</th>
+          <th v-if="isBillsSelected" class="amount">Amount</th>
         </tr>
       </thead>
 
@@ -512,7 +516,7 @@ onMounted(async () => {
           <td>{{ getPartyLabel(item.partyID) }}</td>
           <td>{{ item.info1 }}</td>
           <td>{{ item.info2 }}</td>
-          <td>
+          <td v-if="isBillsSelected">
             <span
               v-if="item.indicatorDTA === 1"
               class="dta-badge"
@@ -520,7 +524,7 @@ onMounted(async () => {
               {{ formatDate(item.dtaDate) }}
             </span>
           </td>
-          <td class="amount">
+          <td v-if="isBillsSelected" class="amount">
             {{ formatAmount(item.refAmount) }}
           </td>
         </tr>
