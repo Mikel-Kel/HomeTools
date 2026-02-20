@@ -77,6 +77,9 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   // Tentative de connexion Drive
+  if (drive.driveStatus.value === "EXPIRED") {
+    return next({ name: "authentication" });
+  }
   try {
     await drive.connect();
 

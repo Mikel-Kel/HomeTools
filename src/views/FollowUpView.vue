@@ -7,6 +7,7 @@ import FollowUpBar from "@/components/followup/FollowUpBar.vue";
 import CategorySheet from "@/components/followup/CategorySheet.vue";
 
 import { useDrive } from "@/composables/useDrive";
+import { useRouter } from "vue-router";
 import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
 import { useCategories } from "@/composables/useCategories";
 import type { CategoryNature } from "@/composables/useCategories";
@@ -73,7 +74,9 @@ interface FollowUpItem {
 /* =========================
    State
 ========================= */
-const { driveState } = useDrive();
+const router = useRouter();
+const { driveState, driveStatus } = useDrive();
+
 const categoriesStore = useCategories();
 
 const categorySheetOpen = ref(false);
@@ -91,6 +94,13 @@ const analysisScope = ref<AnalysisScope>("YTD");
    Drive watcher
 ========================= */
 const followUpLastModified = ref<string | null>(null);
+
+/* 🔐 Si session perdue → retour authentication */
+watch(driveStatus, (status) => {
+  if (status !== "CONNECTED") {
+    router.replace({ name: "authentication" });
+  }
+});
 
 useDriveWatcher({
   folderId: driveState.value!.folders.allocations.budget,
@@ -597,9 +607,13 @@ const showAllocationsDetail = computed(() => {
 watch(
   () => driveState.value,
   async state => {
-    if (!state) return;
+    if (!state || driveStatus.value !== "CONNECTED") {
+      router.replace({ name: "authentication" });
+      return;
+    }
 
     await load();
+
     if (!categoriesStore.categories.value.length) {
       await categoriesStore.load();
     }
@@ -609,171 +623,218 @@ watch(
   },
   { immediate: true }
 );
+
 </script>
 
 <template>
-  <PageHeader title="Follow-up" icon="followup" />
+  <div v-if="driveStatus !== 'CONNECTED'" class="loading">
+    <p>Drive session not available.</p>
+  </div>
+  <div v-else>
+    <PageHeader title="Follow-up" icon="followup" />
 
-  <!-- =========================
-      STICKY STACK (Filters + Header + Total)
-  ========================= -->
-  <div class="sticky-stack">
+    <!-- =========================
+        STICKY STACK (Filters + Header + Total)
+    ========================= -->
+    <div class="sticky-stack">
 
-    <!-- Filters -->
-    <section class="filters">
-      <header
-        class="filters-header clickable"
-        @click="filtersOpen = !filtersOpen"
-      >
-        <span class="arrow">{{ filtersOpen ? "▼" : "►" }}</span>
-        <h2>Filters</h2>
-      </header>
+      <!-- Filters -->
+      <section class="filters">
+        <header
+          class="filters-header clickable"
+          @click="filtersOpen = !filtersOpen"
+        >
+          <span class="arrow">{{ filtersOpen ? "▼" : "►" }}</span>
+          <h2>Filters</h2>
+        </header>
 
-      <div v-if="filtersOpen" class="filters-body">
-        <!-- PRIMARY FILTERS -->
-        <div class="primary-group">
-          <!-- Year -->
-          <div class="year-segmented">
-            <button
-              v-for="y in availableYears"
-              :key="y"
-              class="year-segment"
-              :class="{ active: year === y }"
-              @click="year = y"
-            >
-              {{ y }}
-            </button>
+        <div v-if="filtersOpen" class="filters-body">
+          <!-- PRIMARY FILTERS -->
+          <div class="primary-group">
+            <!-- Year -->
+            <div class="year-segmented">
+              <button
+                v-for="y in availableYears"
+                :key="y"
+                class="year-segment"
+                :class="{ active: year === y }"
+                @click="year = y"
+              >
+                {{ y }}
+              </button>
+            </div>
+
+            <!-- Scope -->
+            <div class="scope-selector">
+              <button
+                v-for="s in ['FULL', 'MTD', 'YTD']"
+                :key="s"
+                class="scope-btn"
+                :class="{
+                  active: analysisScope === s,
+                  disabled: !isCurrentYear && s !== 'FULL'
+                }"
+                :disabled="!isCurrentYear && s !== 'FULL'"
+                @click="analysisScope = s as AnalysisScope"
+              >
+                {{ s }}
+              </button>
+            </div>
+
+            <!-- Nature -->
+            <div class="scope-selector">
+              <button
+                class="scope-btn"
+                :class="{ active: natureFilter === 'ALL' }"
+                @click="natureFilter = 'ALL'"
+              >
+                All
+              </button>
+              <button
+                class="scope-btn"
+                :class="{ active: natureFilter === 'I' }"
+                @click="natureFilter = 'I'"
+              >
+                Income
+              </button>
+              <button
+                class="scope-btn"
+                :class="{ active: natureFilter === 'E' }"
+                @click="natureFilter = 'E'"
+              >
+                Expenses
+              </button>
+            </div>
           </div>
 
-          <!-- Scope -->
-          <div class="scope-selector">
-            <button
-              v-for="s in ['FULL', 'MTD', 'YTD']"
-              :key="s"
-              class="scope-btn"
-              :class="{
-                active: analysisScope === s,
-                disabled: !isCurrentYear && s !== 'FULL'
-              }"
-              :disabled="!isCurrentYear && s !== 'FULL'"
-              @click="analysisScope = s as AnalysisScope"
-            >
-              {{ s }}
-            </button>
-          </div>
+          <!-- Categories -->
+          <div class="filter-row with-label">
+            <span class="filter-label">Category</span>
 
-          <!-- Nature -->
-          <div class="scope-selector">
             <button
-              class="scope-btn"
-              :class="{ active: natureFilter === 'ALL' }"
-              @click="natureFilter = 'ALL'"
+              class="chip"
+              :class="{ active: selectedCategory === '*' }"
+              @click="selectAllCategories"
             >
               All
             </button>
+
             <button
-              class="scope-btn"
-              :class="{ active: natureFilter === 'I' }"
-              @click="natureFilter = 'I'"
+              v-for="cat in categoryChips"
+              :key="cat.id"
+              class="chip"
+              :class="{ active: selectedCategory === String(cat.id) }"
+              @click="selectCategory(cat.id)"
             >
-              Income
+              {{ cat.label }}
             </button>
+
             <button
-              class="scope-btn"
-              :class="{ active: natureFilter === 'E' }"
-              @click="natureFilter = 'E'"
+              class="chip more-toggle"
+              :class="{ active: showSecondaryCategories }"
+              @click="showSecondaryCategories = !showSecondaryCategories"
+              :title="showSecondaryCategories
+                ? 'Hide secondary categories'
+                : 'Show secondary categories'"
             >
-              Expenses
+              {{ showSecondaryCategories ? '←' : '→' }}
+            </button>
+          </div>
+
+          <!-- Subcategories -->
+          <div v-if="activeCategory" class="filter-row with-label">
+            <span class="filter-label"></span>
+            <button
+              class="chip"
+              :class="{ active: selectedSubCategory === null }"
+              @click="selectedSubCategory = null"
+            >
+              All
+            </button>
+
+            <button
+              v-for="sub in subCategoryChips"
+              :key="sub.id"
+              class="chip"
+              :class="{ active: selectedSubCategory === String(sub.id) }"
+              @click="selectSubCategory(sub.id)"
+            >
+              {{ sub.label }}
             </button>
           </div>
         </div>
+      </section>
 
-        <!-- Categories -->
-        <div class="filter-row with-label">
-          <span class="filter-label">Category</span>
+      <!-- Header band -->
+      <div class="followup-header-wrapper">
+        <div class="followup-grid followup-header">
+          <div class="col-label">Categories</div>
 
-          <button
-            class="chip"
-            :class="{ active: selectedCategory === '*' }"
-            @click="selectAllCategories"
-          >
-            All
-          </button>
+          <div class="col-chart centered">
+            <span class="status-pill">
+              {{ statusAsOfLabel }}
+            </span>
+          </div>
 
-          <button
-            v-for="cat in categoryChips"
-            :key="cat.id"
-            class="chip"
-            :class="{ active: selectedCategory === String(cat.id) }"
-            @click="selectCategory(cat.id)"
-          >
-            {{ cat.label }}
-          </button>
+          <div class="col-allocated">
+            {{ allocatedColumnLabel }}
+          </div>
 
-          <button
-            class="chip more-toggle"
-            :class="{ active: showSecondaryCategories }"
-            @click="showSecondaryCategories = !showSecondaryCategories"
-            :title="showSecondaryCategories
-              ? 'Hide secondary categories'
-              : 'Show secondary categories'"
-          >
-            {{ showSecondaryCategories ? '←' : '→' }}
-          </button>
-        </div>
-
-        <!-- Subcategories -->
-        <div v-if="activeCategory" class="filter-row with-label">
-          <span class="filter-label"></span>
-          <button
-            class="chip"
-            :class="{ active: selectedSubCategory === null }"
-            @click="selectedSubCategory = null"
-          >
-            All
-          </button>
-
-          <button
-            v-for="sub in subCategoryChips"
-            :key="sub.id"
-            class="chip"
-            :class="{ active: selectedSubCategory === String(sub.id) }"
-            @click="selectSubCategory(sub.id)"
-          >
-            {{ sub.label }}
-          </button>
+          <div class="col-budget">Budget</div>
         </div>
       </div>
-    </section>
 
-    <!-- Header band -->
-    <div class="followup-header-wrapper">
-      <div class="followup-grid followup-header">
-        <div class="col-label">Categories</div>
+      <!-- Total row (sticky as part of the stack) -->
+      <div v-if="totalItem" class="followup-total-wrapper">
+        <div class="followup-grid followup-row total">
+          <div class="label">{{ totalItem.label }}</div>
 
-        <div class="col-chart centered">
-          <span class="status-pill">
-            {{ statusAsOfLabel }}
-          </span>
+          <div class="chart">
+            <FollowUpBar
+              :amount="totalItem.amount"
+              :budget="totalItem.budget"
+              :scale="scale"
+              :spreadLimit="followUpSpreadLimit"
+            />
+          </div>
+
+          <div
+            class="allocated"
+            :class="allocatedClass(
+              totalAllocatedValue(),
+              totalItem.budget
+            )"
+          >
+            {{ fmt(totalAllocatedValue()) }}
+          </div>
+
+          <div class="budget">
+            <span v-if="totalItem.budget !== undefined">
+              {{ fmt(totalItem.budget) }}
+            </span>
+            <span v-else class="muted">—</span>
+          </div>
         </div>
-
-        <div class="col-allocated">
-          {{ allocatedColumnLabel }}
-        </div>
-
-        <div class="col-budget">Budget</div>
       </div>
+
     </div>
 
-    <!-- Total row (sticky as part of the stack) -->
-    <div v-if="totalItem" class="followup-total-wrapper">
-      <div class="followup-grid followup-row total">
-        <div class="label">{{ totalItem.label }}</div>
+    <!-- =========================
+        CONTENT (scrolls under sticky stack)
+    ========================= -->
+    <div class="followup-table">
+      <div
+        v-for="item in items"
+        :key="item.id"
+        v-if="selectedSubCategory === null"
+        class="followup-grid followup-row"
+      >
+        <div class="label">{{ item.label }}</div>
 
         <div class="chart">
           <FollowUpBar
-            :amount="totalItem.amount"
-            :budget="totalItem.budget"
+            :amount="item.amount"
+            :budget="displayedBudget(item)"
             :scale="scale"
             :spreadLimit="followUpSpreadLimit"
           />
@@ -782,81 +843,40 @@ watch(
         <div
           class="allocated"
           :class="allocatedClass(
-            totalAllocatedValue(),
-            totalItem.budget
+            allocatedValue(item),
+            displayedBudget(item)
           )"
         >
-          {{ fmt(totalAllocatedValue()) }}
+          {{ fmt(allocatedValue(item)) }}
         </div>
 
         <div class="budget">
-          <span v-if="totalItem.budget !== undefined">
-            {{ fmt(totalItem.budget) }}
+          <span v-if="displayedBudget(item) !== undefined">
+            {{ fmt(displayedBudget(item)!) }}
           </span>
           <span v-else class="muted">—</span>
         </div>
       </div>
     </div>
 
+    <!-- le reste inchangé -->
+    <CategorySheet
+      v-model="selectedCategory"
+      :open="categorySheetOpen"
+      :categories="[]"
+      @close="categorySheetOpen = false"
+    />
+
+    <FollowUpDetails
+      v-if="showAllocationsDetail"
+      :year="year"
+      :category-ids="allocationCategoryIds"
+      :sub-category-id="allocationSubCategoryId"
+      :monthly-budget-map="detailsMonthlyBudgetMap"
+      :nature="detailsNature"
+      :max-month="detailsMaxMonth"
+    />
   </div>
-
-  <!-- =========================
-      CONTENT (scrolls under sticky stack)
-  ========================= -->
-  <div class="followup-table">
-    <div
-      v-for="item in items"
-      :key="item.id"
-      v-if="selectedSubCategory === null"
-      class="followup-grid followup-row"
-    >
-      <div class="label">{{ item.label }}</div>
-
-      <div class="chart">
-        <FollowUpBar
-          :amount="item.amount"
-          :budget="displayedBudget(item)"
-          :scale="scale"
-          :spreadLimit="followUpSpreadLimit"
-        />
-      </div>
-
-      <div
-        class="allocated"
-        :class="allocatedClass(
-          allocatedValue(item),
-          displayedBudget(item)
-        )"
-      >
-        {{ fmt(allocatedValue(item)) }}
-      </div>
-
-      <div class="budget">
-        <span v-if="displayedBudget(item) !== undefined">
-          {{ fmt(displayedBudget(item)!) }}
-        </span>
-        <span v-else class="muted">—</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- le reste inchangé -->
-  <CategorySheet
-    v-model="selectedCategory"
-    :open="categorySheetOpen"
-    :categories="[]"
-    @close="categorySheetOpen = false"
-  />
-
-  <FollowUpDetails
-    v-if="showAllocationsDetail"
-    :year="year"
-    :category-ids="allocationCategoryIds"
-    :sub-category-id="allocationSubCategoryId"
-    :monthly-budget-map="detailsMonthlyBudgetMap"
-    :nature="detailsNature"
-    :max-month="detailsMaxMonth"
-  />
 </template>
 
 <style scoped>

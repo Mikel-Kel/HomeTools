@@ -85,6 +85,11 @@ function setSpendingLastModified(ts: string) {
   spendingLastModified.value = ts;
 }
 
+function clear() {
+  accounts.value = [];
+  records.value = [];
+}
+
 return {
     accounts,
     records,
@@ -94,5 +99,7 @@ return {
     getDraftRecords,
     spendingLastModified,
     setSpendingLastModified,
+    clear,
   };
 }
+

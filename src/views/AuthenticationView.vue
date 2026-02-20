@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRouter } from "vue-router";
+
 import PageHeader from "@/components/PageHeader.vue";
 import { useDrive } from "@/composables/useDrive";
 
+/* =========================
+   Router
+========================= */
 const router = useRouter();
 
+/* =========================
+   Drive session
+========================= */
 const {
   connect,
   driveStatus,
@@ -20,12 +27,19 @@ const isConnected = computed(
   () => driveStatus.value === "CONNECTED"
 );
 
+const isExpired = computed(
+  () => driveStatus.value === "EXPIRED"
+);
+
 /* =========================
    Actions
 ========================= */
 async function handleConnect() {
+  if (driveBusy.value) return;
+
   try {
     await connect();
+
     if (driveStatus.value === "CONNECTED") {
       router.push({ name: "home" });
     }
@@ -40,8 +54,11 @@ async function handleConnect() {
 
   <div class="authentication-view">
     <p>
-      Please connect your Google account to enable Drive
-      features.
+      {{
+        isExpired
+          ? "Your Drive session has expired. Please reconnect."
+          : "Please connect your Google account to enable Drive features."
+      }}
     </p>
 
     <button
@@ -53,9 +70,10 @@ async function handleConnect() {
 
     <p v-if="driveBusy">Connecting…</p>
 
-    <p v-if="driveError" class="error">
+    <p v-if="driveError && !isExpired" class="error">
       {{ driveError }}
     </p>
+
   </div>
 </template>
 

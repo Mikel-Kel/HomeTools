@@ -11,6 +11,7 @@
  */
 
 import { getAccessToken } from "./googleInit";
+import { isTokenValid } from "./googleInit";
 import { useDrive } from "@/composables/useDrive";
 
 const DRIVE_BASE = "https://www.googleapis.com/drive/v3";
@@ -41,6 +42,11 @@ async function driveFetch(
   const token = getAccessToken();
   if (!token) {
     expire("Missing access token");
+    throw new Error("DRIVE_UNAUTHORIZED");
+  }
+
+  if (!isTokenValid()) {
+    expire("Token expired (local check)");
     throw new Error("DRIVE_UNAUTHORIZED");
   }
 
@@ -248,16 +254,13 @@ export async function getFileMetadataByName(
     pageSize: "1",
   });
 
-    const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
-    {
-      headers: {
-        Authorization: `Bearer ${getAccessToken()}`, // 🔑 déjà existant chez toi
-      },
-    }
+  const res = await driveFetch(
+    `https://www.googleapis.com/drive/v3/files?${params.toString()}`
   );
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    throw new Error(`[Drive] getFileMetadata HTTP ${res.status}`);
+  }
 
   const json = await res.json();
   return json.files?.[0] ?? null;

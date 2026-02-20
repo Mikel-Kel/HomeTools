@@ -14,6 +14,7 @@ import { ref } from "vue";
 import { connectGoogle } from "@/services/google/googleInit";
 import { DRIVE_STATE } from "@/config/driveState";
 import type { HomeToolsDriveState } from "@/config/driveState";
+import { clearAccessToken } from "@/services/google/googleInit";
 
 /* =========================
    Types
@@ -63,7 +64,9 @@ export function useDrive() {
    */
   function expire(reason = "Drive session expired") {
     console.warn("🔐 Drive expired:", reason);
+    clearAccessToken();
     driveStatus.value = "EXPIRED";
+    driveState.value = null;
     driveError.value = reason;
   }
 

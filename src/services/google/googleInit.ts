@@ -11,12 +11,18 @@ export const googleAuthenticated = ref(false);
    Token interne
 ============================ */
 let accessToken: string | null = null;
+let tokenExpiresAt: number | null = null;
 
 /* ============================
    Expose access token (pour googleDrive)
 ============================ */
 export function getAccessToken(): string | null {
   return accessToken;
+}
+
+export function clearAccessToken() {
+  accessToken = null;
+  googleAuthenticated.value = false;
 }
 
 /* ============================
@@ -70,6 +76,7 @@ export async function initGoogleAPI(): Promise<void> {
    Étape 2 — Auth Google (popup / redirect auto)
 ============================ */
 export async function connectGoogle(): Promise<void> {
+
   return new Promise((resolve, reject) => {
     if (!window.google) {
       reject("[Google] GIS not loaded");
@@ -102,8 +109,12 @@ export async function connectGoogle(): Promise<void> {
             reject(resp);
           } else if (resp?.access_token) {
             accessToken = resp.access_token;
+
+            if (resp.expires_in) {
+              tokenExpiresAt = Date.now() + (resp.expires_in - 30) * 1000;
+            }
+
             googleAuthenticated.value = true;
-            log.info("[Google] Auth success");
             resolve();
           }
         },
@@ -111,4 +122,10 @@ export async function connectGoogle(): Promise<void> {
 
     tokenClient.requestAccessToken({ prompt: "consent" });
   });
+}
+
+export function isTokenValid(): boolean {
+  if (!accessToken) return false;
+  if (!tokenExpiresAt) return true;
+  return Date.now() < tokenExpiresAt;
 }

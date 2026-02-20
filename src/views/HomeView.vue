@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 
+/* =========================
+   App parameters
+========================= */
 import { useAppParameters } from "@/composables/useAppParameters";
 const { load } = useAppParameters();
 
@@ -8,26 +11,37 @@ onMounted(async () => {
   await load();
 });
 
-import { useTheme } from "@/composables/useTheme";
-import { googleAuthenticated } from "@/services/google/googleInit";
-
-import AppTitle from "@/components/AppTitle.vue";
-import AppIcon from "@/components/AppIcon.vue";
-
-// version app (injectée par Vite)
-const appVersion = __APP_VERSION__;
-
 /* =========================
    Theme
 ========================= */
+import { useTheme } from "@/composables/useTheme";
 const { toggle, theme } = useTheme();
 
 /* =========================
-   Drive status
+   Drive session (SINGLE SOURCE OF TRUTH)
 ========================= */
-const driveStatus = computed<"connected" | "disconnected">(() =>
-  googleAuthenticated.value ? "connected" : "disconnected"
+import { useDrive } from "@/composables/useDrive";
+
+const { driveStatus } = useDrive();
+
+/*
+  On adapte pour le CSS existant :
+  "connected" | "disconnected"
+*/
+const uiDriveStatus = computed<"connected" | "disconnected">(() =>
+  driveStatus.value === "CONNECTED" ? "connected" : "disconnected"
 );
+
+/* =========================
+   Components
+========================= */
+import AppTitle from "@/components/AppTitle.vue";
+import AppIcon from "@/components/AppIcon.vue";
+
+/* =========================
+   Version app (injectée par Vite)
+========================= */
+const appVersion = __APP_VERSION__;
 </script>
 
 <template>
@@ -42,11 +56,11 @@ const driveStatus = computed<"connected" | "disconnected">(() =>
         />
 
         <!-- Drive status (aligné sous le TEXTE, pas l’icône) -->
-        <div class="drive-status" :class="driveStatus">
+        <div class="drive-status" :class="uiDriveStatus">
           <span class="dot"></span>
           <span class="status-text">
             {{
-              driveStatus === "connected"
+              uiDriveStatus === "connected"
                 ? "Home tools ready"
                 : "Home tools not available, please login"
             }}

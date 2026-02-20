@@ -42,7 +42,14 @@ export function useDriveWatcher({
         lastKnownModified.value = remote;
         await onChanged();
       }
-    } catch (err) {
+    } 
+    catch (err: any) {
+      if (err?.message === "DRIVE_UNAUTHORIZED") {
+        // Laisse le router gérer la redirection
+        paused.value = true;
+        return;
+      }
+
       console.warn("DriveWatcher error", err);
     } finally {
       running.value = false;

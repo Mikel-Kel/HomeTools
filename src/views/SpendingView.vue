@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, computed, ref } from "vue";
+import { onMounted, onBeforeUnmount, computed, ref, watch} from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
@@ -25,7 +25,8 @@ import { useDriveWatcher } from "@/composables/useDriveWatcher";
 const router = useRouter();
 const statusFilter = ref<Set<AllocationStatus>>(new Set());
 
-const { driveState } = useDrive();
+const { driveState, driveStatus } = useDrive();
+
 const spending = useSpending();
 
 /* =========================
@@ -36,6 +37,12 @@ useDriveWatcher({
   fileName: "spending.json",
   lastKnownModified: spending.spendingLastModified,
   onChanged: loadFromDrive,
+});
+
+watch(driveStatus, (s) => {
+  if (s !== "CONNECTED") {
+    spending.clear();  // méthode à créer
+  }
 });
 
 /* =========================

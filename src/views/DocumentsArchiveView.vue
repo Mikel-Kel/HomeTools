@@ -3,6 +3,8 @@ import { ref, computed, watch, onMounted } from "vue";
 import PageHeader from "@/components/PageHeader.vue";
 
 import { useDrive } from "@/composables/useDrive";
+import { useRouter } from "vue-router";
+
 import { useAppParameters } from "@/composables/useAppParameters";
 import { loadJSONFromFolder } from "@/services/google/driveRepository";
 
@@ -57,7 +59,8 @@ interface FolderView {
 /* =========================
    Drive & Parameters
 ========================= */
-const { driveState } = useDrive();
+const router = useRouter();
+const { driveState, driveStatus } = useDrive();
 const { appParameters } = useAppParameters();
 
 /* =========================
@@ -107,6 +110,12 @@ const isBillsSelected = computed(() => {
 /* =========================
    Watch rules
 ========================= */
+/* 🔐 Si session perdue → retour authentication */
+watch(driveStatus, (status) => {
+  if (status !== "CONNECTED") {
+    router.replace({ name: "authentication" });
+  }
+});
 
 watch(selectedFolder, (val) => {
   if (val !== BILLS_FOLDER) {
@@ -156,7 +165,7 @@ function openDocument(item: ArchiveItem) {
    Load
 ========================= */
 async function loadArchive() {
-  if (!driveState.value) return;
+  if (!driveState.value || driveStatus.value !== "CONNECTED") return;
 
   loading.value = true;
   error.value = null;
@@ -181,7 +190,7 @@ async function loadArchive() {
 }
 
 async function loadParty() {
-  if (!driveState.value) return;
+  if (!driveState.value || driveStatus.value !== "CONNECTED") return;
 
   try {
     const folderId = driveState.value.folders.settings;
@@ -402,6 +411,12 @@ const headerCountLabel = computed(() => {
    Init
 ========================= */
 onMounted(async () => {
+  /* 🔐 sécurité supplémentaire */
+  if (driveStatus.value !== "CONNECTED") {
+    router.replace({ name: "authentication" });
+    return;
+  }
+
   await loadArchive();
   await loadParty();
 });
@@ -410,158 +425,164 @@ onMounted(async () => {
 <template>
   <PageHeader title="Documents archives" icon="bookshelf" />
 
-  <!-- =========================
-       STICKY STACK
-  ========================= -->
-  <div class="sticky-stack">
+  <div v-if="driveStatus !== 'CONNECTED'" class="archives-view muted">
+    Drive session not available.
+  </div>
 
-    <section class="filters">
-      <header
-        class="filters-header clickable"
-        @click="filtersOpen = !filtersOpen"
-      >
-        <span class="arrow">
-          {{ filtersOpen ? "▼" : "►" }}
-        </span>
-        <span class="filters-title">Filters</span>
-      </header>
+  <div v-else>  
+    <!-- =========================
+        STICKY STACK
+    ========================= -->
+    <div class="sticky-stack">
 
-      <div v-if="filtersOpen" class="filters-body">
-
-        <!-- Folder -->
-        <div class="filter-row with-label">
-          <span class="filter-label">Documents</span>
-
-          <button
-            class="chip"
-            :class="{ active: selectedFolder === null }"
-            @click="selectedFolder = null"
-          >
-            All
-          </button>
-
-          <button
-            v-for="f in folders"
-            :key="f.source"
-            class="chip"
-            :class="{ active: selectedFolder === f.source }"
-            @click="selectedFolder = f.source"
-          >
-            {{ f.label }}
-          </button>
-        </div>
-
-        <!-- Pay Date -->
-        <div
-          v-if="isPayDateVisible"
-          class="filter-row paydate-row"
+      <section class="filters">
+        <header
+          class="filters-header clickable"
+          @click="filtersOpen = !filtersOpen"
         >
-          <span class="filter-label">
-            Pay date
+          <span class="arrow">
+            {{ filtersOpen ? "▼" : "►" }}
           </span>
+          <span class="filters-title">Filters</span>
+        </header>
 
-          <div class="quarter-capsule">
-            <span class="arrow-nav" @click="selectedQuarterOffset--">‹</span>
-            <span class="quarter-title">
-              {{ activeQuarterKey }}
-            </span>
-            <span class="arrow-nav" @click="selectedQuarterOffset++">›</span>
-          </div>
+        <div v-if="filtersOpen" class="filters-body">
 
-          <div class="chip-scroll">
+          <!-- Folder -->
+          <div class="filter-row with-label">
+            <span class="filter-label">Documents</span>
+
             <button
-              v-for="d in payDatesInActiveQuarter"
-              :key="d"
               class="chip"
-              :class="{ active: selectedDTADate === d }"
-              @click="selectedDTADate = d"
+              :class="{ active: selectedFolder === null }"
+              @click="selectedFolder = null"
             >
-              {{ formatDate(d) }}
+              All
+            </button>
+
+            <button
+              v-for="f in folders"
+              :key="f.source"
+              class="chip"
+              :class="{ active: selectedFolder === f.source }"
+              @click="selectedFolder = f.source"
+            >
+              {{ f.label }}
             </button>
           </div>
-        </div>
 
-        <!-- Search -->
-        <div class="filter-row with-label">
-          <span class="filter-label">Search</span>
-          <input
-            v-model="searchText"
-            type="text"
-            placeholder="Search info..."
-          />
-        </div>
-
-      </div>
-    </section>
-
-    <!-- Counter with separators -->
-    <div class="archive-counter-wrapper">
-      <div class="archive-separator"></div>
-
-      <div class="archive-counter">
-        <span class="status-pill">
-          {{ headerCountLabel }}
-        </span>
-      </div>
-
-      <div class="archive-separator"></div>
-    </div>
-
-  </div>
-
-  <!-- =========================
-       SCROLLABLE TABLE AREA
-  ========================= -->
-  <div class="archives-table-wrapper">
-
-    <table v-if="!loading && !error" class="archive-table">
-
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Party</th>
-          <th>Info1</th>
-          <th>Info2</th>
-          <th v-if="isBillsSelected">DTA</th>
-          <th v-if="isBillsSelected" class="amount">Amount</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        <tr
-          v-for="item in filteredItems"
-          :key="item.tocid"
-          class="clickable-row"
-          @click="openDocument(item)"
-        >
-          <td>{{ formatDate(item.documentDate) }}</td>
-          <td v-html="highlight(getPartyLabel(item.partyID))"></td>
-          <td v-html="highlight(item.info1)"></td>
-          <td v-html="highlight(item.info2)"></td>
-          <td v-if="isBillsSelected">
-            <span
-              v-if="item.indicatorDTA === 1"
-              class="dta-badge"
-            >
-              {{ formatDate(item.dtaDate) }}
+          <!-- Pay Date -->
+          <div
+            v-if="isPayDateVisible"
+            class="filter-row paydate-row"
+          >
+            <span class="filter-label">
+              Pay date
             </span>
-          </td>
-          <td v-if="isBillsSelected" class="amount">
-            {{ formatAmount(item.refAmount) }}
-          </td>
-        </tr>
-      </tbody>
-    </table>
 
-    <div v-if="loading" class="archives-view muted">
-      Loading…
+            <div class="quarter-capsule">
+              <span class="arrow-nav" @click="selectedQuarterOffset--">‹</span>
+              <span class="quarter-title">
+                {{ activeQuarterKey }}
+              </span>
+              <span class="arrow-nav" @click="selectedQuarterOffset++">›</span>
+            </div>
+
+            <div class="chip-scroll">
+              <button
+                v-for="d in payDatesInActiveQuarter"
+                :key="d"
+                class="chip"
+                :class="{ active: selectedDTADate === d }"
+                @click="selectedDTADate = d"
+              >
+                {{ formatDate(d) }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Search -->
+          <div class="filter-row with-label">
+            <span class="filter-label">Search</span>
+            <input
+              v-model="searchText"
+              type="text"
+              placeholder="Search info..."
+            />
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Counter with separators -->
+      <div class="archive-counter-wrapper">
+        <div class="archive-separator"></div>
+
+        <div class="archive-counter">
+          <span class="status-pill">
+            {{ headerCountLabel }}
+          </span>
+        </div>
+
+        <div class="archive-separator"></div>
+      </div>
+
     </div>
 
-    <div v-else-if="error" class="archives-view error">
-      {{ error }}
-    </div>
+    <!-- =========================
+        SCROLLABLE TABLE AREA
+    ========================= -->
+    <div class="archives-table-wrapper">
 
-  </div>
+      <table v-if="!loading && !error" class="archive-table">
+
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Party</th>
+            <th>Info1</th>
+            <th>Info2</th>
+            <th v-if="isBillsSelected">DTA</th>
+            <th v-if="isBillsSelected" class="amount">Amount</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr
+            v-for="item in filteredItems"
+            :key="item.tocid"
+            class="clickable-row"
+            @click="openDocument(item)"
+          >
+            <td>{{ formatDate(item.documentDate) }}</td>
+            <td v-html="highlight(getPartyLabel(item.partyID))"></td>
+            <td v-html="highlight(item.info1)"></td>
+            <td v-html="highlight(item.info2)"></td>
+            <td v-if="isBillsSelected">
+              <span
+                v-if="item.indicatorDTA === 1"
+                class="dta-badge"
+              >
+                {{ formatDate(item.dtaDate) }}
+              </span>
+            </td>
+            <td v-if="isBillsSelected" class="amount">
+              {{ formatAmount(item.refAmount) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div v-if="loading" class="archives-view muted">
+        Loading…
+      </div>
+
+      <div v-else-if="error" class="archives-view error">
+        {{ error }}
+      </div>
+
+    </div>
+  </div>  
 </template>
 
 <style scoped>

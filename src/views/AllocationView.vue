@@ -8,6 +8,7 @@ import AppIcon from "@/components/AppIcon.vue";
 import { useSpending } from "@/composables/spending/useSpending";
 import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
+import { useDrive } from "@/composables/useDrive";
 
 import type { SpendingRecord } from "@/composables/spending/useSpending";
 
@@ -18,18 +19,30 @@ const router = useRouter();
 const props = defineProps<{ id: string }>();
 
 /* =========================
+   Drive guard (AJOUT MINIMAL)
+========================= */
+const { driveStatus } = useDrive();
+
+/* 🔐 Si session perdue → retour authentication */
+watch(driveStatus, (status) => {
+  if (status !== "CONNECTED") {
+    router.replace({ name: "authentication" });
+  }
+});
+
+/* =========================
    Stores
 ========================= */
 const spendingStore = useSpending();
 const categoriesStore = useCategories();
-/* =========================
 
+/* =========================
    Auto-close arming
 ========================= */
 const autoCloseArmed = ref<boolean>(false);
 const hasAutoClosed = ref<boolean>(false);
 
-  /* =========================
+/* =========================
    Record (nullable)
 ========================= */
 const record = computed<SpendingRecord | null>(() =>
@@ -43,21 +56,9 @@ const recordSafe = computed<SpendingRecord>(() => {
   return record.value ?? ({} as SpendingRecord);
 });
 
-const allocationSafe = computed(() => {
-  return allocation.value ?? {
-    loading: ref(true),
-    busy: ref(false),
-    busyAction: ref(null),
-  };
-});
-
 /* =========================
    Allocation (créé seulement si record existe)
 ========================= */
-const loading = computed(() => allocationSafe.value.loading.value);
-const busy = computed(() => allocationSafe.value.busy.value);
-const busyAction = computed(() => allocationSafe.value.busyAction.value);
-
 const allocation = computed(() =>
   record.value
     ? useAllocation(
@@ -68,6 +69,19 @@ const allocation = computed(() =>
       )
     : null
 );
+
+/* SAFE fallback */
+const allocationSafe = computed(() => {
+  return allocation.value ?? {
+    loading: ref(true),
+    busy: ref(false),
+    busyAction: ref(null),
+  };
+});
+
+const loading = computed(() => allocationSafe.value.loading.value);
+const busy = computed(() => allocationSafe.value.busy.value);
+const busyAction = computed(() => allocationSafe.value.busyAction.value);
 
 /* =========================
    Exposition SAFE pour le template
@@ -113,15 +127,14 @@ const allocationDate = computed<string | null>({
 
 const showAllocationDate = ref(false);
 
-/*const totalAllocated = computed(
-  () => allocation.value?.totalAllocated.value ?? 0
-);*/
 const remainingAmount = computed(
   () => allocation.value?.remainingAmount.value ?? 0
 );
+
 const isBalanced = computed(
   () => allocation.value?.isBalanced.value ?? false
 );
+
 const canSaveDraft = computed(
   () => allocation.value?.canSaveDraft.value ?? false
 );
@@ -138,7 +151,7 @@ const busyMessage = computed(() => {
 });
 
 /* =========================
-   Auto-close when balanced (FINAL)
+   Auto-close when balanced
 ========================= */
 watch(
   [isBalanced, busy],
@@ -172,17 +185,29 @@ const dateInput = ref<HTMLInputElement | null>(null);
    Lifecycle
 ========================= */
 onMounted(async () => {
+  /* 🔐 sécurité supplémentaire */
+  if (driveStatus.value !== "CONNECTED") {
+    router.replace({ name: "authentication" });
+    return;
+  }
+
+  /* 🔎 Si record absent → retour spending */
+  if (!record.value) {
+    router.replace({ name: "spending" });
+    return;
+  }
+
   await categoriesStore.load();
 
   if (allocation.value) {
     await allocation.value.loadDraft();
-    // ✅ preset (si pas de draft chargé)
+
     if (allocation.value.allocations.value.length === 0 && record.value) {
       allocation.value.categoryID.value = record.value.categoryID;
       allocation.value.subCategoryID.value = record.value.subCategoryID;
       allocation.value.comment.value = record.value.allocComment ?? "";
-      // tagID : pas encore disponible / visible ici, mais utilisé par useAllocation lors de addAllocation()
     }
+
     await resetAmountToRemaining();
   }
 });
@@ -201,9 +226,10 @@ const allowedNature = computed(() =>
 const categories = computed(() =>
   categoriesStore.categories.value
     .filter(c => c.nature === allowedNature.value)
-    .slice() // sécurité immutabilité
+    .slice()
     .sort((a, b) => a.seq - b.seq)
 );
+
 const subCategories = computed(() =>
   typeof categoryID.value === "number"
     ? categoriesStore
@@ -214,7 +240,7 @@ const subCategories = computed(() =>
 );
 
 /* =========================
-   Helpers (MANQUANTS AVANT)
+   Helpers
 ========================= */
 function categoryLabel(id: number | null) {
   return id == null
@@ -247,8 +273,7 @@ function formatAmount(a: number) {
 async function onAddAllocation() {
   if (!allocation.value) return;
 
-  autoCloseArmed.value = true; // 🔑 armement explicite
-
+  autoCloseArmed.value = true;
   await allocation.value.addAllocation();
   showAllocationDate.value = false;
   await resetAmountToRemaining();
@@ -260,7 +285,7 @@ async function onSaveDraft() {
 }
 
 async function onRemoveAllocation(index: number) {
-  autoCloseArmed.value = true; // 🔑 armement explicite
+  autoCloseArmed.value = true;
   await allocation.value?.removeAllocation(index);
 }
 
@@ -273,7 +298,11 @@ function closeView() {
 <template>
   <PageHeader title="Allocation" icon="spending" />
 
-  <div v-if="!recordReady" class="loading">
+  <div v-if="driveStatus !== 'CONNECTED'" class="loading">
+    <p>Drive session not available.</p>
+  </div>
+
+  <div v-else-if="!recordReady" class="loading">
     <p>Loading allocation...</p>
   </div>
 
