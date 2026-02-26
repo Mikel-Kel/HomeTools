@@ -3,19 +3,24 @@ import vue from "@vitejs/plugin-vue";
 import { fileURLToPath, URL } from "url";
 import pkg from "./package.json";
 
-export default defineConfig({
-  base: "/HomeTools/",
+export default defineConfig(({ mode }) => ({
+  base: mode === "production" ? "/HomeTools/" : "/",
+
   plugins: [vue()],
-  define: {__APP_VERSION__: JSON.stringify(pkg.version),
+
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
+
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+
   server: {
     allowedHosts: [
       "eva-beverages-witnesses-fibre.trycloudflare.com",
     ],
   },
-});
+}));
