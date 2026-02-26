@@ -38,6 +38,10 @@ export function useSpending() {
     function setSpendingLastModified(ts) {
         spendingLastModified.value = ts;
     }
+    function clear() {
+        accounts.value = [];
+        records.value = [];
+    }
     return {
         accounts,
         records,
@@ -47,5 +51,6 @@ export function useSpending() {
         getDraftRecords,
         spendingLastModified,
         setSpendingLastModified,
+        clear,
     };
 }

@@ -21,6 +21,11 @@ export function useDriveWatcher({ folderId, fileName, lastKnownModified, onChang
             }
         }
         catch (err) {
+            if (err?.message === "DRIVE_UNAUTHORIZED") {
+                // Laisse le router gérer la redirection
+                paused.value = true;
+                return;
+            }
             console.warn("DriveWatcher error", err);
         }
         finally {
