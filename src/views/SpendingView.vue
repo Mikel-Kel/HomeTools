@@ -174,6 +174,41 @@ function openFollowUp() {
   });
 }
 
+function isForeign(record: SpendingWithStatus) {
+  return record.foreignAmount != null;
+}
+
+const fxPopover = ref<{
+  record: SpendingWithStatus;
+  x: number;
+  y: number;
+} | null>(null);
+
+let fxTimer: number | null = null;
+
+function showFxPopover(event: MouseEvent, record: SpendingWithStatus) {
+  if (!isForeign(record)) return;
+
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+
+  fxPopover.value = {
+    record,
+    x: rect.right - 10,
+    y: rect.top - 8,
+  };
+
+  if (fxTimer) clearTimeout(fxTimer);
+
+  fxTimer = window.setTimeout(() => {
+    fxPopover.value = null;
+  }, 2000);
+}
+
+function closeFxPopover() {
+  fxPopover.value = null;
+  if (fxTimer) clearTimeout(fxTimer);
+}
+
 /* =========================
    Release all drafts
 ========================= */
@@ -247,10 +282,8 @@ async function loadFromDrive() {
   if (raw.modifiedTime) {
     spending.setSpendingLastModified(raw.modifiedTime);
   }
-
   const { accounts, records } =
     transformSpendingRaw(raw.items);
-
   spending.replaceAll(accounts, records);
 
   await loadAllocationStatusFromDrive();
@@ -487,19 +520,38 @@ onBeforeUnmount(() => {
                   :class="['status-pill', record.allocationStatus]"
                 >
                   {{ record.allocationStatus }}
-                </span>              </td>
-              <td
-                class="right"
-                :class="record.amount >= 0 ? 'positive' : 'negative'"
-              >
-                {{ formatAmount(record.amount) }}
+                </span>
               </td>
+              <td
+                class="right amount-cell"
+                :class="[
+                  record.amount >= 0 ? 'positive' : 'negative',
+                  { foreign: isForeign(record) }
+                ]"
+                @click.stop="showFxPopover($event, record)"
+              >
+                <span v-if="isForeign(record)" class="fx-dot"></span>
+                {{ formatAmount(record.amount) }}
+              </td>  
             </tr>
           </tbody>
         </table>
       </section>
     </div>
   </div>
+  <!-- FX micro popover -->
+<div
+  v-if="fxPopover"
+  class="fx-popover"
+  :style="{ top: fxPopover.y + 'px', left: fxPopover.x + 'px' }"
+  @click.stop="closeFxPopover"
+>
+  {{ fxPopover.record.foreignAmount?.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+  }) }}
+  {{ fxPopover.record.currency }}
+</div>
 </template>
 
 <style scoped>
@@ -844,5 +896,53 @@ onBeforeUnmount(() => {
 
 .row:hover {
   background: var(--primary-soft);
+}
+
+/* =========================================================
+   FX indicator & popover
+========================================================= */
+
+/* Petit rond bleu */
+.fx-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--primary);
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+  opacity: 0.9;
+}
+
+/* Cell clickable */
+.amount-cell.foreign {
+  cursor: pointer;
+}
+
+/* Micro popover */
+.fx-popover {
+  position: fixed;
+  transform: translate(-100%, -100%);
+  background: var(--surface);
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  animation: fxFade 0.15s ease-out;
+  z-index: 1000;
+}
+
+/* Subtle animation */
+@keyframes fxFade {
+  from {
+    opacity: 0;
+    transform: translate(-100%, -90%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-100%, -100%) scale(1);
+  }
 }
 </style>

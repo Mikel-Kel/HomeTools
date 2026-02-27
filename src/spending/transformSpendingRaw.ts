@@ -11,7 +11,8 @@ export interface BackendSpendingRow {
   partyID?: number | null;
   valueDate: string;
   expenseOwner: string;
-  // champs ajoutés dans spending.json (déjà en camelCase)
+  currency?:string;
+  foreignAmount?:number | null; 
   categoryID?: number | null;
   subCategoryID?: number | null;
   allocComment?: string;
@@ -59,8 +60,8 @@ export function transformSpendingRaw(
       partyID: row.partyID ?? null,
       amount: row.amount,
       owner: row.expenseOwner ?? "",
-
-      // nouveaux champs à véhiculer
+      currency: row.currency ?? "CHF",
+      foreignAmount: row.foreignAmount ?? null,
       categoryID: row.categoryID ?? null,
       subCategoryID: row.subCategoryID ?? null,
       allocComment: row.allocComment ?? "",
