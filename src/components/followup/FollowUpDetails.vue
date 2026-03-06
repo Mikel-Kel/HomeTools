@@ -208,11 +208,15 @@ function monthStatusClass(key: string, total: number) {
   if (budget == null) return "neutral";
 
   if (props.nature === "E") {
-    return total > budget ? "over" : "neutral";
+    if (total > budget) return "over"
+    if (total < budget) return "under"
+    return "neutral"
   }
 
   if (props.nature === "I") {
-    return total < budget ? "under" : "neutral";
+    if (total < budget) return "over"
+    if (total > budget) return "under"
+    return "neutral"
   }
 
   return "neutral";

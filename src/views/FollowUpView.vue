@@ -460,17 +460,26 @@ function allocatedClass(
   allocated: number,
   budget?: number
 ): string {
+
   if (budget === undefined) return "allocated-neutral";
 
-  if (natureFilter.value === "E") {
+  const nature = currentNature.value;
+
+  // Expenses → dépasser le budget est mauvais
+  if (nature === "E") {
     return allocated > budget
       ? "allocated-bad"
       : "allocated-good";
   }
 
-  return allocated < budget
-    ? "allocated-bad"
-    : "allocated-good";
+  // Income → ne pas atteindre le budget est mauvais
+  if (nature === "I") {
+    return allocated < budget
+      ? "allocated-bad"
+      : "allocated-good";
+  }
+
+  return "allocated-neutral";
 }
 
 /* =========================
@@ -844,6 +853,7 @@ watch(
               :budget="totalItem.budget"
               :scale="scale"
               :spreadLimit="followUpSpreadLimit"
+              :nature="currentNature === '-' ? null : currentNature"
             />
           </div>
 
@@ -886,6 +896,7 @@ watch(
             :budget="displayedBudget(item)"
             :scale="scale"
             :spreadLimit="followUpSpreadLimit"
+            :nature="currentNature === '-' ? null : currentNature"
           />
         </div>
 

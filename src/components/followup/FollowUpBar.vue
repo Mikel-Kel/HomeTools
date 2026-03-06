@@ -8,7 +8,8 @@ const props = defineProps<{
   amount: number;
   budget?: number;
   scale: { min: number; max: number };
-  spreadLimit?: number; // %
+  spreadLimit?: number;
+  nature?: "E" | "I" | null;
 }>();
 
 /* =========================
@@ -16,6 +17,18 @@ const props = defineProps<{
 ========================= */
 const delta = computed(() => {
   if (props.budget === undefined) return 0;
+
+  // Expenses → budget - amount
+  if (props.nature === "E") {
+    return props.budget - props.amount;
+  }
+
+  // Income → amount - budget
+  if (props.nature === "I") {
+    return props.amount - props.budget;
+  }
+
+  // fallback
   return props.budget - props.amount;
 });
 
