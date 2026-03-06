@@ -86,6 +86,7 @@ const selectedCategory = ref<string>("*");
 const selectedSubCategory = ref<string | null>(null);
 
 const followUpRaw = ref<FollowUpFile | null>(null);
+const followUpDetailsRaw = ref<any | null>(null);  
 const budgetRaw = ref<BudgetFile | null>(null);
 
 const analysisScope = ref<AnalysisScope>("YTD");
@@ -156,6 +157,29 @@ function selectSubCategory(id: number) {
 function getMonthIndex(): number {
   return new Date().getMonth() + 1;
 }
+
+const currentMonthDetails = computed(() => {
+  if (!followUpDetailsRaw.value) return new Map<number, number>();
+
+  const month = getMonthIndex();
+
+  const map = new Map<number, number>();
+
+  for (const it of followUpDetailsRaw.value.items) {
+
+    const d = new Date(it.allocationDate);
+    const m = d.getMonth() + 1;
+
+    if (m !== month) continue;
+
+    map.set(
+      it.subCategoryId,
+      (map.get(it.subCategoryId) ?? 0) + it.amount
+    );
+  }
+
+  return map;
+});
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString("fr-CH", {
@@ -343,11 +367,21 @@ const items = computed<FollowUpItem[]>(() => {
         if (!yearData) return null;
 
         const amount = yearData.items.reduce(
-          (s, i) =>
-            s +
-            (analysisScope.value === "MTD"
-              ? i.monthToDate
-              : i.amount),
+          (s, i) => {
+
+            if (analysisScope.value === "MTD")
+              return s + i.monthToDate;
+
+            if (analysisScope.value === "YTD")
+              return (
+                s +
+                i.monthToDate +
+                (currentMonthDetails.value.get(i.subCategoryId) ?? 0)
+              );
+
+            return s + i.amount;
+
+          },
           0
         );
 
@@ -392,7 +426,10 @@ const items = computed<FollowUpItem[]>(() => {
         amount:
           analysisScope.value === "MTD"
             ? i.monthToDate
-            : i.amount,
+            : analysisScope.value === "YTD"
+              ? i.monthToDate +
+                (currentMonthDetails.value.get(i.subCategoryId) ?? 0)
+              : i.amount,
       };
     })
     .filter((v): v is FollowUpItem => v !== null)
@@ -591,6 +628,17 @@ const detailsMonthlyBudgetMap = computed<Record<string, number>>(() => {
   return map;
 });
 
+async function loadFollowUpDetails() {
+  const folderId =
+    driveState.value!.folders.allocations.budget;
+
+  const files = await listFilesInFolder(folderId);
+  const file = files.find(f => f.name === "FollowUpDetails.json");
+  if (!file) throw new Error("FollowUpDetails.json not found");
+
+  followUpDetailsRaw.value = await readJSON<any>(file.id);
+}
+
 const detailsNature = computed<"E" | "I" | null>(() => {
   if (!activeCategory.value) return null;
   const n = activeCategory.value.nature;
@@ -620,6 +668,7 @@ watch(
 
     await loadFollowUp();
     await loadBudget();
+    await loadFollowUpDetails();
   },
   { immediate: true }
 );
