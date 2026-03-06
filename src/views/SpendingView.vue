@@ -534,8 +534,20 @@ onBeforeUnmount(() => {
                 ]"
                 @click.stop="showFxPopover($event, record)"
               >
-                <span v-if="isForeign(record)" class="fx-dot"></span>
-                {{ formatAmount(record.amount) }}
+                <span v-if="isForeign(record)" class="fx-code">
+                  {{ record.currency }}
+                </span>
+
+                <span>
+                  {{
+                    isForeign(record)
+                      ? record.foreignAmount?.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        })
+                      : formatAmount(record.amount)
+                  }}
+                </span>
               </td>  
             </tr>
           </tbody>
@@ -550,11 +562,7 @@ onBeforeUnmount(() => {
   :style="{ top: fxPopover.y + 'px', left: fxPopover.x + 'px' }"
   @click.stop="closeFxPopover"
 >
-  {{ fxPopover.record.foreignAmount?.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-  }) }}
-  {{ fxPopover.record.currency }}
+  {{ formatAmount(fxPopover.record.amount) }} CHF
 </div>
 </template>
 
@@ -907,7 +915,7 @@ onBeforeUnmount(() => {
 ========================================================= */
 
 /* Petit rond bleu */
-.fx-dot {
+/*.fx-dot {
   display: inline-block;
   width: 6px;
   height: 6px;
@@ -916,6 +924,16 @@ onBeforeUnmount(() => {
   margin-right: 6px;
   vertical-align: middle;
   opacity: 0.9;
+}*/
+/* Devise affichée avant le montant */
+.fx-code {
+  display: inline-block;
+  min-width: 34px; /* garde l'alignement vertical */
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-right: 6px;
+  text-align: left;
 }
 
 /* Cell clickable */
