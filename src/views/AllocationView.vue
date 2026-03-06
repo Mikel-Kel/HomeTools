@@ -240,6 +240,24 @@ const subCategories = computed(() =>
 );
 
 /* =========================
+   Currency display (if present)
+========================= */
+const currencyAmount = computed(() => {
+  const foreignAmount = recordSafe.value.foreignAmount;
+  if (
+    foreignAmount != null &&
+    foreignAmount !== 0 &&
+    recordSafe.value.currency
+  ) {
+    return {
+      amount: foreignAmount,
+      code: recordSafe.value.currency,
+    };
+  }
+  return null;
+});
+
+/* =========================
    Helpers
 ========================= */
 function categoryLabel(id: number | null) {
@@ -330,8 +348,16 @@ function closeView() {
       <div class="record-amounts">
         <div class="amount-box total">
           <div class="amount-label">Total</div>
-          <div class="amount-value">
-            {{ formatAmount(Math.abs(recordSafe.amount)) }}
+          <div class="amount-value amount-with-currency">
+            <span>
+              {{ formatAmount(Math.abs(recordSafe.amount)) }}
+            </span>
+            <span
+              v-if="currencyAmount"
+              class="currency-amount"
+            >
+              {{ formatAmount(Math.abs(currencyAmount.amount)) }} {{ currencyAmount.code }}
+            </span>
           </div>
         </div>
 
@@ -566,6 +592,18 @@ function closeView() {
 .amount-value {
   font-size: 1.2rem;
   font-weight: 600;
+}
+.amount-with-currency {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.currency-amount {
+  font-size: 1.1rem;
+  font-weight: 600;
+  opacity: 0.9;
+  color: var(--primary);
+  white-space: nowrap;
 }
 .amount-box.total {
   color: var(--text);

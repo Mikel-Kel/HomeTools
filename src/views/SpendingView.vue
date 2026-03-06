@@ -175,7 +175,11 @@ function openFollowUp() {
 }
 
 function isForeign(record: SpendingWithStatus) {
-  return record.foreignAmount != null;
+  return (
+    record.foreignAmount != null &&
+    record.currency &&
+    record.currency !== "CHF"
+  );
 }
 
 const fxPopover = ref<{
