@@ -182,7 +182,7 @@ const currentMonthDetails = computed(() => {
   return map;
 });
 
-function scopedFollowUpAmount(i: FollowUpYearItem): number {
+function scopedFollowUpAmount(i: FollowUpYearItem, categoryId: number): number {
   if (analysisScope.value === "FULL") {
     return i.amount;
   }
@@ -192,7 +192,7 @@ function scopedFollowUpAmount(i: FollowUpYearItem): number {
   }
 
   // YTD = MTD + mois courant
-  return i.monthToDate + (currentMonthDetails.value.get(i.subCategoryId) ?? 0);
+  return i.monthToDate + (currentMonthDetails.value.get(`${categoryId}:${i.subCategoryId}`) ?? 0);
 }
 
 function formatDate(d: Date): string {
@@ -381,7 +381,7 @@ const items = computed<FollowUpItem[]>(() => {
         if (!yearData) return null;
 
         const amount = yearData.items.reduce(
-          (s, i) => s + scopedFollowUpAmount(i),
+          (s, i) => s + scopedFollowUpAmount(i, cat.id),
           0
         );
 
@@ -423,7 +423,7 @@ const items = computed<FollowUpItem[]>(() => {
       return {
         id: String(sub.id),
         label: sub.label,
-        amount: scopedFollowUpAmount(i),
+        amount: scopedFollowUpAmount(i, catId),
       };
     })
     .filter((v): v is FollowUpItem => v !== null)
