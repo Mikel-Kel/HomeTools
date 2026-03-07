@@ -18,8 +18,8 @@ export interface SpendingRecord {
   owner: string;
 
   // 🔵 NOUVEAU — multi-devise
-  currency: string;            // "CHF", "EUR", "USD", etc.
-  foreignAmount: number | null; // Montant original si != CHF
+  currency?: string;            // "CHF", "EUR", "USD", etc.
+  foreignAmount?: number | null; // Montant original si != CHF
 
   // 🔽 additional fields to ease allocation process
   categoryID: number | null;

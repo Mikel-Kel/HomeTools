@@ -157,13 +157,12 @@ function selectSubCategory(id: number) {
 function getMonthIndex(): number {
   return new Date().getMonth() + 1;
 }
-
 const currentMonthDetails = computed(() => {
-  if (!followUpDetailsRaw.value) return new Map<number, number>();
+  if (!followUpDetailsRaw.value) return new Map<string, number>();
 
   const month = getMonthIndex();
 
-  const map = new Map<number, number>();
+  const map = new Map<string, number>();
 
   for (const it of followUpDetailsRaw.value.items) {
 
@@ -172,14 +171,29 @@ const currentMonthDetails = computed(() => {
 
     if (m !== month) continue;
 
+    const key = `${it.categoryId}:${it.subCategoryId}`;
+
     map.set(
-      it.subCategoryId,
-      (map.get(it.subCategoryId) ?? 0) + it.amount
+      key,
+      (map.get(key) ?? 0) + it.amount
     );
   }
 
   return map;
 });
+
+function scopedFollowUpAmount(i: FollowUpYearItem): number {
+  if (analysisScope.value === "FULL") {
+    return i.amount;
+  }
+
+  if (analysisScope.value === "MTD") {
+    return i.monthToDate;
+  }
+
+  // YTD = MTD + mois courant
+  return i.monthToDate + (currentMonthDetails.value.get(i.subCategoryId) ?? 0);
+}
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString("fr-CH", {
@@ -367,21 +381,7 @@ const items = computed<FollowUpItem[]>(() => {
         if (!yearData) return null;
 
         const amount = yearData.items.reduce(
-          (s, i) => {
-
-            if (analysisScope.value === "MTD")
-              return s + i.monthToDate;
-
-            if (analysisScope.value === "YTD")
-              return (
-                s +
-                i.monthToDate +
-                (currentMonthDetails.value.get(i.subCategoryId) ?? 0)
-              );
-
-            return s + i.amount;
-
-          },
+          (s, i) => s + scopedFollowUpAmount(i),
           0
         );
 
@@ -423,13 +423,7 @@ const items = computed<FollowUpItem[]>(() => {
       return {
         id: String(sub.id),
         label: sub.label,
-        amount:
-          analysisScope.value === "MTD"
-            ? i.monthToDate
-            : analysisScope.value === "YTD"
-              ? i.monthToDate +
-                (currentMonthDetails.value.get(i.subCategoryId) ?? 0)
-              : i.amount,
+        amount: scopedFollowUpAmount(i),
       };
     })
     .filter((v): v is FollowUpItem => v !== null)
