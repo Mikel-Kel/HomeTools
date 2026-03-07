@@ -2,25 +2,29 @@ export type DeviceType =
   | "Mac"
   | "iPad"
   | "iPhone"
-  | "other";
+  | "Other";
 
 export function detectDevice(): DeviceType {
 
   const ua = navigator.userAgent.toLowerCase();
+  const touch = navigator.maxTouchPoints || 0;
 
-  if (ua.includes("macintosh")) {
-    return "Mac";
-  }
-
-  if (ua.includes("ipad")) {
-    return "iPad";
-  }
-
+  /* iPhone */
   if (ua.includes("iphone")) {
     return "iPhone";
   }
 
-  return "other";
+  /* iPad (Safari/PWA se présente comme Mac) */
+  if (ua.includes("macintosh") && touch > 1) {
+    return "iPad";
+  }
+
+  /* Mac */
+  if (ua.includes("macintosh")) {
+    return "Mac";
+  }
+
+  return "Other";
 }
 
 export function isPWA(): boolean {
