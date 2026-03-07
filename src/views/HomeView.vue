@@ -2,6 +2,13 @@
 import { computed, onMounted } from "vue";
 
 /* =========================
+   Device detection
+========================= */
+import { detectDevice } from "@/utils/deviceDetection";
+
+const device = detectDevice();
+
+/* =========================
    App parameters
 ========================= */
 import { useAppParameters } from "@/composables/useAppParameters";
@@ -61,8 +68,8 @@ const appVersion = __APP_VERSION__;
           <span class="status-text">
             {{
               uiDriveStatus === "connected"
-                ? "Home tools ready"
-                : "Home tools not available, please login"
+                ? `Home tools ready (${device})`
+                : `Home tools not available (${device})`
             }}
           </span>
         </div>
