@@ -1,7 +1,17 @@
 // src/composables/useAppParameters.ts
+
 import { ref } from "vue";
+
 import { useDrive } from "@/composables/useDrive";
-import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
+
+import {
+  listFiles,
+  loadJSONFromFolder
+} from "@/services/google/driveRepository";
+
+/* =========================
+   Types
+========================= */
 
 export interface ArchiveFolderConfig {
   id: number;
@@ -16,43 +26,87 @@ export interface AppParameters {
   archiveFolders?: ArchiveFolderConfig[];
 }
 
+/* =========================
+   State (singleton)
+========================= */
+
 const appParameters = ref<AppParameters | null>(null);
+
 const loading = ref(false);
 const error = ref<string | null>(null);
 
+/* =========================
+   Composable
+========================= */
+
 export function useAppParameters() {
-  const { driveState } = useDrive();
+
+  const { folders } = useDrive();
 
   async function load() {
-    if (!driveState.value) return;
+
     if (appParameters.value) return;
 
     loading.value = true;
     error.value = null;
 
     try {
-      const folderId = driveState.value.folders.settings;
-      const files = await listFilesInFolder(folderId);
 
-      const file = files.find(f => f.name === "AppParameters.json");
+      const folderId = folders.value.settings;
+
+      const files = await listFiles(folderId);
+
+      const file = files.find(
+        f => f.name === "AppParameters.json"
+      );
+
       if (!file) {
+
         appParameters.value = {};
+
         return;
+
       }
 
-      appParameters.value = await readJSON<AppParameters>(file.id);
-    } catch (e: any) {
-      error.value = e.message ?? "Unable to load AppParameters.json";
-      appParameters.value = {};
-    } finally {
-      loading.value = false;
+      const data =
+        await loadJSONFromFolder<AppParameters>(
+          folderId,
+          "AppParameters.json"
+        );
+
+      appParameters.value =
+        data ?? {};
+
     }
+
+    catch (e: any) {
+
+      error.value =
+        e?.message ??
+        "Unable to load AppParameters.json";
+
+      appParameters.value = {};
+
+    }
+
+    finally {
+
+      loading.value = false;
+
+    }
+
   }
 
   return {
+
     appParameters,
+
     load,
+
     loading,
-    error,
+
+    error
+
   };
+
 }

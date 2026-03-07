@@ -5,8 +5,29 @@ import { computed, onMounted } from "vue";
    Device detection
 ========================= */
 import { detectDevice } from "@/utils/deviceDetection";
-
 const device = detectDevice();
+
+import { useStorageBackend } from "@/composables/useStorageBackend";
+const { backend } = useStorageBackend();
+
+import { pickLocalDirectory, getLocalDirectory } from "@/services/local/localDirectory"
+
+const uiDriveStatus = computed(() => {
+
+  if (backend.value === "LOCAL_DRIVE") {
+
+    if (getLocalDirectory()) return "connected"
+
+    return "disconnected"
+
+  }
+
+  return driveStatus.value === "CONNECTED"
+    ? "connected"
+    : "disconnected"
+
+})
+
 
 /* =========================
    App parameters
@@ -30,14 +51,6 @@ const { toggle, theme } = useTheme();
 import { useDrive } from "@/composables/useDrive";
 
 const { driveStatus } = useDrive();
-
-/*
-  On adapte pour le CSS existant :
-  "connected" | "disconnected"
-*/
-const uiDriveStatus = computed<"connected" | "disconnected">(() =>
-  driveStatus.value === "CONNECTED" ? "connected" : "disconnected"
-);
 
 /* =========================
    Components
@@ -66,11 +79,19 @@ const appVersion = __APP_VERSION__;
         <div class="drive-status" :class="uiDriveStatus">
           <span class="dot"></span>
           <span class="status-text">
-            {{
-              uiDriveStatus === "connected"
-                ? `Home tools ready (${device})`
-                : `Home tools not available (${device})`
-            }}
+
+            <template v-if="backend === 'LOCAL_DRIVE' && !getLocalDirectory()">
+              Select HomeTools folder (Mac)
+            </template>
+
+            <template v-else-if="uiDriveStatus === 'connected'">
+              Home tools ready ({{ device }} • {{ backend }})
+            </template>
+
+            <template v-else>
+              Home tools not available ({{ device }})
+            </template>
+
           </span>
         </div>
       </div>

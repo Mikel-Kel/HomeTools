@@ -1,4 +1,8 @@
 import { createRouter, createWebHashHistory } from "vue-router";
+import LocalFolderRequiredView from "@/views/LocalFolderRequiredView.vue";
+import { getLocalDirectory } from "@/services/local/localDirectory";
+import { detectStorageBackend } from "@/utils/storageBackend";
+
 import { useDrive } from "@/composables/useDrive";
 import { ensureAppVersionChecked } from "@/services/version/versionGuard";
 
@@ -18,6 +22,12 @@ const router = createRouter({
       name: "home",
       component: HomeView,
       meta: { level: 0, title: "Home" },
+    },
+    {
+      path: "/select-folder",
+      name: "selectFolder",
+      component: LocalFolderRequiredView,
+      meta: { level: 0, title: "Select folder" },
     },
     {
       path: "/authentication",
@@ -63,7 +73,31 @@ const router = createRouter({
    BEFORE — Access control
 ========================= */
 router.beforeEach(async (to, _from, next) => {
+
   document.title = (to.meta?.title as string) ?? "HomeTools";
+
+  const backend = detectStorageBackend();
+
+  /* =========================
+     LOCAL DRIVE MODE
+  ========================= */
+
+  if (backend === "LOCAL_DRIVE") {
+
+    const folder = getLocalDirectory();
+
+    // dossier non sélectionné → forcer page select-folder
+    if (!folder && to.name !== "selectFolder") {
+      return next({ name: "selectFolder" });
+    }
+
+    // dossier sélectionné → accès libre
+    return next();
+  }
+
+  /* =========================
+     GOOGLE DRIVE MODE
+  ========================= */
 
   if (!to.meta?.requiresDrive) {
     return next();
@@ -71,15 +105,16 @@ router.beforeEach(async (to, _from, next) => {
 
   const drive = useDrive();
 
-  // Déjà prêt → OK
+  // déjà prêt
   if (drive.driveStatus.value === "CONNECTED" && drive.driveState.value) {
     return next();
   }
 
-  // Tentative de connexion Drive
+  // session expirée
   if (drive.driveStatus.value === "EXPIRED") {
     return next({ name: "authentication" });
   }
+
   try {
     await drive.connect();
 
@@ -87,7 +122,7 @@ router.beforeEach(async (to, _from, next) => {
       return next();
     }
   } catch {
-    // ignore, handled below
+    // ignore
   }
 
   console.warn("🚫 Navigation blocked — Drive not ready", {
@@ -96,21 +131,28 @@ router.beforeEach(async (to, _from, next) => {
   });
 
   return next({ name: "authentication" });
+
 });
 
 /* =========================
    AFTER — Version check
 ========================= */
 router.afterEach(async () => {
+
   try {
+
     await ensureAppVersionChecked();
+
   } catch (err: any) {
+
     alert(
       "⚠️ Application version inconsistency detected.\n\n" +
       err.message +
       "\n\nPlease refresh your browser and try again."
     );
+
   }
+
 });
 
 export default router;

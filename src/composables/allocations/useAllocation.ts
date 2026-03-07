@@ -1,137 +1,50 @@
-/**
- * ============================================================
- * Allocation — Business rules & state machine
- * ============================================================
- *
- * CORE PRINCIPLE
- * --------------
- * Allocation is driven by a single deterministic state machine.
- * UI buttons (Save / Release) are derived ONLY from this state.
- *
- *
- * STATES
- * ------
- * EMPTY     : no allocation yet
- * EDITING   : allocations exist, remaining ≠ 0
- * BALANCED  : allocations exist, remaining = 0, not drafted
- * DRAFTED   : draft saved in Drive (drafts/)
- * READONLY  : released allocation loaded (processed or not), read-only
- * BUSY      : transient state during async Drive operations
- *
- *
- * BUSINESS RULES
- * --------------
- *
- * R1 — Save draft
- *      A draft can be saved IF AND ONLY IF:
- *        - remaining === 0
- *        - state === BALANCED
- *
- * R2 — Release
- *      A draft can be released IF AND ONLY IF:
- *        - state === DRAFTED
- *
- * R3 — Draft invalidation
- *      Any user modification AFTER a draft exists
- *      (currently: allocation removal)
- *      MUST:
- *        - delete the draft file from Drive
- *        - revert state to EDITING / BALANCED
- *
- * R4 — Post-save behavior
- *      After a successful saveDraft:
- *        - state becomes DRAFTED
- *        - Save button is disabled
- *        - Release button becomes available
- *
- * R5 — Auto-save
- *      When user actions lead to remaining === 0
- *      (typically after the last ADD),
- *      a draft is automatically saved.
- *
- * R6 — Released allocations
- *      When AllocationView is opened:
- *        - if a draft exists → it is loaded (editable)
- *        - else if a released file exists → it is loaded READ-ONLY
- *
- *      Released files are NEVER moved back to drafts.
- *      Their lifecycle is handled exclusively by backend/batch processes
- *      via the `processed` flag.
- *
-  * R7 — Balanced completion (UI responsibility)
- *      When an allocation becomes BALANCED as a result of
- *      a user action in AllocationView:
- *        - the allocation is auto-saved (R5)
- *        - the view may automatically close and return
- *          to SpendingView
- *
- *      This behavior is:
- *        - NOT handled by this composable
- *        - explicitly implemented in the view layer
- *        - triggered only by a user-driven transition
- *          to the BALANCED state (not on initial load)
- * 
- * TECHNICAL GUARANTEES
- * --------------------
- * - All async operations are serialized via runExclusive()
- * - State transitions are explicit and centralized
- * - No watcher-based side effects
- * - Released files are immutable from the UI
- * - UI derives from state, never the opposite
- * - Navigation and view lifecycle decisions are handled
- *   exclusively by the view layer (AllocationView)
- *
- * ============================================================
- */
-
 import { ref, computed } from "vue";
+
 import {
-  listFilesInFolder,
-  readJSON,
-  writeJSON,
-  deleteFile,
-} from "@/services/google/googleDrive";
+  listFiles,
+  loadJSONFromFolder,
+  saveJSONToFolder,
+  deleteFileFromFolder
+} from "@/services/google/driveRepository";
+
 import { useDrive } from "@/composables/useDrive";
-import { googleAuthenticated } from "@/services/google/googleInit";
 
 /* =========================
    Types
 ========================= */
+
 export interface Allocation {
   id: string;
   categoryID: number | null;
   subCategoryID: number | null;
   comment: string;
   amount: number;
-  allocationDate: string | null; // YYYY-MM-DD ou null
-  allocatedTagID: number | null;   // tag choisi (peut rester null)
+  allocationDate: string | null;
+  allocatedTagID: number | null;
 }
 
 type AllocationState =
-  | "EMPTY"     // aucune allocation
-  | "EDITING"   // remaining != 0
-  | "BALANCED"  // remaining == 0, pas drafté
-  | "DRAFTED"   // draft sauvegardé
-  | "READONLY"   // draft sauvegardé
-  | "BUSY";     // transition
+  | "EMPTY"
+  | "EDITING"
+  | "BALANCED"
+  | "DRAFTED"
+  | "READONLY"
+  | "BUSY";
 
 const loading = ref(true);
 
 /* =========================
-   Helpers Drive
+   Helpers
 ========================= */
-/*async function findFileByName(folderId: string, filename: string) {
-  const files = await listFilesInFolder(folderId);
-  return files.find((f) => f.name === filename) ?? null;
-}
-*/
+
 async function findFileByName(folderId: string, filename: string) {
 
-  const files = await listFilesInFolder(folderId);
+  const files = await listFiles(folderId);
 
   const found = files.find(f => f.name === filename) ?? null;
 
   return found;
+
 }
 
 function todayISODate() {
@@ -141,88 +54,108 @@ function todayISODate() {
 /* =========================
    Composable
 ========================= */
-export function useAllocation(spendingId: string, spendingAmount: number, partyID: number | null, spendingDate: string) {
-  const { driveState } = useDrive();
+
+export function useAllocation(
+  spendingId: string,
+  spendingAmount: number,
+  partyID: number | null,
+  spendingDate: string
+) {
+
+  const { folders } = useDrive();
 
   /* =========================
-     Drive availability
+     Mutex
   ========================= */
-  function driveAvailable(): boolean {
-    return !!driveState.value && googleAuthenticated.value;
-  }
 
-  /* =========================
-     Mutex (serialize async ops)
-     → évite les courses "click + autosave + delete"
-  ========================= */
   let chain = Promise.resolve();
+
   function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+
     const next = chain.then(fn, fn);
-    // ne casse pas la chaîne en cas d’erreur
+
     chain = next.then(
       () => undefined,
       () => undefined
     ) as unknown as Promise<void>;
+
     return next;
+
   }
 
   /* =========================
-     State (UI)
+     State
   ========================= */
+
   const state = ref<AllocationState>("EMPTY");
+
   const busy = ref(false);
   const busyAction = ref<"load" | "save" | null>(null);
-  
+
   /* =========================
-     Domain data
+     Domain
   ========================= */
+
   const allocations = ref<Allocation[]>([]);
 
   const categoryID = ref<number | null>(null);
   const subCategoryID = ref<number | null>(null);
   const comment = ref<string>("");
+
   const amount = ref<number>(Math.abs(spendingAmount));
   const allocationDate = ref<string | null>(null);
 
   /* =========================
-     Computed amounts
+     Computed
   ========================= */
-  // Total à allouer = toujours positif (règle ii)
-  const totalToAllocate = computed(() => Math.abs(spendingAmount));
 
-  // Somme des montants alloués = somme SIGNÉE, telle que saisie (règle iii + iv)
+  const totalToAllocate = computed(() =>
+    Math.abs(spendingAmount)
+  );
+
   const totalAllocated = computed(() =>
     Number(
-      allocations.value.reduce((s, a) => s + Number(a.amount || 0), 0).toFixed(2)
+      allocations.value
+        .reduce((s, a) => s + Number(a.amount || 0), 0)
+        .toFixed(2)
     )
   );
 
-  // Remaining (signé) = total positif - somme des allocations (tenant compte du signe)
-  // (règle iii)
   const remainingAmount = computed(() =>
-    Number((totalToAllocate.value - totalAllocated.value).toFixed(2))
+    Number(
+      (totalToAllocate.value - totalAllocated.value)
+        .toFixed(2)
+    )
   );
 
-  const isBalanced = computed(() => remainingAmount.value === 0);
-
-
-  /* =========================
-     UI flags (DERIVED ONLY)
-     - pas des états métier supplémentaires
-  ========================= */
-  const hasDraft = computed(() => state.value === "DRAFTED");
-  const canSaveDraft = computed(() => state.value === "BALANCED");
-  const canRelease = computed(() => state.value === "DRAFTED");
+  const isBalanced = computed(() =>
+    remainingAmount.value === 0
+  );
 
   /* =========================
-     Local state recomputation
-     (pure, sans Drive)
+     UI flags
   ========================= */
-/* function recomputeLocalState(base?: AllocationState) {
+
+  const hasDraft = computed(() =>
+    state.value === "DRAFTED"
+  );
+
+  const canSaveDraft = computed(() =>
+    state.value === "BALANCED"
+  );
+
+  const canRelease = computed(() =>
+    state.value === "DRAFTED"
+  );
+
+  /* =========================
+     State recomputation
+  ========================= */
+
+  function recomputeLocalState(base?: AllocationState) {
+
     const current = base ?? state.value;
 
-    // 🔑 DRAFTED est un état métier figé
-    // BUSY ne doit JAMAIS bloquer une recomposition
     if (current === "DRAFTED") return;
 
     if (allocations.value.length === 0) {
@@ -230,60 +163,39 @@ export function useAllocation(spendingId: string, spendingAmount: number, partyI
       return;
     }
 
-    state.value = isBalanced.value ? "BALANCED" : "EDITING";
-  }
-*/
-function recomputeLocalState(base?: AllocationState) {
-  const current = base ?? state.value;
+    state.value =
+      isBalanced.value
+        ? "BALANCED"
+        : "EDITING";
 
-  if (current === "DRAFTED") {
-    return;
   }
-
-  if (allocations.value.length === 0) {
-    state.value = "EMPTY";
-    return;
-  }
-
-  state.value = isBalanced.value ? "BALANCED" : "EDITING";
-}
 
   /* =========================
-     Draft file helpers
+     Draft helpers
   ========================= */
+
   async function deleteDraftFileIfExists(): Promise<void> {
 
-    if (!driveAvailable()) {
-      console.warn("🚫 Drive not available");
-      console.groupEnd();
-      return;
-    }
+    const folder =
+      folders.value.allocations.drafts;
 
-    const folder = driveState.value!.folders.allocations.drafts;
     const filename = `${spendingId}.json`;
-    const existing = await findFileByName(folder, filename);
 
-    if (!existing) {
-      console.warn("❌ Draft file NOT FOUND → nothing deleted");
-      console.groupEnd();
-      return;
-    }
-
-    await deleteFile(existing.id);
+    await deleteFileFromFolder(
+      folder,
+      filename
+    );
 
   }
 
-
   async function saveDraftInternal(): Promise<void> {
-    if (!driveAvailable()) return;
 
-    const draftsFolder = driveState.value!.folders.allocations.drafts;
+    const draftsFolder =
+      folders.value.allocations.drafts;
+
     const filename = `${spendingId}.json`;
 
-    // upsert (évite doublons)
-    const existing = await findFileByName(draftsFolder, filename);
-
-    await writeJSON(
+    await saveJSONToFolder(
       draftsFolder,
       filename,
       {
@@ -292,262 +204,411 @@ function recomputeLocalState(base?: AllocationState) {
         processed: false,
         partyID: partyID ?? null,
         savedAt: new Date().toISOString(),
-        allocations: allocations.value,
-      },
-      existing?.id
+        allocations: allocations.value
+      }
     );
+
   }
 
   /* =========================
-     Public actions
+     Load
   ========================= */
 
   async function loadDraft(): Promise<void> {
-    loading.value = true; // 🔑 cycle de vie UI : chargement initial
+
+    loading.value = true;
 
     return runExclusive(async () => {
-      if (!driveAvailable()) {
-        loading.value = false;
-        return;
-      }
 
       busy.value = true;
       busyAction.value = "load";
 
       try {
-        const draftsFolder = driveState.value!.folders.allocations.drafts;
-        const releasedFolder = driveState.value!.folders.allocations.released;
-        const filename = `${spendingId}.json`;
 
-        /* =====================================================
-          1. Tentative : DRAFT
-        ===================================================== */
-        let file = await findFileByName(draftsFolder, filename);
+        const draftsFolder =
+          folders.value.allocations.drafts;
 
-        if (file) {
-          const raw = await readJSON<any>(file.id);
-          const processed = raw?.processed === true;
+        const releasedFolder =
+          folders.value.allocations.released;
+
+        const filename =
+          `${spendingId}.json`;
+
+        /* ===== DRAFT ===== */
+
+        const draftFile =
+          await findFileByName(
+            draftsFolder,
+            filename
+          );
+
+        if (draftFile) {
+
+          const raw =
+            await loadJSONFromFolder<any>(
+              draftsFolder,
+              filename
+            );
 
           if (!Array.isArray(raw?.allocations)) {
-            // draft invalide → on repart proprement
+
             allocations.value = [];
             state.value = "EMPTY";
             recomputeLocalState();
+
             return;
+
           }
 
-          allocations.value = raw.allocations.map((a: any) => ({
-            id: crypto.randomUUID(),
-            categoryID: a.categoryID ?? null,
-            subCategoryID: a.subCategoryID ?? null,
-            comment: a.comment ?? "",
-            amount: Number(Number(a.amount).toFixed(2)),
-            allocationDate: a.allocationDate ?? null,
-            allocatedTagID: a.allocatedTagID ?? null,
-          }));
+          allocations.value =
+            raw.allocations.map((a: any) => ({
 
-          // draft chargé ⇒ état DRAFTED
+              id: crypto.randomUUID(),
+
+              categoryID:
+                a.categoryID ?? null,
+
+              subCategoryID:
+                a.subCategoryID ?? null,
+
+              comment:
+                a.comment ?? "",
+
+              amount:
+                Number(
+                  Number(a.amount)
+                  .toFixed(2)
+                ),
+
+              allocationDate:
+                a.allocationDate ?? null,
+
+              allocatedTagID:
+                a.allocatedTagID ?? null
+
+            }));
+
           state.value = "DRAFTED";
+
           presetAmount();
+
           return;
+
         }
 
-        /* =====================================================
-          2. Tentative : RELEASED (lecture seule)
-        ===================================================== */
-        const released = await findFileByName(releasedFolder, filename);
+        /* ===== RELEASED ===== */
 
-        if (released) {
-          const raw = await readJSON<any>(released.id);
-          const processed = raw?.processed === true;
+        const releasedFile =
+          await findFileByName(
+            releasedFolder,
+            filename
+          );
+
+        if (releasedFile) {
+
+          const raw =
+            await loadJSONFromFolder<any>(
+              releasedFolder,
+              filename
+            );
 
           if (!Array.isArray(raw?.allocations)) {
+
             allocations.value = [];
             state.value = "EMPTY";
             recomputeLocalState();
+
             return;
+
           }
 
-          allocations.value = raw.allocations.map((a: any) => ({
-            id: crypto.randomUUID(),
-            categoryID: a.categoryID ?? null,
-            subCategoryID: a.subCategoryID ?? null,
-            comment: a.comment ?? "",
-            amount: Number(Number(a.amount).toFixed(2)),
-            allocationDate: a.allocationDate ?? null,
-            allocatedTagID: a.allocatedTagID ?? null,
-          }));
+          allocations.value =
+            raw.allocations.map((a: any) => ({
 
-          // 🔒 lecture seule
+              id: crypto.randomUUID(),
+
+              categoryID:
+                a.categoryID ?? null,
+
+              subCategoryID:
+                a.subCategoryID ?? null,
+
+              comment:
+                a.comment ?? "",
+
+              amount:
+                Number(
+                  Number(a.amount)
+                  .toFixed(2)
+                ),
+
+              allocationDate:
+                a.allocationDate ?? null,
+
+              allocatedTagID:
+                a.allocatedTagID ?? null
+
+            }));
+
           state.value = "READONLY";
+
           presetAmount();
+
           return;
+
         }
 
-        /* =====================================================
-          3. Rien trouvé
-        ===================================================== */
+        /* ===== EMPTY ===== */
+
         allocations.value = [];
         state.value = "EMPTY";
+
         recomputeLocalState();
 
-      } finally {
+      }
+
+      finally {
+
         busy.value = false;
         busyAction.value = null;
-        loading.value = false; // 🔑 fin définitive du "Loading…"
+        loading.value = false;
+
       }
+
     });
+
   }
 
+  /* =========================
+     Add allocation
+  ========================= */
+
   async function addAllocation(): Promise<void> {
+
     return runExclusive(async () => {
-      if (!categoryID.value || !subCategoryID.value) return;
-      if (!Number.isFinite(amount.value) || amount.value === 0) return;
+
+      if (!categoryID.value ||
+          !subCategoryID.value) return;
+
+      if (!Number.isFinite(amount.value) ||
+          amount.value === 0) return;
 
       const normalizedDate =
-        allocationDate.value && allocationDate.value.trim() !== ""
+        allocationDate.value &&
+        allocationDate.value.trim() !== ""
           ? allocationDate.value
           : spendingDate;
 
-      // ✅ on conserve exactement le signe saisi (règle iv)
-      const typed = Number(amount.value.toFixed(2));
+      const typed =
+        Number(amount.value.toFixed(2));
 
       allocations.value.push({
+
         id: crypto.randomUUID(),
-        categoryID: categoryID.value,
-        subCategoryID: subCategoryID.value,
-        comment: comment.value.trim() || "Please comment",
+
+        categoryID:
+          categoryID.value,
+
+        subCategoryID:
+          subCategoryID.value,
+
+        comment:
+          comment.value.trim() ||
+          "Please comment",
+
         amount: typed,
-        allocationDate: normalizedDate,
-        allocatedTagID: null,
+
+        allocationDate:
+          normalizedDate,
+
+        allocatedTagID: null
+
       });
 
       resetForm();
 
       if (state.value === "DRAFTED") {
+
         await deleteDraftFileIfExists();
+
         state.value = "EDITING";
-      } else {
+
+      }
+
+      else {
+
         recomputeLocalState();
+
       }
 
       if (state.value === "BALANCED") {
-        if (!driveAvailable()) return;
 
         busy.value = true;
         busyAction.value = "save";
         state.value = "BUSY";
 
         try {
+
           await saveDraftInternal();
+
           state.value = "DRAFTED";
-        } finally {
+
+        }
+
+        finally {
+
           busyAction.value = null;
           busy.value = false;
+
         }
+
       }
+
     });
+
   }
-  
-  async function removeAllocation(index: number): Promise<void> {
+
+  /* =========================
+     Remove allocation
+  ========================= */
+
+  async function removeAllocation(
+    index: number
+  ): Promise<void> {
+
     return runExclusive(async () => {
-      if (index < 0 || index >= allocations.value.length) return;
+
+      if (index < 0 ||
+          index >= allocations.value.length)
+        return;
 
       allocations.value.splice(index, 1);
+
       presetAmount();
 
-      // 🔑 Si on venait d’un draft, on invalide explicitement l’état
-      const wasDrafted = state.value === "DRAFTED";
+      const wasDrafted =
+        state.value === "DRAFTED";
 
-      if (driveAvailable() && wasDrafted) {
+      if (wasDrafted) {
+
         busy.value = true;
-        busyAction.value = null;
-        state.value = "BUSY";
 
         try {
+
           await deleteDraftFileIfExists();
-        } finally {
-          busy.value = false;
-          busyAction.value = null;
+
         }
+
+        finally {
+
+          busy.value = false;
+
+        }
+
       }
 
-      // 🔑 SORTIE EXPLICITE DE DRAFTED
-      state.value = isBalanced.value ? "BALANCED" : "EDITING";
+      state.value =
+        isBalanced.value
+          ? "BALANCED"
+          : "EDITING";
+
     });
+
   }
 
+  /* =========================
+     Save draft
+  ========================= */
+
   async function saveDraft(): Promise<void> {
+
     return runExclusive(async () => {
-      // R1 : uniquement BALANCED
-      if (state.value !== "BALANCED") return;
-      if (!driveAvailable()) return;
+
+      if (state.value !== "BALANCED")
+        return;
 
       busy.value = true;
       busyAction.value = "save";
       state.value = "BUSY";
 
       try {
+
         await saveDraftInternal();
-        state.value = "DRAFTED"; // R4
-      } finally {
+
+        state.value = "DRAFTED";
+
+      }
+
+      finally {
+
         busy.value = false;
         busyAction.value = null;
+
       }
+
     });
-  }
 
-/* =========================
-     Form helpers
-  ========================= */
-  function presetAmount() {
-    // ✅ l’utilisateur voit un montant "naturel" (positif) à compléter
-    // le signe sera celui qu’il saisira (règle iii + iv)
-    amount.value = Number(Math.abs(remainingAmount.value).toFixed(2));
-  }
-
-  function resetForm() {
-    categoryID.value = null;
-    subCategoryID.value = null;
-    comment.value = "";
-    allocationDate.value=null;
-    presetAmount();
   }
 
   /* =========================
-     Public API
+     Form helpers
   ========================= */
+
+  function presetAmount() {
+
+    amount.value =
+      Number(
+        Math.abs(
+          remainingAmount.value
+        ).toFixed(2)
+      );
+
+  }
+
+  function resetForm() {
+
+    categoryID.value = null;
+    subCategoryID.value = null;
+    comment.value = "";
+    allocationDate.value = null;
+
+    presetAmount();
+
+  }
+
+  /* =========================
+     API
+  ========================= */
+
   return {
-    // state (si tu veux le logger/debug)
+
     state,
 
-    // data
     allocations,
+
     categoryID,
     subCategoryID,
     comment,
     amount,
     allocationDate,
 
-    // computed amounts
     totalAllocated,
     remainingAmount,
     isBalanced,
 
-    // UI flags derived from state
     canSaveDraft,
     canRelease,
     hasDraft,
 
-    // busy
     loading,
     busy,
     busyAction,
 
-    // actions
     loadDraft,
     addAllocation,
     removeAllocation,
-    saveDraft,
+    saveDraft
+
   };
+
 }

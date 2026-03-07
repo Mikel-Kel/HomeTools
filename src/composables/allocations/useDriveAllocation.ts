@@ -1,47 +1,61 @@
 import {
-  listFilesInFolder,
-  readJSON,
-  writeJSON,
-  deleteFile,
-} from "@/services/google/googleDrive";
+  listFiles,
+  loadJSONFromFolder,
+  saveJSONToFolder,
+  deleteFileFromFolder
+} from "@/services/google/driveRepository";
+
 import { useDrive } from "@/composables/useDrive";
 
 export function useAllocationDrive() {
-  const { driveState } = useDrive();
+
+  const { folders } = useDrive();
 
   async function moveReleasedToDraft(spendingId: string) {
-    if (!driveState.value) throw new Error("Drive not ready");
 
-    const releasedFolder = driveState.value.folders.allocations.released;
-    const draftsFolder = driveState.value.folders.allocations.drafts;
+    const releasedFolder = folders.value.allocations.released;
+    const draftsFolder = folders.value.allocations.drafts;
+
     const filename = `${spendingId}.json`;
 
     // 1️⃣ retrouver le fichier released
-    const releasedFiles = await listFilesInFolder(releasedFolder);
-    const releasedFile = releasedFiles.find(f => f.name === filename);
+    const releasedFiles = await listFiles(releasedFolder);
+
+    const releasedFile = releasedFiles.find(
+      f => f.name === filename
+    );
+
     if (!releasedFile) {
       throw new Error("Released allocation not found");
     }
 
     // 2️⃣ lire son contenu
-    const payload = await readJSON<any>(releasedFile.id);
+    const payload = await loadJSONFromFolder<any>(
+      releasedFolder,
+      filename
+    );
 
-    // 3️⃣ écrire dans drafts (⚠️ overwrite autorisé)
-    const draftFiles = await listFilesInFolder(draftsFolder);
-    const existingDraft = draftFiles.find(f => f.name === filename);
+    if (!payload) {
+      throw new Error("Released allocation payload invalid");
+    }
 
-    await writeJSON(
+    // 3️⃣ écrire dans drafts
+    await saveJSONToFolder(
       draftsFolder,
       filename,
-      payload,
-      existingDraft?.id
+      payload
     );
 
     // 4️⃣ supprimer l’original released
-    await deleteFile(releasedFile.id);
+    await deleteFileFromFolder(
+      releasedFolder,
+      filename
+    );
+
   }
 
   return {
     moveReleasedToDraft,
   };
+
 }

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
+
+import { loadJSONFromFolder } from "@/services/google/driveRepository";
 import { useDrive } from "@/composables/useDrive";
 import { useCategories } from "@/composables/useCategories";
 
 /* =========================================================
    TYPES
 ========================================================= */
+
 interface FollowUpDetailItem {
   categoryId: number;
   subCategoryId: number;
@@ -25,7 +27,7 @@ interface FollowUpDetailsFile {
 }
 
 interface MonthGroup {
-  key: string;          // YYYY-MM
+  key: string;
   label: string;
   total: number;
   items: FollowUpDetailItem[];
@@ -34,6 +36,7 @@ interface MonthGroup {
 /* =========================================================
    PROPS
 ========================================================= */
+
 const props = defineProps<{
   year: number;
   categoryIds: number[];
@@ -46,17 +49,21 @@ const props = defineProps<{
 /* =========================================================
    STATE
 ========================================================= */
-const { driveState } = useDrive();
+
+const { folders } = useDrive();
 const categoriesStore = useCategories();
 
 const raw = ref<FollowUpDetailsFile | null>(null);
+
 const loading = ref(false);
 const error = ref<string | null>(null);
 
 /* =========================================================
    LOAD
 ========================================================= */
+
 async function loadDetails() {
+
   if (props.subCategoryId === null) {
     raw.value = null;
     return;
@@ -66,29 +73,51 @@ async function loadDetails() {
   error.value = null;
 
   try {
-    const folderId = driveState.value!.folders.allocations.budget;
-    const files = await listFilesInFolder(folderId);
 
-    const file = files.find(
-      f => f.name === `FollowUpDetails-${props.year}.json`
-    );
+    const folderId =
+      folders.value.allocations.budget;
 
-    if (!file) {
-      throw new Error(`FollowUpDetails-${props.year}.json not found`);
+    const filename =
+      `FollowUpDetails-${props.year}.json`;
+
+    const data =
+      await loadJSONFromFolder<FollowUpDetailsFile>(
+        folderId,
+        filename
+      );
+
+    if (!data) {
+      throw new Error(`${filename} not found`);
     }
 
-    raw.value = await readJSON<FollowUpDetailsFile>(file.id);
+    raw.value = data;
 
-  } catch (e: any) {
-    error.value = e?.message ?? "Unable to load FollowUpDetails";
-    raw.value = null;
-  } finally {
-    loading.value = false;
   }
+
+  catch (e: any) {
+
+    error.value =
+      e?.message ??
+      "Unable to load FollowUpDetails";
+
+    raw.value = null;
+
+  }
+
+  finally {
+
+    loading.value = false;
+
+  }
+
 }
 
 watch(
-  () => [props.year, props.categoryIds, props.subCategoryId],
+  () => [
+    props.year,
+    props.categoryIds,
+    props.subCategoryId
+  ],
   loadDetails,
   { immediate: true }
 );
@@ -96,130 +125,248 @@ watch(
 /* =========================================================
    HELPERS
 ========================================================= */
+
 function fmt(n: number) {
-  return n.toLocaleString("en-GB", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+
+  return n.toLocaleString(
+    "en-GB",
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }
+  );
+
 }
 
 function fmtInt(n: number) {
-  return Math.round(n).toLocaleString("en-GB");
+
+  return Math.round(n)
+    .toLocaleString("en-GB");
+
 }
 
 function monthKey(date: string) {
+
   return date.slice(0, 7);
+
 }
 
 function monthLabel(key: string) {
-  const [y, m] = key.split("-").map(Number);
-  return new Date(y, m - 1).toLocaleDateString("en-GB", {
-    month: "long",
-    year: "numeric",
-  });
+
+  const [y, m] =
+    key.split("-").map(Number);
+
+  return new Date(y, m - 1)
+    .toLocaleDateString(
+      "en-GB",
+      {
+        month: "long",
+        year: "numeric"
+      }
+    );
+
 }
 
-function subCategoryLabel(catId: number, subId: number) {
-  const cat = categoriesStore.getCategory(catId);
+function subCategoryLabel(
+  catId: number,
+  subId: number
+) {
+
+  const cat =
+    categoriesStore.getCategory(catId);
+
   return (
-    cat?.subcategories.find(s => s.id === subId)?.label ??
+    cat?.subcategories
+      .find(s => s.id === subId)
+      ?.label ??
     `#${subId}`
   );
+
 }
 
 /* =========================================================
    FILTERED ITEMS
 ========================================================= */
+
 const filteredItems = computed(() => {
-  if (!raw.value || props.subCategoryId === null) return [];
+
+  if (!raw.value ||
+      props.subCategoryId === null)
+    return [];
 
   return raw.value.items
     .filter(it => {
+
       if (
         props.categoryIds.length &&
-        !props.categoryIds.includes(it.categoryId)
-      ) return false;
+        !props.categoryIds.includes(
+          it.categoryId
+        )
+      )
+        return false;
 
-      if (it.subCategoryId !== props.subCategoryId) return false;
+      if (
+        it.subCategoryId !==
+        props.subCategoryId
+      )
+        return false;
 
-      // 🔥 Scope filter (MTD)
       if (props.maxMonth != null) {
-        const month = Number(it.allocationDate.slice(5, 7));
-        if (month > props.maxMonth) return false;
+
+        const month =
+          Number(
+            it.allocationDate.slice(5, 7)
+          );
+
+        if (month > props.maxMonth)
+          return false;
+
       }
 
       return true;
+
     })
     .sort((a, b) =>
-      b.allocationDate.localeCompare(a.allocationDate)
+      b.allocationDate
+        .localeCompare(a.allocationDate)
     );
+
 });
 
 /* =========================================================
    MONTHLY GROUPS
 ========================================================= */
-const monthlyGroups = computed<MonthGroup[]>(() => {
-  const map = new Map<string, FollowUpDetailItem[]>();
+
+const monthlyGroups =
+computed<MonthGroup[]>(() => {
+
+  const map =
+    new Map<string,
+      FollowUpDetailItem[]
+    >();
 
   for (const it of filteredItems.value) {
-    const key = monthKey(it.allocationDate);
-    if (!map.has(key)) map.set(key, []);
+
+    const key =
+      monthKey(it.allocationDate);
+
+    if (!map.has(key))
+      map.set(key, []);
+
     map.get(key)!.push(it);
+
   }
 
-  return Array.from(map.entries())
+  return Array
+    .from(map.entries())
     .map(([key, list]) => ({
+
       key,
-      label: monthLabel(key),
-      total: list.reduce((s, i) => s + i.amount, 0),
-      items: list.sort((a, b) =>
-        b.allocationDate.localeCompare(a.allocationDate)
-      ),
+
+      label:
+        monthLabel(key),
+
+      total:
+        list.reduce(
+          (s, i) =>
+            s + i.amount,
+          0
+        ),
+
+      items:
+        list.sort((a, b) =>
+          b.allocationDate
+            .localeCompare(a.allocationDate)
+        )
+
     }))
-    .sort((a, b) => b.key.localeCompare(a.key));
+    .sort((a, b) =>
+      b.key.localeCompare(a.key)
+    );
+
 });
 
 /* =========================================================
    COLLAPSE
 ========================================================= */
-const openMonths = ref<Set<string>>(new Set());
+
+const openMonths =
+ref<Set<string>>(new Set());
 
 watch(monthlyGroups, groups => {
+
   if (groups.length) {
-    openMonths.value = new Set([groups[0].key]);
+
+    openMonths.value =
+      new Set([groups[0].key]);
+
   }
+
 });
 
 function toggleMonth(key: string) {
+
   if (openMonths.value.has(key)) {
+
     openMonths.value.delete(key);
-  } else {
-    openMonths.value.add(key);
+
   }
+
+  else {
+
+    openMonths.value.add(key);
+
+  }
+
 }
 
 /* =========================================================
    STATUS
 ========================================================= */
-function monthStatusClass(key: string, total: number) {
-  if (!props.monthlyBudgetMap || !props.nature) return "neutral";
 
-  const budget = props.monthlyBudgetMap[key];
-  if (budget == null) return "neutral";
+function monthStatusClass(
+  key: string,
+  total: number
+) {
+
+  if (
+    !props.monthlyBudgetMap ||
+    !props.nature
+  )
+    return "neutral";
+
+  const budget =
+    props.monthlyBudgetMap[key];
+
+  if (budget == null)
+    return "neutral";
 
   if (props.nature === "E") {
-    if (total > budget) return "over"
-    if (total < budget) return "under"
-    return "neutral"
+
+    if (total > budget)
+      return "over";
+
+    if (total < budget)
+      return "under";
+
+    return "neutral";
+
   }
 
   if (props.nature === "I") {
-    if (total < budget) return "over"
-    if (total > budget) return "under"
-    return "neutral"
+
+    if (total < budget)
+      return "over";
+
+    if (total > budget)
+      return "under";
+
+    return "neutral";
+
   }
 
   return "neutral";
+
 }
 </script>
 

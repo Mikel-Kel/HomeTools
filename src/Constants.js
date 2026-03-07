@@ -1,1 +1,0 @@
-export const ASSET_BASE_PATH = import.meta.env.VITE_ASSET_BASE_PATH || '/assets/';

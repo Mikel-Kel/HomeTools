@@ -1,10 +1,11 @@
 import { ref, computed, type Ref } from "vue";
-import { listFilesInFolder, readJSON } from "@/services/google/googleDrive";
+import { loadJSONFromFolder } from "@/services/google/driveRepository";
 import { useDrive } from "@/composables/useDrive";
 
 /* =========================
    Types
 ========================= */
+
 export type CategoryNature = "-" | "I" | "E";
 export type CategoryDisplayScope = "P" | "S" | "X";
 
@@ -46,26 +47,23 @@ export interface BudgetYear {
 /* =========================
    State (singleton)
 ========================= */
+
 const categories: Ref<Category[]> = ref([]);
 
 /* =========================
    Composable
 ========================= */
+
 export function useCategories() {
-  const { driveState } = useDrive();
+
+  const { folders } = useDrive();
 
   async function load(): Promise<void> {
-    if (!driveState.value) return;
 
-    const folderId = driveState.value.folders.settings;
-    const files = await listFilesInFolder(folderId);
-
-    const file = files.find(f => f.name === "categories.json");
-    if (!file) {
-      throw new Error("categories.json not found in settings");
-    }
-
-    const raw = await readJSON<CategoriesFile>(file.id);
+    const raw = await loadJSONFromFolder<CategoriesFile>(
+      folders.value.settings,
+      "categories.json"
+    );
 
     if (
       !raw ||
@@ -76,7 +74,9 @@ export function useCategories() {
     }
 
     /* JSON already matches Category interface */
+
     categories.value = raw.categories;
+
   }
 
   function getCategory(id: number): Category | undefined {
@@ -92,10 +92,11 @@ export function useCategories() {
   );
 
   return {
-    categories,          // Ref<Category[]>
+    categories,
     load,
     getCategory,
     getSubcategories,
     allSubcategories,
   };
+
 }

@@ -1,425 +1,526 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
-import PageHeader from "@/components/PageHeader.vue";
+import { ref, computed, watch, onMounted } from "vue"
+import PageHeader from "@/components/PageHeader.vue"
 
-import { useDrive } from "@/composables/useDrive";
-import { useRouter } from "vue-router";
+import { useDrive } from "@/composables/useDrive"
+import { useRouter } from "vue-router"
 
-import { useAppParameters } from "@/composables/useAppParameters";
-import { loadJSONFromFolder } from "@/services/google/driveRepository";
+import { useAppParameters } from "@/composables/useAppParameters"
+import { loadJSONFromFolder } from "@/services/google/driveRepository"
 
 /* =========================
    Types
 ========================= */
+
 interface ArchiveItem {
-  tocid: number;
-  folder: string;
-  documentDate: string;
-  dtaDate: string | null;
-  info1: string;
-  info2: string;
-  indicatorDTA: number;
-  physicalName: string;
-  partyID: number;
-  refAmount: number;
-  googleFileId: string;
+  tocid: number
+  folder: string
+  documentDate: string
+  dtaDate: string | null
+  info1: string
+  info2: string
+  indicatorDTA: number
+  physicalName: string
+  partyID: number
+  refAmount: number
+  googleFileId: string
 }
 
 interface ArchiveFile {
-  version: number;
-  generatedAt: string;
-  count: number;
-  items: ArchiveItem[];
+  version: number
+  generatedAt: string
+  count: number
+  items: ArchiveItem[]
 }
 
 interface Party {
-  id: number;
-  label: string;
+  id: number
+  label: string
 }
 
 interface PartyFile {
-  version: number;
-  updatedAt: string;
-  parties: Party[];
+  version: number
+  updatedAt: string
+  parties: Party[]
 }
 
 interface ArchiveFolderConfig {
-  id: number;
-  source: string;
-  label: string;
-  order: number;
+  id: number
+  source: string
+  label: string
+  order: number
 }
 
 interface FolderView {
-  source: string;
-  label: string;
-  order: number;
+  source: string
+  label: string
+  order: number
 }
 
 /* =========================
-   Drive & Parameters
+   Drive
 ========================= */
-const router = useRouter();
-const { driveState, driveStatus } = useDrive();
-const { appParameters } = useAppParameters();
+
+const router = useRouter()
+
+const { folders, driveStatus } = useDrive()
+
+const { appParameters } = useAppParameters()
 
 /* =========================
    Constants
 ========================= */
-const BILLS_FOLDER = "Factures";
+
+const BILLS_FOLDER = "Factures"
 
 /* =========================
    State
 ========================= */
-const loading = ref(false);
-const error = ref<string | null>(null);
-const archive = ref<ArchiveItem[]>([]);
-const parties = ref<Party[]>([]);
 
-const filtersOpen = ref(true);
-const selectedFolder = ref<string | null>(null);
-const selectedDTADate = ref<string | null>(null);
-const searchText = ref("");
+const loading = ref(false)
+const error = ref<string | null>(null)
+
+const archive = ref<ArchiveItem[]>([])
+const parties = ref<Party[]>([])
+
+const filtersOpen = ref(true)
+
+const selectedFolder = ref<string | null>(null)
+const selectedDTADate = ref<string | null>(null)
+
+const searchText = ref("")
 
 /* =========================
-   Party Map (NEW)
+   Party map
 ========================= */
-const partyMap = computed(() => {
-  const map = new Map<number, string>();
-  for (const p of parties.value) {
-    map.set(p.id, p.label);
-  }
-  return map;
-});
 
-function getPartyLabel(partyID: number): string {
-  return partyMap.value.get(partyID) ?? `#${partyID}`;
+const partyMap = computed(() => {
+  const map = new Map<number, string>()
+  for (const p of parties.value) {
+    map.set(p.id, p.label)
+  }
+  return map
+})
+
+function getPartyLabel(partyID: number) {
+  return partyMap.value.get(partyID) ?? `#${partyID}`
 }
 
 /* =========================
-   DTA activation rule
+   Visibility rules
 ========================= */
-const isPayDateVisible = computed(() => {
-  return selectedFolder.value === BILLS_FOLDER;
-});
 
-const isBillsSelected = computed(() => {
-  return selectedFolder.value === BILLS_FOLDER;
-});
+const isPayDateVisible = computed(
+  () => selectedFolder.value === BILLS_FOLDER
+)
+
+const isBillsSelected = computed(
+  () => selectedFolder.value === BILLS_FOLDER
+)
 
 /* =========================
-   Watch rules
+   Drive session watcher
 ========================= */
-/* 🔐 Si session perdue → retour authentication */
-watch(driveStatus, (status) => {
+
+watch(driveStatus, status => {
   if (status !== "CONNECTED") {
-    router.replace({ name: "authentication" });
+    router.replace({ name: "authentication" })
   }
-});
+})
 
-watch(selectedFolder, (val) => {
+/* =========================
+   Folder watcher
+========================= */
+
+watch(selectedFolder, val => {
   if (val !== BILLS_FOLDER) {
-    selectedDTADate.value = null;
-    return;
+    selectedDTADate.value = null
+    return
   }
 
-  selectedQuarterOffset.value = 0;
-  selectDefaultPayDateForQuarter();
-});
+  selectedQuarterOffset.value = 0
+  selectDefaultPayDateForQuarter()
+})
 
-watch(selectedDTADate, (val) => {
+watch(selectedDTADate, val => {
   if (val && selectedFolder.value !== BILLS_FOLDER) {
-    selectedFolder.value = BILLS_FOLDER;
+    selectedFolder.value = BILLS_FOLDER
   }
-});
+})
 
 /* =========================
    Platform detection
 ========================= */
-function isRealMacDesktop(): boolean {
-  const ua = navigator.userAgent;
-  const isMacUA = ua.includes("Macintosh");
-  const isTouch = navigator.maxTouchPoints > 1;
-  return isMacUA && !isTouch;
+
+function isRealMacDesktop() {
+  const ua = navigator.userAgent
+  const isMac = ua.includes("Macintosh")
+  const isTouch = navigator.maxTouchPoints > 1
+  return isMac && !isTouch
 }
 
 /* =========================
    Open document
 ========================= */
+
 function openDocument(item: ArchiveItem) {
   if (isRealMacDesktop()) {
     const url =
-      `hometools://open?file=${encodeURIComponent(item.physicalName)}`;
-    window.location.href = url;
-    return;
+      `hometools://open?file=${encodeURIComponent(item.physicalName)}`
+    window.location.href = url
+    return
   }
 
   if (item.googleFileId) {
     const driveUrl =
-      `https://drive.google.com/file/d/${item.googleFileId}/view`;
-    window.open(driveUrl, "_blank", "noopener");
+      `https://drive.google.com/file/d/${item.googleFileId}/view`
+    window.open(driveUrl, "_blank", "noopener")
   }
 }
 
 /* =========================
-   Load
+   Load archive
 ========================= */
-async function loadArchive() {
-  if (!driveState.value || driveStatus.value !== "CONNECTED") return;
 
-  loading.value = true;
-  error.value = null;
+async function loadArchive() {
+
+  if ( driveStatus.value !== "CONNECTED")
+    return
+
+  loading.value = true
+  error.value = null
 
   try {
-    const folderId = driveState.value.folders.archive;
 
     const raw = await loadJSONFromFolder<ArchiveFile>(
-      folderId,
+      folders.value.archive,
       "archivetoc.json"
-    );
+    )
 
-    if (!raw) return;
+    if (!raw) return
 
-    archive.value = raw.items ?? [];
-    selectDefaultPayDateForQuarter();
+    archive.value = raw.items ?? []
+
+    selectDefaultPayDateForQuarter()
+
   } catch (err: any) {
-    error.value = err.message ?? "Failed to load archive";
+
+    error.value = err.message ?? "Failed to load archive"
+
   } finally {
-    loading.value = false;
+
+    loading.value = false
   }
 }
 
 async function loadParty() {
-  if (!driveState.value || driveStatus.value !== "CONNECTED") return;
+
+  if ( driveStatus.value !== "CONNECTED")
+    return
 
   try {
-    const folderId = driveState.value.folders.settings;
 
     const raw = await loadJSONFromFolder<PartyFile>(
-      folderId,
+      folders.value.settings,
       "party.json"
-    );
+    )
 
-    if (!raw) return;
+    if (!raw) return
 
-    parties.value = raw.parties ?? [];
-  } catch (err: any) {
-    console.error("Failed to load party.json", err);
+    parties.value = raw.parties ?? []
+
+  } catch (err) {
+
+    console.error("party.json load failed", err)
   }
 }
 
 /* =========================
-   Folder config map
+   Folder configuration
 ========================= */
+
 const folderConfigMap = computed(() => {
-  const map = new Map<string, { label: string; order: number }>();
+
+  const map = new Map<string, { label: string; order: number }>()
+
   const configs =
-    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? [];
+    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
 
   for (const f of configs) {
-    map.set(f.source, { label: f.label, order: f.order });
-  }
-  return map;
-});
 
-const folders = computed<FolderView[]>(() => {
-  const unique = [...new Set(archive.value.map(i => i.folder))];
+    map.set(f.source, {
+      label: f.label,
+      order: f.order
+    })
+
+  }
+
+  return map
+})
+
+const archiveFolders = computed<FolderView[]>(() => {
+
+  const unique = [...new Set(archive.value.map(i => i.folder))]
 
   return unique
     .map((f): FolderView => {
-      const cfg = folderConfigMap.value.get(f);
+
+      const cfg = folderConfigMap.value.get(f)
+
       return {
         source: f,
         label: cfg?.label ?? f,
         order: cfg?.order ?? 999
-      };
+      }
+
     })
-    .sort((a, b) => a.order - b.order);
-});
+    .sort((a, b) => a.order - b.order)
+
+})
 
 /* =========================
    Quarter logic
 ========================= */
-const selectedQuarterOffset = ref(0);
+
+const selectedQuarterOffset = ref(0)
 
 function getQuarterKey(dateStr: string) {
-  const [y, m] = dateStr.split("-").map(Number);
-  const quarter = Math.floor((m - 1) / 3) + 1;
-  return `${y} Q${quarter}`;
+
+  const [y, m] = dateStr.split("-").map(Number)
+
+  const quarter = Math.floor((m - 1) / 3) + 1
+
+  return `${y} Q${quarter}`
 }
 
 function getCurrentQuarterKey() {
-  const now = new Date();
-  const q = Math.floor(now.getMonth() / 3) + 1;
-  return `${now.getFullYear()} Q${q}`;
+
+  const now = new Date()
+
+  const q = Math.floor(now.getMonth() / 3) + 1
+
+  return `${now.getFullYear()} Q${q}`
 }
 
 const payDatesByQuarter = computed(() => {
-  const map = new Map<string, string[]>();
+
+  const map = new Map<string, string[]>()
 
   for (const item of archive.value) {
-    if (!item.dtaDate) continue;
 
-    const key = getQuarterKey(item.dtaDate);
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(item.dtaDate);
+    if (!item.dtaDate) continue
+
+    const key = getQuarterKey(item.dtaDate)
+
+    if (!map.has(key)) map.set(key, [])
+
+    map.get(key)!.push(item.dtaDate)
   }
 
   for (const [k, arr] of map) {
-    const unique = [...new Set(arr)];
-    unique.sort((a, b) => b.localeCompare(a));
-    map.set(k, unique);
+
+    const unique = [...new Set(arr)]
+
+    unique.sort((a, b) => b.localeCompare(a))
+
+    map.set(k, unique)
   }
 
-  return map;
-});
+  return map
+})
 
 const availableQuarters = computed(() =>
   [...payDatesByQuarter.value.keys()].sort().reverse()
-);
+)
 
 const activeQuarterIndex = computed(() => {
-  if (!availableQuarters.value.length) return -1;
-  const idx = availableQuarters.value.indexOf(getCurrentQuarterKey());
-  return idx === -1 ? 0 : idx;
-});
+
+  if (!availableQuarters.value.length) return -1
+
+  const idx =
+    availableQuarters.value.indexOf(getCurrentQuarterKey())
+
+  return idx === -1 ? 0 : idx
+})
 
 const activeQuarterKey = computed(() => {
-  if (!availableQuarters.value.length) return null;
 
-  const base = activeQuarterIndex.value;
-  const shifted = base + selectedQuarterOffset.value;
+  if (!availableQuarters.value.length) return null
+
+  const base = activeQuarterIndex.value
+
+  const shifted = base + selectedQuarterOffset.value
 
   if (shifted < 0 || shifted >= availableQuarters.value.length)
-    return availableQuarters.value[base];
+    return availableQuarters.value[base]
 
-  return availableQuarters.value[shifted];
-});
+  return availableQuarters.value[shifted]
+
+})
 
 const payDatesInActiveQuarter = computed(() => {
-  if (!activeQuarterKey.value) return [];
-  return payDatesByQuarter.value.get(activeQuarterKey.value) ?? [];
-});
+
+  if (!activeQuarterKey.value) return []
+
+  return payDatesByQuarter.value.get(activeQuarterKey.value) ?? []
+})
 
 watch(activeQuarterKey, () => {
-  selectDefaultPayDateForQuarter();
-});
+
+  selectDefaultPayDateForQuarter()
+
+})
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toISOString().slice(0, 10)
 }
 
 function selectDefaultPayDateForQuarter() {
-  const quarter = activeQuarterKey.value;
-  if (!quarter) return;
 
-  const dates =
-    payDatesByQuarter.value.get(quarter) ?? [];
+  const quarter = activeQuarterKey.value
 
-  if (!dates.length) return;
+  if (!quarter) return
+
+  const dates = payDatesByQuarter.value.get(quarter) ?? []
+
+  if (!dates.length) return
 
   if (quarter === getCurrentQuarterKey()) {
+
     const asc = [...dates].sort((a, b) =>
       a.localeCompare(b)
-    );
-    const next = asc.find(d => d >= todayISO());
+    )
+
+    const next = asc.find(d => d >= todayISO())
+
     selectedDTADate.value =
-      next ?? asc[asc.length - 1];
+      next ?? asc[asc.length - 1]
+
   } else {
-    selectedDTADate.value = dates[0];
+
+    selectedDTADate.value = dates[0]
+
   }
 }
 
 /* =========================
    Filtering
 ========================= */
+
 const filteredItems = computed(() => {
+
   return archive.value
     .filter(item => {
-      if (selectedFolder.value && item.folder !== selectedFolder.value)
-        return false;
+
+      if (
+        selectedFolder.value &&
+        item.folder !== selectedFolder.value
+      )
+        return false
 
       if (
         isPayDateVisible.value &&
         selectedDTADate.value &&
         item.dtaDate !== selectedDTADate.value
       )
-        return false;
+        return false
 
       if (searchText.value.trim()) {
-        const t = searchText.value.trim().toLowerCase();
 
-        const partyLabel = getPartyLabel(item.partyID).toLowerCase();
-        const info1 = item.info1?.toLowerCase() ?? "";
-        const info2 = item.info2?.toLowerCase() ?? "";
+        const t = searchText.value.trim().toLowerCase()
 
-        const match =
-          partyLabel.includes(t) ||
-          info1.includes(t) ||
-          info2.includes(t);
+        const party =
+          getPartyLabel(item.partyID).toLowerCase()
 
-        if (!match) return false;
+        const info1 = item.info1?.toLowerCase() ?? ""
+
+        const info2 = item.info2?.toLowerCase() ?? ""
+
+        if (
+          !party.includes(t) &&
+          !info1.includes(t) &&
+          !info2.includes(t)
+        )
+          return false
       }
 
-      return true;
+      return true
+
     })
     .sort((a, b) =>
       b.documentDate.localeCompare(a.documentDate)
-    );
-});
+    )
+})
 
-const resultCount = computed(() => filteredItems.value.length);
+const resultCount = computed(
+  () => filteredItems.value.length
+)
 
 /* =========================
    Formatting
 ========================= */
+
 function formatDate(d: string | null) {
-  if (!d) return "";
-  const [y, m, day] = d.split("-");
-  return `${day}.${m}.${y.slice(2)}`;
+
+  if (!d) return ""
+
+  const [y, m, day] = d.split("-")
+
+  return `${day}.${m}.${y.slice(2)}`
 }
 
 function formatAmount(a: number) {
+
   return a.toLocaleString(undefined, {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+    maximumFractionDigits: 2
+  })
 }
 
 function escapeRegExp(str: string) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-function highlight(text: string | null | undefined): string {
-  if (!text) return "";
+function highlight(text: string | null | undefined) {
 
-  const query = searchText.value?.trim();
-  if (!query) return text;
+  if (!text) return ""
 
-  const safeQuery = escapeRegExp(query);
-  const regex = new RegExp(`(${safeQuery})`, "gi");
+  const query = searchText.value?.trim()
 
-  return text.replace(regex, `<mark>$1</mark>`);
+  if (!query) return text
+
+  const safeQuery = escapeRegExp(query)
+
+  const regex = new RegExp(`(${safeQuery})`, "gi")
+
+  return text.replace(regex, `<mark>$1</mark>`)
 }
 
 const headerCountLabel = computed(() => {
-  const n = resultCount.value;
-  return `${n} document${n !== 1 ? "s" : ""}`;
-});
+
+  const n = resultCount.value
+
+  return `${n} document${n !== 1 ? "s" : ""}`
+})
 
 /* =========================
    Init
 ========================= */
+
 onMounted(async () => {
-  /* 🔐 sécurité supplémentaire */
+
   if (driveStatus.value !== "CONNECTED") {
-    router.replace({ name: "authentication" });
-    return;
+
+    router.replace({ name: "authentication" })
+
+    return
   }
 
-  await loadArchive();
-  await loadParty();
-});
+  await loadArchive()
+
+  await loadParty()
+
+})
 </script>
 
 <template>
@@ -461,7 +562,7 @@ onMounted(async () => {
             </button>
 
             <button
-              v-for="f in folders"
+              v-for="f in archiveFolders"
               :key="f.source"
               class="chip"
               :class="{ active: selectedFolder === f.source }"

@@ -28,5 +28,7 @@ tsbuildinfo
 *.sln
 *.sw?
 src/services/google/*.js
+*.vue.js
+*.js.map
 # Ignore build output
 dist/
