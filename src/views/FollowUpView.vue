@@ -486,7 +486,7 @@ async function loadBudget() {
   budgetRaw.value = data;
 }
 
-async function loadFollowUpDetails() {
+/*async function loadFollowUpDetails() {
 
   const folderId =
     folders.value.allocations.budget;
@@ -502,7 +502,7 @@ async function loadFollowUpDetails() {
 
   followUpDetailsRaw.value = data;
 }
-
+*/
 /* =========================
    Init
 ========================= */
@@ -524,7 +524,7 @@ watch(
 
     await loadFollowUp();
     await loadBudget();
-    await loadFollowUpDetails();
+    /*await FollowUpDetails();*/
   },
   { immediate: true }
 );
