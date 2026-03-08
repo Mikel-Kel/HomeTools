@@ -93,7 +93,6 @@ const selectedCategory = ref<string>("*");
 const selectedSubCategory = ref<string | null>(null);
 
 const followUpRaw = ref<FollowUpFile | null>(null);
-const followUpDetailsRaw = ref<any | null>(null);
 const budgetRaw = ref<BudgetFile | null>(null);
 
 const analysisScope = ref<AnalysisScope>("YTD");
@@ -248,87 +247,155 @@ function selectSubCategory(id: number) {
 /* =========================
    Follow-up computation
 ========================= */
-
 const items = computed<FollowUpItem[]>(() => {
-
   if (!followUpRaw.value) return [];
-
-  const cats = followUpRaw.value.categories;
-
-  const month = getMonthIndex();
 
   const out: FollowUpItem[] = [];
 
-  for (const c of cats) {
-
-    const meta = categoriesStore.getCategory(c.categoryId);
-    if (!meta) continue;
-
-    if (
-      natureFilter.value !== "ALL" &&
-      meta.nature !== natureFilter.value
-    ) continue;
-
-    if (
-      selectedCategory.value !== "*" &&
-      Number(selectedCategory.value) !== c.categoryId
-    ) continue;
-
-    const yearData = c.years.find(y => y.year === year.value);
-    if (!yearData) continue;
-
-    let amount = 0;
-
-    for (const i of yearData.items) {
+  /* =========================================================
+     MODE 1 — aucune catégorie sélectionnée
+     → liste des catégories
+  ========================================================= */
+  if (selectedCategory.value === "*") {
+    for (const c of followUpRaw.value.categories) {
+      const meta = categoriesStore.getCategory(c.categoryId);
+      if (!meta) continue;
 
       if (
-        selectedSubCategory.value &&
-        Number(selectedSubCategory.value) !== i.subCategoryId
+        natureFilter.value !== "ALL" &&
+        meta.nature !== natureFilter.value
       ) continue;
 
-      if (analysisScope.value === "MTD")
-        amount += i.monthToDate;
-      else
-        amount += i.amount;
+      const yearData = c.years.find(y => y.year === year.value);
+      if (!yearData) continue;
+
+      const amount = yearData.items.reduce((sum, i) => {
+        return sum + (
+          analysisScope.value === "MTD"
+            ? i.monthToDate
+            : i.amount
+        );
+      }, 0);
+
+      out.push({
+        id: String(c.categoryId),
+        label: meta.label,
+        amount,
+      });
+    }
+
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /* =========================================================
+     MODE 2 / 3 — catégorie sélectionnée
+     → liste des sous-catégories
+     → ou une seule sous-catégorie si sélectionnée
+  ========================================================= */
+  const catId = Number(selectedCategory.value);
+  const cat = followUpRaw.value.categories.find(c => c.categoryId === catId);
+  const meta = categoriesStore.getCategory(catId);
+
+  if (!cat || !meta) return [];
+
+  const yearData = cat.years.find(y => y.year === year.value);
+  if (!yearData) return [];
+
+  const subTotals = new Map<number, number>();
+
+  for (const i of yearData.items) {
+    const value =
+      analysisScope.value === "MTD"
+        ? i.monthToDate
+        : i.amount;
+
+    subTotals.set(
+      i.subCategoryId,
+      (subTotals.get(i.subCategoryId) ?? 0) + value
+    );
+  }
+
+  const officialSubs = meta.subcategories
+    .slice()
+    .sort((a, b) => a.seq - b.seq);
+
+  for (const sub of officialSubs) {
+    if (!subTotals.has(sub.id)) continue;
+
+    if (
+      selectedSubCategory.value !== null &&
+      Number(selectedSubCategory.value) !== sub.id
+    ) {
+      continue;
     }
 
     out.push({
-      id: String(c.categoryId),
-      label: meta.label,
-      amount
+      id: String(sub.id),
+      label: sub.label,
+      amount: subTotals.get(sub.id) ?? 0,
     });
   }
 
-  return out.sort((a, b) => a.label.localeCompare(b.label));
+  return out;
 });
 
-/* =========================
-   Budget helpers
-========================= */
-
 function displayedBudget(item: FollowUpItem) {
-
   if (!budgetRaw.value) return undefined;
 
-  const month = getMonthIndex();
+  const currentMonth = getMonthIndex();
 
-  const rows = budgetRaw.value.budgets
-    .filter(b =>
-      b.year === year.value &&
-      (analysisScope.value === "FULL" || b.month <= month)
-    );
+  const rows = budgetRaw.value.budgets.filter(b => {
+    if (b.year !== year.value) return false;
+
+    if (analysisScope.value === "FULL") return true;
+    if (analysisScope.value === "MTD") return b.month < currentMonth;
+    if (analysisScope.value === "YTD") return b.month <= currentMonth;
+
+    return false;
+  });
 
   let total = 0;
 
+  /* =========================================================
+     MODE 1 — catégories
+  ========================================================= */
+  if (selectedCategory.value === "*") {
+    const categoryId = Number(item.id);
+
+    for (const r of rows) {
+      for (const i of r.items) {
+        if (i.categoryId === categoryId) {
+          total += i.amount;
+        }
+      }
+    }
+
+    return total || undefined;
+  }
+
+  /* =========================================================
+     MODE 2 / 3 — sous-catégories
+  ========================================================= */
+  const categoryId = Number(selectedCategory.value);
+  const subCategoryId = Number(item.id);
+
   for (const r of rows) {
     for (const i of r.items) {
-      if (String(i.categoryId) === item.id)
+      if (
+        i.categoryId === categoryId &&
+        i.subCategoryId === subCategoryId
+      ) {
         total += i.amount;
+      }
     }
   }
 
   return total || undefined;
 }
+
+/* =========================
+   Budget helpers
+========================= */
 
 function allocatedValue(item: FollowUpItem) {
   return item.amount;
@@ -434,18 +501,59 @@ const allocationSubCategoryId = computed(() => {
   return Number(selectedSubCategory.value);
 });
 
-const detailsMonthlyBudgetMap = computed(() => {
-  return {};
+const detailsMonthlyBudgetMap = computed<Record<string, number>>(() => {
+  if (
+    !budgetRaw.value ||
+    selectedCategory.value === "*" ||
+    !selectedSubCategory.value
+  ) {
+    return {};
+  }
+
+  const catId = Number(selectedCategory.value);
+  const subId = Number(selectedSubCategory.value);
+
+  const map: Record<string, number> = {};
+
+  for (const m of budgetRaw.value.budgets) {
+    if (m.year !== year.value) continue;
+
+    const budget = m.items
+      .filter(
+        it =>
+          it.categoryId === catId &&
+          it.subCategoryId === subId
+      )
+      .reduce((s, it) => s + it.amount, 0);
+
+    const key = `${m.year}-${String(m.month).padStart(2, "0")}`;
+
+    map[key] = budget;
+  }
+
+  return map;
 });
 
 const detailsNature = computed(() => {
   return currentNature.value === "-" ? null : currentNature.value;
 });
 
-const detailsMaxMonth = computed(() => {
-  return analysisScope.value === "FULL"
-    ? 12
-    : getMonthIndex();
+const detailsMaxMonth = computed<number | null>(() => {
+  const currentMonth = getMonthIndex();
+
+  if (analysisScope.value === "FULL") {
+    return null;
+  }
+
+  if (analysisScope.value === "MTD") {
+    return currentMonth - 1;
+  }
+
+  if (analysisScope.value === "YTD") {
+    return currentMonth;
+  }
+
+  return null;
 });
 
 /* =========================
@@ -486,23 +594,6 @@ async function loadBudget() {
   budgetRaw.value = data;
 }
 
-/*async function loadFollowUpDetails() {
-
-  const folderId =
-    folders.value.allocations.budget;
-
-  const data =
-    await loadJSONFromFolder<any>(
-      folderId,
-      "FollowUpDetails.json"
-    );
-
-  if (!data)
-    throw new Error("FollowUpDetails.json not found");
-
-  followUpDetailsRaw.value = data;
-}
-*/
 /* =========================
    Init
 ========================= */
@@ -517,14 +608,10 @@ watch(
     }
 
     await load();
-
-    if (!categoriesStore.categories.value.length) {
-      await categoriesStore.load();
-    }
-
+    await categoriesStore.load();
     await loadFollowUp();
     await loadBudget();
-    /*await FollowUpDetails();*/
+/*    await FollowUpDetails();*/
   },
   { immediate: true }
 );
