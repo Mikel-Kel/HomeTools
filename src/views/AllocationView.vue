@@ -184,6 +184,10 @@ watch(
   }
 );
 
+watch(categoryID, () => {
+  subCategoryID.value = null
+})
+
 watch([categoryID, subCategoryID], () => {
   allocatedTagID.value = null
 })
@@ -247,16 +251,12 @@ const allowedNature = computed(() =>
 const categories = computed(() =>
   categoriesStore.categories.value
     .filter(c => c.nature === allowedNature.value)
-    .slice()
-    .sort((a, b) => a.seq - b.seq)
 );
 
 const subCategories = computed(() =>
   typeof categoryID.value === "number"
     ? categoriesStore
         .getSubcategories(categoryID.value)
-        .slice()
-        .sort((a, b) => a.seq - b.seq)
     : []
 );
 
@@ -413,29 +413,56 @@ function closeView() {
     ========================== -->
     <section class="allocation-form">
 
-      <select v-model="categoryID"
-      class="field field-short"
-      :disabled="allocation?.state.value === 'DRAFTED' 
-                || allocation?.state.value === 'BUSY'
-                || allocation?.state.value === 'READONLY'"
-      > 
-        <option :value="null" disabled>Category</option>
-        <option v-for="c in categories" :key="c.id" :value="c.id">
-          {{ c.label }}
-        </option>
-      </select>
-      <select v-model="subCategoryID"
-      :disabled="categoryID === null
-             || allocation?.state.value === 'DRAFTED'
-             || allocation?.state.value === 'BUSY'
-             || allocation?.state.value === 'READONLY'"
-      class="field field-short"
-      >
-        <option :value="null" disabled>Sub-category</option>
-        <option v-for="sc in subCategories" :key="sc.id" :value="sc.id">
-          {{ sc.label }}
-        </option>
-      </select>
+      <!-- CATEGORY -->
+      <div class="allocation-row">
+
+        <div class="allocation-label">
+          Category
+        </div>
+
+        <div class="allocation-chip-scroll">
+
+          <button
+            v-for="c in categories"
+            :key="c.id"
+            class="allocation-chip"
+            :class="{ active: categoryID === c.id }"
+            @click="categoryID = c.id"
+            :disabled="allocation?.state.value === 'DRAFTED'
+                      || allocation?.state.value === 'BUSY'
+                      || allocation?.state.value === 'READONLY'"
+          >
+            {{ c.label }}
+          </button>
+
+        </div>
+      </div>
+
+      <!-- SUBCATEGORY -->
+      <div class="allocation-row" v-if="categoryID">
+
+        <div class="allocation-label">
+          Sub
+        </div>
+
+        <div class="allocation-chip-scroll">
+
+          <button
+            v-for="sc in subCategories"
+            :key="sc.id"
+            class="allocation-chip"
+            :class="{ active: subCategoryID === sc.id }"
+            @click="subCategoryID = sc.id"
+            :disabled="allocation?.state.value === 'DRAFTED'
+                      || allocation?.state.value === 'BUSY'
+                      || allocation?.state.value === 'READONLY'"
+          >
+            {{ sc.label }}
+          </button>
+
+        </div>
+
+      </div>
 
       <!-- 🔽 MONTANT + CALENDRIER -->
       <div class="amount-block">
@@ -466,21 +493,32 @@ function closeView() {
         </div>
       </div> 
 
-      <div class="tag-scroll" v-if="tags.length">
+      <div class="allocation-row">
 
-        <button
-          v-for="t in tags"
-          :key="t.id"
-          class="tag-chip"
-          :class="{
-            active: allocatedTagID === t.id,
-            disabled: !canSelectTag
-          }"
-          :disabled="!canSelectTag"
-          @click="allocatedTagID = allocatedTagID === t.id ? null : t.id"
+        <div class="allocation-label">
+          Tag
+        </div>
+
+        <div
+          class="tag-scroll"
+          :class="{ disabled: !categoryID || !subCategoryID }"
         >
-          {{ t.tagName }}
-        </button>
+
+          <button
+            v-for="t in tags"
+            :key="t.id"
+            class="tag-chip"
+            :class="{
+              active: allocatedTagID === t.id,
+              disabled: !categoryID || !subCategoryID
+            }"
+            :disabled="!categoryID || !subCategoryID"
+            @click="allocatedTagID = allocatedTagID === t.id ? null : t.id"
+          >
+            {{ t.tagName }}
+          </button>
+
+        </div>
 
       </div>
 
@@ -706,6 +744,107 @@ function closeView() {
 .amount-input {
   text-align: right;
 }
+
+.allocation-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.allocation-label {
+  width: 60px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+/* =========================================================
+   Cat & sub cat chips
+========================================================= */
+.allocation-chip-scroll {
+
+  display: flex;
+  gap: 8px;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  -webkit-overflow-scrolling: touch;
+
+  scrollbar-width: none;
+
+  position: relative;
+  max-width: 420px;
+
+}
+
+.allocation-chip-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.allocation-chip {
+
+  flex: 0 0 auto;
+
+  padding: 8px 10px;
+
+  border-radius: 999px;
+  border: 1px solid var(--border);
+
+  background: var(--surface);
+
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+
+  opacity: 0.7;
+  cursor: pointer;
+
+  white-space: nowrap;
+
+}
+
+.allocation-chip.active {
+
+  opacity: 1;
+
+  background: var(--primary-soft);
+  border-color: var(--primary);
+
+}
+
+.allocation-chip-scroll::after {
+
+  content: "";
+
+  position: absolute;
+  top: 0;
+  right: 0;
+
+  width: 40px;
+  height: 100%;
+
+  pointer-events: none;
+
+  background: linear-gradient(
+    to right,
+    rgba(255,255,255,0),
+    var(--bg)
+  );
+
+}
+
+
+.chip.active {
+
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+
+}
+
+/* =========================================================
+   Allocation Tags
+========================================================= */
 
 .tag-scroll {
 
