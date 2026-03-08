@@ -83,9 +83,13 @@ const appVersion = __APP_VERSION__;
             <template v-if="backend === 'LOCAL_DRIVE' && !getLocalDirectory()">
               Select HomeTools folder (Mac)
             </template>
-
             <template v-else-if="uiDriveStatus === 'connected'">
-              Home tools ready ({{ device }} • {{ backend }})
+              <template v-if="backend === 'LOCAL_DRIVE'">
+                App ready (local)
+              </template>
+              <template v-else>
+                App ready (remote)
+              </template>
             </template>
 
             <template v-else>

@@ -3,18 +3,31 @@ import App from "./App.vue";
 import router from "./router";
 import "@/assets/theme.css";
 
-import { initGoogleAPI } from "@/services/google/googleInit"; // ⬅️ ajout
+import { restoreLocalDirectory } from "@/services/local/localDirectory";
+import { initGoogleAPI } from "@/services/google/googleInit";
+
 import { log } from "./utils/logger";
 import PageHeader from "@/components/PageHeader.vue";
 
 async function bootstrap() {
-const app = createApp(App);
 
-app.component("PageHeader", PageHeader);
+  /* ============================
+     Étape 0 — Restore Local Drive
+  ============================ */
+  try {
+    await restoreLocalDirectory();
+  } catch (e) {
+    log.warn("[LocalDrive] restore failed", e);
+  }
+
+  const app = createApp(App);
+
+  app.component("PageHeader", PageHeader);
 
   /* ============================ 
      Gestion globale des erreurs
   ============================ */
+
   app.config.errorHandler = (err, instance, info) => {
     log.error("[Vue errorHandler]", err);
     log.error("[Vue errorHandler info]", info);
@@ -33,6 +46,7 @@ app.component("PageHeader", PageHeader);
      Étape 1 — Init Google (gapi)
      ➜ PAS d'auth, PAS de popup
   ============================ */
+
   try {
     await initGoogleAPI();
   } catch (e) {
@@ -42,6 +56,7 @@ app.component("PageHeader", PageHeader);
   /* ============================
      Lancement de l'app Vue
   ============================ */
+
   app.use(router).mount("#app");
 }
 

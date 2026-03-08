@@ -248,6 +248,7 @@ function selectSubCategory(id: number) {
    Follow-up computation
 ========================= */
 const items = computed<FollowUpItem[]>(() => {
+
   if (!followUpRaw.value) return [];
 
   const out: FollowUpItem[] = [];
@@ -256,35 +257,53 @@ const items = computed<FollowUpItem[]>(() => {
      MODE 1 — aucune catégorie sélectionnée
      → liste des catégories
   ========================================================= */
+
   if (selectedCategory.value === "*") {
+
     for (const c of followUpRaw.value.categories) {
+
       const meta = categoriesStore.getCategory(c.categoryId);
       if (!meta) continue;
+
+      /* 🔹 filtres cohérents avec les chips */
 
       if (
         natureFilter.value !== "ALL" &&
         meta.nature !== natureFilter.value
       ) continue;
 
+      if (
+        meta.displayScope === "S" &&
+        !showSecondaryCategories.value
+      ) continue;
+
+      if (meta.displayScope === "X") continue;
+
+      /* ---------------------------------- */
+
       const yearData = c.years.find(y => y.year === year.value);
       if (!yearData) continue;
 
       const amount = yearData.items.reduce((sum, i) => {
+
         return sum + (
           analysisScope.value === "MTD"
             ? i.monthToDate
             : i.amount
         );
+
       }, 0);
 
       out.push({
         id: String(c.categoryId),
         label: meta.label,
-        amount,
+        amount
       });
+
     }
 
     return out.sort((a, b) => a.label.localeCompare(b.label));
+
   }
 
   /* =========================================================
@@ -292,18 +311,28 @@ const items = computed<FollowUpItem[]>(() => {
      → liste des sous-catégories
      → ou une seule sous-catégorie si sélectionnée
   ========================================================= */
+
   const catId = Number(selectedCategory.value);
-  const cat = followUpRaw.value.categories.find(c => c.categoryId === catId);
-  const meta = categoriesStore.getCategory(catId);
+
+  const cat =
+    followUpRaw.value.categories
+      .find(c => c.categoryId === catId);
+
+  const meta =
+    categoriesStore.getCategory(catId);
 
   if (!cat || !meta) return [];
 
-  const yearData = cat.years.find(y => y.year === year.value);
+  const yearData =
+    cat.years.find(y => y.year === year.value);
+
   if (!yearData) return [];
 
-  const subTotals = new Map<number, number>();
+  const subTotals =
+    new Map<number, number>();
 
   for (const i of yearData.items) {
+
     const value =
       analysisScope.value === "MTD"
         ? i.monthToDate
@@ -313,13 +342,16 @@ const items = computed<FollowUpItem[]>(() => {
       i.subCategoryId,
       (subTotals.get(i.subCategoryId) ?? 0) + value
     );
+
   }
 
-  const officialSubs = meta.subcategories
-    .slice()
-    .sort((a, b) => a.seq - b.seq);
+  const officialSubs =
+    meta.subcategories
+      .slice()
+      .sort((a, b) => a.seq - b.seq);
 
   for (const sub of officialSubs) {
+
     if (!subTotals.has(sub.id)) continue;
 
     if (
@@ -332,11 +364,13 @@ const items = computed<FollowUpItem[]>(() => {
     out.push({
       id: String(sub.id),
       label: sub.label,
-      amount: subTotals.get(sub.id) ?? 0,
+      amount: subTotals.get(sub.id) ?? 0
     });
+
   }
 
   return out;
+
 });
 
 function displayedBudget(item: FollowUpItem) {

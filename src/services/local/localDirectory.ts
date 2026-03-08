@@ -1,60 +1,142 @@
-let directoryHandle: FileSystemDirectoryHandle | null = null;
+/* =========================================================
+   Local directory manager (HomeTools)
+========================================================= */
 
-/* =========================
-   Select folder
-========================= */
+let localDirectory: FileSystemDirectoryHandle | null = null;
 
-export async function pickLocalDirectory() {
+const DB_NAME = "hometools";
+const STORE_NAME = "handles";
+const STORAGE_KEY = "local-root";
 
-  directoryHandle = await (window as any).showDirectoryPicker();
+/* =========================================================
+   Accessors
+========================================================= */
+
+export function getLocalDirectory(): FileSystemDirectoryHandle | null {
+  return localDirectory;
+}
+
+export function setLocalDirectory(
+  dir: FileSystemDirectoryHandle | null
+) {
+  localDirectory = dir;
+}
+
+/* =========================================================
+   Pick directory (user action)
+========================================================= */
+
+export async function pickLocalDirectory(): Promise<FileSystemDirectoryHandle> {
+
+  const dir = await (window as any).showDirectoryPicker({
+    mode: "readwrite",
+    id: "hometools",
+  });
+
+  setLocalDirectory(dir);
+
+  await saveLocalDirectory(dir);
 
   console.log("📁 Local directory selected");
 
-  return directoryHandle;
+  return dir;
 }
 
-/* =========================
-   Access handle
-========================= */
+/* =========================================================
+   Restore directory at startup
+========================================================= */
 
-export function getLocalDirectory() {
-  return directoryHandle;
-}
+export async function restoreLocalDirectory(): Promise<FileSystemDirectoryHandle | null> {
 
-/* =========================
-   Resolve directory path
-   (handles nested paths)
-========================= */
+  const db = await openDB();
 
-export async function resolveLocalDirectory(
-  path: string
-): Promise<FileSystemDirectoryHandle> {
+  const tx = db.transaction(STORE_NAME, "readonly");
+  const store = tx.objectStore(STORE_NAME);
 
-  if (!directoryHandle) {
-    throw new Error("LOCAL_DIRECTORY_NOT_SELECTED");
+  const handle =
+    await requestToPromise<FileSystemDirectoryHandle | undefined>(
+      store.get(STORAGE_KEY)
+    );
+
+  if (!handle) return null;
+
+  const permission =
+    await (handle as any).queryPermission({
+      mode: "readwrite",
+    });
+
+  if (permission === "granted") {
+
+    setLocalDirectory(handle);
+
+    console.log("📁 Local directory restored");
+
+    return handle;
+
   }
 
-  const parts = path.split("/").filter(Boolean);
+  console.log("📁 Local directory permission not granted");
 
-  let current: FileSystemDirectoryHandle = directoryHandle;
-
-  for (const part of parts) {
-    current = await current.getDirectoryHandle(part);
-  }
-
-  return current;
+  return null;
 }
 
-/* =========================
-   Resolve file
-========================= */
+/* =========================================================
+   Save directory handle
+========================================================= */
 
-export async function resolveLocalFile(
-  path: string,
-  fileName: string
-): Promise<FileSystemFileHandle> {
+async function saveLocalDirectory(
+  handle: FileSystemDirectoryHandle
+): Promise<void> {
 
-  const dir = await resolveLocalDirectory(path);
+  const db = await openDB();
 
-  return await dir.getFileHandle(fileName);
+  const tx = db.transaction(STORE_NAME, "readwrite");
+  const store = tx.objectStore(STORE_NAME);
+
+  await requestToPromise(store.put(handle, STORAGE_KEY));
+
+}
+
+/* =========================================================
+   IndexedDB open
+========================================================= */
+
+function openDB(): Promise<IDBDatabase> {
+
+  return new Promise((resolve, reject) => {
+
+    const req = indexedDB.open(DB_NAME, 1);
+
+    req.onupgradeneeded = () => {
+
+      const db = req.result;
+
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+
+    };
+
+    req.onsuccess = () => resolve(req.result);
+
+    req.onerror = () => reject(req.error);
+
+  });
+
+}
+
+/* =========================================================
+   Promise wrapper for IDB
+========================================================= */
+
+function requestToPromise<T>(req: IDBRequest<T>): Promise<T> {
+
+  return new Promise((resolve, reject) => {
+
+    req.onsuccess = () => resolve(req.result);
+
+    req.onerror = () => reject(req.error);
+
+  });
+
 }
