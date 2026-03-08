@@ -104,6 +104,7 @@ export function useAllocation(
 
   const amount = ref<number>(Math.abs(spendingAmount));
   const allocationDate = ref<string | null>(null);
+  const allocatedTagID = ref<number | null>(null);
 
   /* =========================
      Computed
@@ -421,7 +422,8 @@ export function useAllocation(
         allocationDate:
           normalizedDate,
 
-        allocatedTagID: null
+        allocatedTagID: 
+          allocatedTagID.value
 
       });
 
@@ -571,6 +573,7 @@ export function useAllocation(
     subCategoryID.value = null;
     comment.value = "";
     allocationDate.value = null;
+    allocatedTagID.value = null;
 
     presetAmount();
 
@@ -591,6 +594,8 @@ export function useAllocation(
     comment,
     amount,
     allocationDate,
+    allocatedTagID,
+
 
     totalAllocated,
     remainingAmount,

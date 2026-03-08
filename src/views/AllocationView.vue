@@ -8,6 +8,7 @@ import AppIcon from "@/components/AppIcon.vue";
 import { useSpending } from "@/composables/spending/useSpending";
 import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
+import { useAllocationTags } from "@/composables/allocations/useAllocationTags" 
 import { useDrive } from "@/composables/useDrive";
 
 import type { SpendingRecord } from "@/composables/spending/useSpending";
@@ -35,6 +36,11 @@ watch(driveStatus, (status) => {
 ========================= */
 const spendingStore = useSpending();
 const categoriesStore = useCategories();
+
+/* =========================
+   TAG store
+========================= */
+const tagsStore = useAllocationTags()
 
 /* =========================
    Auto-close arming
@@ -99,6 +105,15 @@ const subCategoryID = computed<number | null>({
     allocation.value && (allocation.value.subCategoryID.value = v),
 });
 
+const allocatedTagID = computed<number | null>({
+  get: () => allocation.value?.allocatedTagID.value ?? null,
+  set: v => {
+    if (allocation.value) {
+      allocation.value.allocatedTagID.value = v
+    }
+  }
+})
+
 const comment = computed<string>({
   get: () => allocation.value?.comment.value ?? "",
   set: v => allocation.value && (allocation.value.comment.value = v),
@@ -108,6 +123,7 @@ const amount = computed<number>({
   get: () => allocation.value?.amount.value ?? 0,
   set: v => allocation.value && (allocation.value.amount.value = v),
 });
+
 
 const amountDisplay = computed<string>({
   get: () => amount.value.toFixed(2),
@@ -168,6 +184,10 @@ watch(
   }
 );
 
+watch([categoryID, subCategoryID], () => {
+  allocatedTagID.value = null
+})
+
 /* =========================
    Focus
 ========================= */
@@ -198,6 +218,7 @@ onMounted(async () => {
   }
 
   await categoriesStore.load();
+  await tagsStore.load();
 
   if (allocation.value) {
     await allocation.value.loadDraft();
@@ -238,6 +259,15 @@ const subCategories = computed(() =>
         .sort((a, b) => a.seq - b.seq)
     : []
 );
+
+const canSelectTag = computed(() =>
+  categoryID.value !== null &&
+  subCategoryID.value !== null
+)
+
+const tags = computed(() =>
+  tagsStore.tags.value
+)
 
 /* =========================
    Currency display (if present)
@@ -283,6 +313,11 @@ function formatAmount(a: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function tagLabel(id: number | null) {
+  if (!id) return ""
+  return tagsStore.getTag(id)?.tagName ?? ""
 }
 
 /* =========================
@@ -401,6 +436,7 @@ function closeView() {
           {{ sc.label }}
         </option>
       </select>
+
       <!-- 🔽 MONTANT + CALENDRIER -->
       <div class="amount-block">
         <div class="amount-row">
@@ -429,6 +465,25 @@ function closeView() {
 
         </div>
       </div> 
+
+      <div class="tag-scroll" v-if="tags.length">
+
+        <button
+          v-for="t in tags"
+          :key="t.id"
+          class="tag-chip"
+          :class="{
+            active: allocatedTagID === t.id,
+            disabled: !canSelectTag
+          }"
+          :disabled="!canSelectTag"
+          @click="allocatedTagID = allocatedTagID === t.id ? null : t.id"
+        >
+          {{ t.tagName }}
+        </button>
+
+      </div>
+
       <!-- commentaire + add -->
       <div class="comment-row">
         <input v-model="comment"
@@ -466,6 +521,7 @@ function closeView() {
       <table>
         <tbody>
           <tr v-for="a in allocations" :key="a.id">
+
             <td class="alloc-text">
               <div class="alloc-comment-row">
                 <span class="alloc-comment">
@@ -480,8 +536,14 @@ function closeView() {
                 >
                   {{ a.allocationDate }}
                 </span>
+                <!-- 🏷 TAG -->
+                <span
+                  v-if="a.allocatedTagID"
+                  class="alloc-tag"
+                >
+                  {{ tagLabel(a.allocatedTagID) }}
+                </span>
               </div>
-
               <div class="alloc-category">
                 {{ categoryLabel(a.categoryID) }}
                 <span v-if="a.subCategoryID">
@@ -643,6 +705,59 @@ function closeView() {
 }
 .amount-input {
   text-align: right;
+}
+
+.tag-scroll {
+
+  display: flex;
+  gap: 8px;
+
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  padding-bottom: 4px;
+
+  /* limite la largeur visible */
+  max-width: 320px;
+
+}
+
+.tag-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.tag-chip {
+
+  flex: 0 0 auto;          /* largeur automatique */
+
+  border: 1px solid var(--border);
+  background: var(--surface);
+
+  border-radius: 999px;
+
+  padding: 6px 14px;       /* un peu plus large */
+
+  font-size: 0.7rem;
+  font-weight: 500;
+
+  cursor: pointer;
+
+  white-space: nowrap;     /* empêche le wrap */
+  text-align: center;
+
+}
+
+.tag-chip.active {
+
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+
+}
+
+.tag-chip.disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* =========================================================
