@@ -698,15 +698,15 @@ onBeforeUnmount(() => {
    Status styles (shared by chips & pills)
 ========================================================= */
 .status.none {
-  background: #eee;
-  color: #666;
-  border-color: #ccc;
+  background: var(--bg-soft);
+  color: var(--text-soft);
+  border-color: var(--border);
 }
 
 .status.draft {
-  background: #fff4cc;
-  color: #a37b00;
-  border-color: #e6c866;
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 .status.released {
@@ -879,17 +879,16 @@ onBeforeUnmount(() => {
   margin: 0 auto;
 }
 
-/* Couleurs par statut */
 .status-pill.none {
-  background: #eee;
-  color: #666;
-  border-color: #ccc;
+  background: var(--bg-soft);
+  color: var(--text-soft);
+  border-color: var(--border);
 }
 
 .status-pill.draft {
-  background: #fff4cc;
-  color: #a37b00;
-  border-color: #e6c866;
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 .status-pill.released {

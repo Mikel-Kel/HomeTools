@@ -202,6 +202,10 @@ const appVersion = __APP_VERSION__;
   background: var(--negative);
 }
 
+.drive-status.connected {
+  color: var(--positive);
+}
+
 .drive-status.disconnected {
   color: var(--negative);
 }
@@ -217,6 +221,7 @@ margin-top: -1.1rem;   /* remonte le texte vers l’icône */
 ========================= */
 .theme-toggle {
   background: none;
+  color: var(--text); 
   border: none;
   padding: 6px;
   border-radius: 8px;
@@ -247,11 +252,12 @@ margin-top: -1.1rem;   /* remonte le texte vers l’icône */
   padding: 18px 20px;
   border-radius: 12px;
   text-decoration: none;
-  color: var(--primary);
+  color: var(--text);
 }
 
 .menu-item:hover {
   background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .menu-item span {

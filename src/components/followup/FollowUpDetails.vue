@@ -486,12 +486,12 @@ onMounted(async () => {
   padding: 6px 0;
   font-size: 0.8rem;
   font-style: italic;
-  color: var(--primary);
+  color: var(--text-soft);
   opacity: 0.85;
 }
 
 .month-header:hover {
-  background: rgba(0,0,0,0.03);
+  background: var(--primary-soft);
 }
 
 .month-toggle {
@@ -505,11 +505,11 @@ onMounted(async () => {
 ========================================================= */
 
 .month-header .col-spent.amount.over {
-  color: var(--danger, #d64545);
+  color: var(--negative);
 }
 
 .month-header .col-spent.amount.under {
-  color: var(--success, #1f9d55);
+  color: var(--positive);
 }
 
 .month-header .col-spent.amount.neutral {
@@ -557,7 +557,7 @@ onMounted(async () => {
 }
 
 .error {
-  color: var(--danger);
+  color: var(--negative);
   font-size: 0.8rem;
 }
 

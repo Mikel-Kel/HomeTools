@@ -742,6 +742,7 @@ onMounted(async () => {
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
+  color: var(--text);  
   font-size: 0.75rem;
   font-weight: 600;
   opacity: 0.7;
@@ -819,7 +820,7 @@ onMounted(async () => {
   padding: 2px 10px;
   border-radius: 999px;
   border: 1px solid var(--primary);
-  background: transparent;
+  background: var(--primary-soft);
   color: var(--primary);
   font-size: 0.7rem;
   font-weight: 600;
@@ -894,6 +895,6 @@ mark {
 }
 
 .error {
-  color: var(--danger);
+  color: var(--negative);
 }
 </style>

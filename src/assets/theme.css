@@ -11,6 +11,7 @@
   --bg: #ffffff;                 /* main background */
   --bg-soft: #f2f2f2;            /* headers, bands, chips */
   --surface: #ffffff;            /* cards, pills */
+  --surface-soft: #f8fafc;
 
   /* ---------- Text ---------- */
   --text: #0f172a;               /* primary text */
@@ -85,6 +86,7 @@ body {
   --bg: #020617;
   --bg-soft: #0f172a;
   --surface: #020617;
+  --surface-soft: #0f172a;
 
   /* ---------- Text ---------- */
   --text: #e5e7eb;

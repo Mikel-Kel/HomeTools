@@ -66,7 +66,7 @@ function select(id: string) {
 .sheet-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.25);
   z-index: 1000;
 
   display: flex;
@@ -107,7 +107,8 @@ function select(id: string) {
   border-radius: 10px;
   text-align: left;
   font-size: 1rem;
-  background: none;
+  background: var(--surface);
+  color: var(--text);
   border: none;
 }
 

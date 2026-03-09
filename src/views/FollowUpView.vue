@@ -1178,6 +1178,7 @@ watch(
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
+  color: var(--text);
   font-size: var(--font-size-xs);
   font-weight: 600;
   opacity: 0.7;
@@ -1208,15 +1209,15 @@ watch(
 }
 
 .allocated-good {
-  color: var(--success, #1f9d55);
+  color: var(--positive);
 }
 
 .allocated-bad {
-  color: var(--danger, #d64545);
+  color: var(--negative);
   font-weight: 700;
 }
 
 .allocated-neutral {
-  color: var(--primary, #1e40af);
+  color: var(--primary);
 }
 </style>

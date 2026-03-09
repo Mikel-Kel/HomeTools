@@ -783,61 +783,44 @@ function closeView() {
 }
 
 .allocation-chip {
-
   flex: 0 0 auto;
-
   padding: 8px 10px;
-
   border-radius: 999px;
   border: 1px solid var(--border);
-
   background: var(--surface);
-
+  color: var(--text);
   font-size: var(--font-size-xs);
   font-weight: 600;
-
   opacity: 0.7;
   cursor: pointer;
-
   white-space: nowrap;
-
 }
 
 .allocation-chip.active {
-
   opacity: 1;
-
   background: var(--primary-soft);
   border-color: var(--primary);
-
 }
 
 .allocation-chip-scroll::after {
-
   content: "";
-
   position: absolute;
   top: 0;
   right: 0;
-
   width: 40px;
   height: 100%;
-
   pointer-events: none;
-
   background: linear-gradient(
     to right,
-    rgba(255,255,255,0),
+    transparent,
     var(--bg)
   );
-
 }
 
 
 .chip.active {
-
   background: var(--primary);
-  color: white;
+  color: var(--primary);
   border-color: var(--primary);
 
 }
@@ -847,18 +830,13 @@ function closeView() {
 ========================================================= */
 
 .tag-scroll {
-
   display: flex;
   gap: 8px;
-
   overflow-x: auto;
   scrollbar-width: none;
-
   padding-bottom: 4px;
-
   /* limite la largeur visible */
   max-width: 320px;
-
 }
 
 .tag-scroll::-webkit-scrollbar {
@@ -866,32 +844,23 @@ function closeView() {
 }
 
 .tag-chip {
-
   flex: 0 0 auto;          /* largeur automatique */
-
   border: 1px solid var(--border);
   background: var(--surface);
-
+  color: var(--text) ;
   border-radius: 999px;
-
   padding: 6px 14px;       /* un peu plus large */
-
   font-size: 0.7rem;
   font-weight: 500;
-
   cursor: pointer;
-
   white-space: nowrap;     /* empêche le wrap */
   text-align: center;
-
 }
 
 .tag-chip.active {
-
   background: var(--primary);
   color: white;
   border-color: var(--primary);
-
 }
 
 .tag-chip.disabled {
@@ -910,6 +879,7 @@ function closeView() {
   align-items: center;
   gap: 0.6rem; /* espace montant ↔ bouton */
 }
+
 .date-anchor {
   position: relative; /* 🔑 référence pour le popover */
   display: inline-flex;
@@ -1223,18 +1193,14 @@ button:disabled {
   max-width: 220px;
   padding: 14px 16px;
   border-radius: 14px;
-
-  background: rgba(255, 255, 255, 0.85);
-  color: #111;
-
+  background: var(--surface);
+  color: var(--text);
+  backdrop-filter: blur(6px);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.15);
-
+  box-shadow: var(--shadow-md);
   text-align: center;
 }
 
@@ -1249,8 +1215,8 @@ button:disabled {
 .spinner {
   width: 22px;
   height: 22px;
-  border: 2px solid rgba(0, 0, 0, 0.15);
-  border-top-color: rgba(0, 0, 0, 0.6);
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

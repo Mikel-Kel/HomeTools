@@ -207,6 +207,7 @@ const labelTransform = computed(() => {
   width: 100%;
   height: 100%;
   display: block;
+  overflow:visible;
 }
 
 /* zero axis */
