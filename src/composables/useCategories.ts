@@ -74,8 +74,15 @@ export function useCategories() {
     }
 
     /* JSON already matches Category interface */
-
-    categories.value = raw.categories;
+    categories.value = raw.categories
+      .map(c => ({
+        ...c,
+        subcategories: (c.subcategories ?? [])
+          .slice()
+          .sort((a, b) => a.seq - b.seq)
+      }))
+      .slice()
+      .sort((a, b) => a.seq - b.seq);
 
   }
 

@@ -825,6 +825,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  vertical-align: middle;
 }
 
 .spending-table tbody tr:nth-child(even) {
@@ -856,7 +857,6 @@ onBeforeUnmount(() => {
 /* center status pill visually */
 .spending-table td:nth-child(4) {
   display: flex;
-  justify-content: center;
 }
 
 /* =========================================================
@@ -875,7 +875,8 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
   line-height: 1.2;
 
-  border: 1px solid transparent;
+  border: 2px solid transparent;
+  margin: 0 auto;
 }
 
 /* Couleurs par statut */
@@ -913,17 +914,6 @@ onBeforeUnmount(() => {
    FX indicator & popover
 ========================================================= */
 
-/* Petit rond bleu */
-/*.fx-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  background: var(--primary);
-  border-radius: 50%;
-  margin-right: 6px;
-  vertical-align: middle;
-  opacity: 0.9;
-}*/
 /* Devise affichée avant le montant */
 .fx-code {
   display: inline-block;

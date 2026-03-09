@@ -661,7 +661,10 @@ watch(
     <!-- =========================
         STICKY STACK (Filters + Header + Total)
     ========================= -->
-    <div class="sticky-stack">
+    <div
+      class="sticky-stack"
+      :key="selectedCategory + '-' + selectedSubCategory"
+    >  
 
       <!-- Filters -->
       <section class="filters">
@@ -915,6 +918,7 @@ watch(
   top: 0;
   z-index: 200;
   background: var(--bg);
+  transform: translateZ(0);
 }
 
 
