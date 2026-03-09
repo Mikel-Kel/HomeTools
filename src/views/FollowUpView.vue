@@ -507,12 +507,10 @@ const scale = computed(() => {
 });
 
 function allocatedClass(amount: number, budget?: number) {
-
-  if (!budget) return "allocated-neutral";
-
-  if (amount > budget) return "allocated-bad";
-
-  return "allocated-good";
+  const b = budget ?? 0;
+  if (amount > b) return "allocated-bad";
+  if (amount < b) return "allocated-good";
+  return "allocated-neutral";
 }
 
 /* =========================
