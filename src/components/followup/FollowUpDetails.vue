@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 
 import { loadJSONFromFolder } from "@/services/google/driveRepository";
 import { useDrive } from "@/composables/useDrive";
 import { useCategories } from "@/composables/useCategories";
+import { useAppParameters } from "@/composables/useAppParameters";
 
 /* =========================================================
    TYPES
@@ -44,6 +45,7 @@ const props = defineProps<{
   monthlyBudgetMap?: Record<string, number>;
   nature?: "E" | "I" | null;
   maxMonth?: number | null;
+  includeOffBudget?: boolean;
 }>();
 
 /* =========================================================
@@ -52,6 +54,7 @@ const props = defineProps<{
 
 const { folders } = useDrive();
 const categoriesStore = useCategories();
+const { appParameters, load } = useAppParameters();
 
 const raw = ref<FollowUpDetailsFile | null>(null);
 
@@ -184,53 +187,54 @@ function subCategoryLabel(
 
 }
 
+const offBudgetTagId = computed<number | null>(() => {
+  return appParameters.value?.offBudgetTagId ?? null;
+});
+
 /* =========================================================
    FILTERED ITEMS
 ========================================================= */
-
-const filteredItems = computed(() => {
-
-  if (!raw.value ||
-      props.subCategoryId === null)
+const filteredItems = computed<FollowUpDetailItem[]>(() => {
+  if (!raw.value || props.subCategoryId === null) {
     return [];
+  }
+
+  const selectedCategoryIds = new Set(props.categoryIds);
+  const selectedSubCategoryId = props.subCategoryId;
+  const maxMonth = props.maxMonth;
+  const includeOffBudget = props.includeOffBudget;
+  const offTagId = offBudgetTagId.value;
 
   return raw.value.items
-    .filter(it => {
+    .filter((it) => {
+      const matchesCategory =
+        selectedCategoryIds.size === 0 ||
+        selectedCategoryIds.has(it.categoryId);
 
-      if (
-        props.categoryIds.length &&
-        !props.categoryIds.includes(
-          it.categoryId
-        )
-      )
-        return false;
+      if (!matchesCategory) return false;
 
-      if (
-        it.subCategoryId !==
-        props.subCategoryId
-      )
-        return false;
+      const matchesSubCategory =
+        it.subCategoryId === selectedSubCategoryId;
 
-      if (props.maxMonth != null) {
+      if (!matchesSubCategory) return false;
 
-        const month =
-          Number(
-            it.allocationDate.slice(5, 7)
-          );
+      const matchesMonth =
+        maxMonth == null ||
+        Number(it.allocationDate.slice(5, 7)) <= maxMonth;
 
-        if (month > props.maxMonth)
-          return false;
+      if (!matchesMonth) return false;
 
-      }
+      const isOffBudget =
+        offTagId !== null &&
+        it.tagId === offTagId;
+
+      if (!includeOffBudget && isOffBudget) return false;
 
       return true;
-
     })
     .sort((a, b) =>
-      b.allocationDate
-        .localeCompare(a.allocationDate)
+      b.allocationDate.localeCompare(a.allocationDate)
     );
-
 });
 
 /* =========================================================
@@ -368,6 +372,11 @@ function monthStatusClass(
   return "neutral";
 
 }
+
+onMounted(async () => {
+  await load();
+});
+
 </script>
 
 <template>

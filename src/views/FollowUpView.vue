@@ -276,6 +276,7 @@ const items = computed<FollowUpItem[]>(() => {
 
       const meta = categoriesStore.getCategory(c.categoryId);
       if (!meta) continue;
+      if (meta.displayScope === "X") continue;
 
       /* 🔹 filtres cohérents avec les chips */
 
@@ -288,8 +289,6 @@ const items = computed<FollowUpItem[]>(() => {
         meta.displayScope === "S" &&
         !showSecondaryCategories.value
       ) continue;
-
-      if (meta.displayScope === "X") continue;
 
       /* ---------------------------------- */
 
@@ -376,7 +375,7 @@ const items = computed<FollowUpItem[]>(() => {
       .sort((a, b) => a.seq - b.seq);
 
   for (const sub of officialSubs) {
-
+  
     if (!subTotals.has(sub.id)) continue;
 
     if (
@@ -941,6 +940,7 @@ watch(
       :monthly-budget-map="detailsMonthlyBudgetMap"
       :nature="detailsNature"
       :max-month="detailsMaxMonth"
+      :include-off-budget="includeOffBudget"
     />
   </div>
 </template>
