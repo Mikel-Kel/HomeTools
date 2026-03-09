@@ -32,6 +32,8 @@ interface FollowUpYearItem {
   subCategoryId: number;
   amount: number;
   monthToDate: number;
+  amountOffBudget?: number;
+  monthToDateOffBudget?: number;
 }
 
 interface FollowUpYear {
@@ -91,6 +93,8 @@ const categorySheetOpen = ref(false);
 const year = ref<number>(2026);
 const selectedCategory = ref<string>("*");
 const selectedSubCategory = ref<string | null>(null);
+
+const includeOffBudget = ref(false);
 
 const followUpRaw = ref<FollowUpFile | null>(null);
 const budgetRaw = ref<BudgetFile | null>(null);
@@ -244,6 +248,14 @@ function selectSubCategory(id: number) {
   selectedSubCategory.value = String(id);
 }
 
+function analysedValue(
+  amount: number,
+  offBudget?: number
+) {
+  if (includeOffBudget.value) return amount;
+  return amount - (offBudget ?? 0);
+}
+
 /* =========================
    Follow-up computation
 ========================= */
@@ -284,15 +296,21 @@ const items = computed<FollowUpItem[]>(() => {
       const yearData = c.years.find(y => y.year === year.value);
       if (!yearData) continue;
 
-      const amount = yearData.items.reduce((sum, i) => {
+        const amount = yearData.items.reduce((sum, i) => {
 
-        return sum + (
-          analysisScope.value === "MTD"
-            ? i.monthToDate
-            : i.amount
-        );
+          const base =
+            analysisScope.value === "MTD"
+              ? i.monthToDate
+              : i.amount;
 
-      }, 0);
+          const off =
+            analysisScope.value === "MTD"
+              ? i.monthToDateOffBudget
+              : i.amountOffBudget;
+
+          return sum + analysedValue(base, off);
+
+        }, 0);
 
       out.push({
         id: String(c.categoryId),
@@ -333,10 +351,17 @@ const items = computed<FollowUpItem[]>(() => {
 
   for (const i of yearData.items) {
 
-    const value =
+    const base =
       analysisScope.value === "MTD"
         ? i.monthToDate
         : i.amount;
+
+    const off =
+      analysisScope.value === "MTD"
+        ? i.monthToDateOffBudget
+        : i.amountOffBudget;
+
+    const value = analysedValue(base, off);
 
     subTotals.set(
       i.subCategoryId,
@@ -733,6 +758,17 @@ watch(
                 Expenses
               </button>
             </div>
+            <button
+              class="scope-btn offbudget-toggle"
+              :class="{ active: includeOffBudget }"
+              @click="includeOffBudget = !includeOffBudget"
+              :title="includeOffBudget
+                ? 'Off-budget included'
+                : 'Off-budget excluded'"
+            >
+              Off-Budget
+            </button>
+
           </div>
 
           <!-- Categories -->
@@ -964,7 +1000,7 @@ watch(
   opacity: 0.8;
 }
 
-/* Primary group (Year / Scope / Nature) */
+/* Primary group (Year / Scope / Nature / Off budget) */
 .primary-group {
   display: flex;
   align-items: center;
@@ -973,6 +1009,9 @@ watch(
   padding: 8px 0;
 }
 
+.offbudget-toggle {
+  margin-left: 4px;
+}
 
 /* =========================================================
    3️⃣ HEADER BAND (Categories / Spent / Budget)
