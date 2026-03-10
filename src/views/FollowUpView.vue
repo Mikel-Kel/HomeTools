@@ -896,7 +896,7 @@ watch(
         <div class="chart">
           <FollowUpBar
             :amount="item.amount"
-            :budget="displayedBudget(item)"
+            :budget="displayedBudget(item) ?? 0"
             :scale="scale"
             :spreadLimit="followUpSpreadLimit"
             :nature="currentNature === '-' ? null : currentNature"
