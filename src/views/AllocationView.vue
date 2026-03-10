@@ -96,13 +96,27 @@ const allocations = computed(() => allocation.value?.allocations.value ?? []);
 
 const categoryID = computed<number | null>({
   get: () => allocation.value?.categoryID.value ?? null,
-  set: v => allocation.value && (allocation.value.categoryID.value = v),
+  set: v => {
+    if (!allocation.value) return
+
+    if (allocation.value.categoryID.value !== v) {
+      allocation.value.categoryID.value = v
+      allocation.value.subCategoryID.value = null
+      allocation.value.allocatedTagID.value = null
+    }
+  },
 });
 
 const subCategoryID = computed<number | null>({
   get: () => allocation.value?.subCategoryID.value ?? null,
-  set: v =>
-    allocation.value && (allocation.value.subCategoryID.value = v),
+  set: v => {
+    if (!allocation.value) return
+
+    if (allocation.value.subCategoryID.value !== v) {
+      allocation.value.subCategoryID.value = v
+      allocation.value.allocatedTagID.value = null
+    }
+  },
 });
 
 const allocatedTagID = computed<number | null>({
@@ -183,14 +197,6 @@ watch(
     }
   }
 );
-
-watch(categoryID, () => {
-  subCategoryID.value = null
-})
-
-watch([categoryID, subCategoryID], () => {
-  allocatedTagID.value = null
-})
 
 /* =========================
    Focus
