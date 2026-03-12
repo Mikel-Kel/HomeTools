@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
-
+import { useAppParameters } from "@/composables/useAppParameters";
 import { loadJSONFromFolder } from "@/services/google/driveRepository";
 import { useDrive } from "@/composables/useDrive";
+
 import { useCategories } from "@/composables/useCategories";
-import { useAppParameters } from "@/composables/useAppParameters";
+import { useAllocationTags } from "@/composables/allocations/useAllocationTags"
 
 /* =========================================================
    TYPES
@@ -53,8 +54,10 @@ const props = defineProps<{
 ========================================================= */
 
 const { folders } = useDrive();
-const categoriesStore = useCategories();
 const { appParameters, load } = useAppParameters();
+
+const categoriesStore = useCategories();
+const tagsStore = useAllocationTags()
 
 const raw = ref<FollowUpDetailsFile | null>(null);
 
@@ -71,48 +74,35 @@ async function loadDetails() {
     raw.value = null;
     return;
   }
-
   loading.value = true;
   error.value = null;
 
   try {
-
     const folderId =
       folders.value.allocations.budget;
-
     const filename =
       `FollowUpDetails-${props.year}.json`;
-
     const data =
       await loadJSONFromFolder<FollowUpDetailsFile>(
         folderId,
         filename
       );
-
     if (!data) {
       throw new Error(`${filename} not found`);
     }
-
     raw.value = data;
-
   }
 
   catch (e: any) {
-
     error.value =
       e?.message ??
       "Unable to load FollowUpDetails";
-
     raw.value = null;
-
   }
 
   finally {
-
     loading.value = false;
-
   }
-
 }
 
 watch(
@@ -130,7 +120,6 @@ watch(
 ========================================================= */
 
 function fmt(n: number) {
-
   return n.toLocaleString(
     "en-GB",
     {
@@ -138,24 +127,18 @@ function fmt(n: number) {
       maximumFractionDigits: 2
     }
   );
-
 }
 
 function fmtInt(n: number) {
-
   return Math.round(n)
     .toLocaleString("en-GB");
-
 }
 
 function monthKey(date: string) {
-
   return date.slice(0, 7);
-
 }
 
 function monthLabel(key: string) {
-
   const [y, m] =
     key.split("-").map(Number);
 
@@ -167,14 +150,12 @@ function monthLabel(key: string) {
         year: "numeric"
       }
     );
-
 }
 
 function subCategoryLabel(
   catId: number,
   subId: number
 ) {
-
   const cat =
     categoriesStore.getCategory(catId);
 
@@ -184,12 +165,17 @@ function subCategoryLabel(
       ?.label ??
     `#${subId}`
   );
-
 }
 
-const offBudgetTagId = computed<number | null>(() => {
-  return appParameters.value?.offBudgetTagId ?? null;
-});
+function getTag(tagId: number | null) {
+  if (tagId === null) return null
+  return tagsStore.getTag(tagId)
+}
+
+function tagLabel(tagId: number | null) {
+  return getTag(tagId)?.tagName ?? ""
+}
+
 
 /* =========================================================
    FILTERED ITEMS
@@ -203,7 +189,6 @@ const filteredItems = computed<FollowUpDetailItem[]>(() => {
   const selectedSubCategoryId = props.subCategoryId;
   const maxMonth = props.maxMonth;
   const includeOffBudget = props.includeOffBudget;
-  const offTagId = offBudgetTagId.value;
 
   return raw.value.items
     .filter((it) => {
@@ -225,8 +210,7 @@ const filteredItems = computed<FollowUpDetailItem[]>(() => {
       if (!matchesMonth) return false;
 
       const isOffBudget =
-        offTagId !== null &&
-        it.tagId === offTagId;
+        getTag(it.tagId)?.offBudget === true;
 
       if (!includeOffBudget && isOffBudget) return false;
 
@@ -250,7 +234,6 @@ computed<MonthGroup[]>(() => {
     >();
 
   for (const it of filteredItems.value) {
-
     const key =
       monthKey(it.allocationDate);
 
@@ -258,18 +241,14 @@ computed<MonthGroup[]>(() => {
       map.set(key, []);
 
     map.get(key)!.push(it);
-
   }
 
   return Array
     .from(map.entries())
     .map(([key, list]) => ({
-
       key,
-
       label:
         monthLabel(key),
-
       total:
         list.reduce(
           (s, i) =>
@@ -282,12 +261,10 @@ computed<MonthGroup[]>(() => {
           b.allocationDate
             .localeCompare(a.allocationDate)
         )
-
     }))
     .sort((a, b) =>
       b.key.localeCompare(a.key)
     );
-
 });
 
 /* =========================================================
@@ -298,30 +275,19 @@ const openMonths =
 ref<Set<string>>(new Set());
 
 watch(monthlyGroups, groups => {
-
   if (groups.length) {
-
     openMonths.value =
       new Set([groups[0].key]);
-
   }
-
 });
 
 function toggleMonth(key: string) {
-
   if (openMonths.value.has(key)) {
-
     openMonths.value.delete(key);
-
   }
-
   else {
-
     openMonths.value.add(key);
-
   }
-
 }
 
 /* =========================================================
@@ -332,7 +298,6 @@ function monthStatusClass(
   key: string,
   total: number
 ) {
-
   if (
     !props.monthlyBudgetMap ||
     !props.nature
@@ -346,37 +311,27 @@ function monthStatusClass(
     return "neutral";
 
   if (props.nature === "E") {
-
     if (total > budget)
       return "over";
-
     if (total < budget)
       return "under";
-
     return "neutral";
-
   }
 
   if (props.nature === "I") {
-
     if (total < budget)
       return "over";
-
     if (total > budget)
       return "under";
-
     return "neutral";
-
   }
-
   return "neutral";
-
 }
 
 onMounted(async () => {
   await load();
+  await tagsStore.load();
 });
-
 </script>
 
 <template>
@@ -430,15 +385,29 @@ onMounted(async () => {
           <div class="col-label date">
             {{ it.allocationDate }}
           </div>
+          <div class="desc-block">
 
-          <div>
-            <div class="desc">
-              {{ it.description || "—" }}
+            <div class="desc-text">
+              <div class="desc">
+                {{ it.description || "—" }}
+              </div>
+              <div class="sub muted">
+                {{ subCategoryLabel(it.categoryId, it.subCategoryId) }}
+              </div>
             </div>
-            <div class="sub muted">
-              {{ subCategoryLabel(it.categoryId, it.subCategoryId) }}
+            <div
+              v-if="it.tagId !== null"
+              class="tag-container"
+            >
+              <span
+                v-if="it.tagId !== null"
+                class="tag-chip"
+                :class="{ off: getTag(it.tagId)?.offBudget }"
+              >
+                {{ tagLabel(it.tagId) }}
+              </span>
             </div>
-          </div>
+          </div>  
 
           <div class="col-spent amount">
             {{ fmt(it.amount) }}
@@ -528,6 +497,49 @@ onMounted(async () => {
   font-weight: 600;
   font-size: 0.8rem;
   color: var(--text-soft);
+}
+
+/* =========================================================
+   Description + tag layout
+========================================================= */
+
+.desc-block {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 8px;
+  align-items: center;
+}
+
+.desc-text {
+  min-width: 0; /* important pour ellipsis */
+}
+
+/* =========================================================
+   Tag chip
+========================================================= */
+
+.tag-container {
+  display: flex;
+  align-items: center;
+}
+
+.tag-chip {
+  padding: 1px 6px;
+
+  border-radius: 999px;
+  border: 1px solid var(--border);
+
+  font-size: 0.65rem;
+  font-weight: 700;
+
+  background: var(--surface-soft);
+  color: var(--text-soft);
+}
+
+.tag-chip.off {
+  background: var(--negative-soft, rgba(255,0,0,0.08));
+  border-color: var(--negative);
+  color: var(--negative);
 }
 
 .desc {

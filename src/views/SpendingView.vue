@@ -397,6 +397,13 @@ onBeforeUnmount(() => {
         >
           <span class="arrow">{{ filtersOpen ? "▼" : "►" }}</span>
           <h2>Filters</h2>
+          <button
+            v-if="filtersOpen"
+            class="reset-button"
+            @click.stop="resetFilters"
+          >
+            Reset
+          </button>
         </header>
 
         <div v-if="filtersOpen" class="filters-body">
@@ -462,7 +469,6 @@ onBeforeUnmount(() => {
               placeholder="Max"
               v-model.number="maxAmount"
             />
-            <button class="reset" @click="resetFilters">Reset</button>
           </div>
         </div>
       </section>
@@ -648,6 +654,29 @@ onBeforeUnmount(() => {
   color: var(--text-soft);
 }
 
+/* pousse le bouton à droite */
+.reset-button {
+
+  padding: 2px 20px;
+
+  border-radius: 999px;
+  border: 1px solid var(--border);
+
+  background: var(--surface-soft);
+  color: var(--text-soft);
+
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.reset-button:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .filters-body {
   padding: 0.5rem 0.5rem 0.75rem;
   display: flex;
@@ -660,6 +689,41 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+/* =========================================================
+   Filter inputs
+========================================================= */
+
+.filter-row input {
+  height: 30px;
+  padding: 0 8px;
+
+  border-radius: 18px;
+  border: 1px solid var(--border);
+
+  background: var(--surface);
+  color: var(--text);
+
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+
+  font-family: inherit;
+}
+
+.filter-row input[type="date"] {
+  width: 120px;
+  letter-spacing: 0.04rem;
+}
+
+.filter-row input[type="number"] {
+  width: 80px;
+}
+
+/* focus */
+.filter-row input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
 }
 
 .label {
@@ -679,8 +743,13 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--surface);
+  border-color: var(--border);
+  background: var(--surface--soft);
+  color:var(--text-soft);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
   user-select: none;
   font-size: var(--font-size-xs);
   font-weight: 600;
@@ -691,6 +760,7 @@ onBeforeUnmount(() => {
 .chip.active {
   opacity: 1;
   background: var(--primary-soft);
+  color:var(--primary);
   border-color: var(--primary);
 }
 
@@ -749,7 +819,13 @@ onBeforeUnmount(() => {
   position: sticky;
   top: var(--sticky-height);
   z-index: 120;
-  background: var(--bg);
+  background: color-mix(in srgb, var(--primary) 20%, var(--surface-soft));
+/*  background: linear-gradient(
+    to bottom,
+    var(--primary) 1%,
+    var(--surface)
+  );*/
+  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 
   /* 🔑 EXACTEMENT la même grille que le tableau */
