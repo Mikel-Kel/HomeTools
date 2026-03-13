@@ -96,7 +96,7 @@ const year = ref<number>(2026);
 const selectedCategory = ref<string>("*");
 const selectedSubCategory = ref<string | null>(null);
 
-const includeOffBudget = ref(false);
+const includeOffBudget = ref(true);
 
 const followUpRaw = ref<FollowUpFile | null>(null);
 const budgetRaw = ref<BudgetFile | null>(null);
