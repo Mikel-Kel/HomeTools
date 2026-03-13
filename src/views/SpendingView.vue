@@ -18,6 +18,8 @@ import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
 import { releaseDraftsBatch } from "@/composables/allocations/releaseBatch";
 import { useDriveWatcher } from "@/composables/useDriveWatcher";
 
+import { formatDate } from "@/utils/dateFormat";
+
 /* =========================
    Router & Stores
 ========================= */
@@ -255,9 +257,6 @@ function formatAmount(amount: number) {
     })
   );
 }
-
-const formatDate = (d: string) =>
-  new Date(d).toLocaleDateString();
 
 /* =========================
    Navigation
@@ -521,7 +520,7 @@ onBeforeUnmount(() => {
               class="row"
               @click="openAllocation(record)"
             >
-              <td>{{ formatDate(record.date) }}</td>
+              <td>{{ formatDate(record.date, "compact") }}</td>
               <td>{{ record.party }}</td>
               <td>{{ record.owner }}</td>
               <td>
@@ -912,7 +911,9 @@ onBeforeUnmount(() => {
    Column alignment (KEY FIX)
 ========================================================= */
 .spending-table th:nth-child(1),
-.spending-table td:nth-child(1),
+.spending-table td:nth-child(1){
+  text-align: center;
+}
 .spending-table th:nth-child(2),
 .spending-table td:nth-child(2) {
   text-align: left;

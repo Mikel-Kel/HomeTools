@@ -20,6 +20,8 @@ import { useAppParameters } from "@/composables/useAppParameters";
 
 const { appParameters, load } = useAppParameters();
 
+import { formatDate } from "@/utils/dateFormat";
+
 /* =========================
    Types
 ========================= */
@@ -155,14 +157,6 @@ watch(year, () => {
 
 function getMonthIndex(): number {
   return new Date().getMonth() + 1;
-}
-
-function formatDate(d: Date): string {
-  return d.toLocaleDateString("fr-CH", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
 }
 
 function endOfPreviousMonth(d: Date): Date {
@@ -523,7 +517,7 @@ const statusAsOfLabel = computed(() => {
 
   const d = new Date(followUpRaw.value.updatedAt);
 
-  return "as of " + formatDate(d);
+  return "as of " + formatDate(d, "text");
 });
 
 const allocatedColumnLabel = computed(() => {

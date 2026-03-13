@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from "vue";
 import { useAppParameters } from "@/composables/useAppParameters";
 import { loadJSONFromFolder } from "@/services/google/driveRepository";
 import { useDrive } from "@/composables/useDrive";
+import { formatDate } from "@/utils/dateFormat";
 
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags"
@@ -383,7 +384,7 @@ onMounted(async () => {
           class="grid row"
         >
           <div class="col-label date">
-            {{ it.allocationDate }}
+            {{ formatDate(it.allocationDate,"text") }}
           </div>
           <div class="desc-block">
 

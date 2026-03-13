@@ -11,6 +11,8 @@ import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags" 
 import { useDrive } from "@/composables/useDrive";
 
+import { formatDate } from "@/utils/dateFormat";
+
 import type { SpendingRecord } from "@/composables/spending/useSpending";
 
 /* =========================
@@ -383,7 +385,7 @@ function closeView() {
     <section class="allocation-record">
       <div class="record-main">
         <div class="record-party">{{ recordSafe.party }}</div>
-        <div class="record-meta">{{ recordSafe.date }}</div>
+        <div class="record-meta">{{ formatDate(recordSafe.date, "compact") }}</div>
       </div>
 
       <div class="record-amounts">
@@ -578,7 +580,7 @@ function closeView() {
                   class="alloc-date-badge"
                   :title="a.allocationDate"
                 >
-                  {{ a.allocationDate }}
+                  {{ formatDate(a.allocationDate, "short") }}
                 </span>
                 <!-- 🏷 TAG -->
                 <span

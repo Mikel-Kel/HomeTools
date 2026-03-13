@@ -8,6 +8,8 @@ import { useRouter } from "vue-router"
 import { useAppParameters } from "@/composables/useAppParameters"
 import { loadJSONFromFolder } from "@/services/google/driveRepository"
 
+import { formatDate } from "@/utils/dateFormat"
+
 /* =========================
    Types
 ========================= */
@@ -460,15 +462,6 @@ const resultCount = computed(
    Formatting
 ========================= */
 
-function formatDate(d: string | null) {
-
-  if (!d) return ""
-
-  const [y, m, day] = d.split("-")
-
-  return `${day}.${m}.${y.slice(2)}`
-}
-
 function formatAmount(a: number) {
 
   return a.toLocaleString(undefined, {
@@ -597,7 +590,7 @@ onMounted(async () => {
                 :class="{ active: selectedDTADate === d }"
                 @click="selectedDTADate = d"
               >
-                {{ formatDate(d) }}
+                {{ formatDate(d,"text") }}
               </button>
             </div>
           </div>
@@ -634,17 +627,24 @@ onMounted(async () => {
         SCROLLABLE TABLE AREA
     ========================= -->
     <div class="archives-table-wrapper">
-
       <table v-if="!loading && !error" class="archive-table">
+        <colgroup>
+          <col class="col-date" />
+          <col class="col-party" />
+          <col class="col-info1" />
+          <col class="col-info2" />
+          <col v-if="isBillsSelected" class="col-dta" />
+          <col v-if="isBillsSelected" class="col-amount" />
+        </colgroup>
 
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Party</th>
-            <th>Info1</th>
-            <th>Info2</th>
-            <th v-if="isBillsSelected">DTA</th>
-            <th v-if="isBillsSelected" class="amount">Amount</th>
+            <th class="col-date">Date</th>
+            <th class="col-party">Party</th>
+            <th class="col-info1">Info1</th>
+            <th class="col-info2">Info2</th>
+            <th v-if="isBillsSelected" class="col-dta">DTA</th>
+            <th v-if="isBillsSelected" class="col-amount">Amount</th>
           </tr>
         </thead>
 
@@ -655,19 +655,19 @@ onMounted(async () => {
             class="clickable-row"
             @click="openDocument(item)"
           >
-            <td>{{ formatDate(item.documentDate) }}</td>
-            <td v-html="highlight(getPartyLabel(item.partyID))"></td>
-            <td v-html="highlight(item.info1)"></td>
-            <td v-html="highlight(item.info2)"></td>
-            <td v-if="isBillsSelected">
+            <td class="col-date">{{ formatDate(item.documentDate, "text") }}</td>
+            <td class="col-party" v-html="highlight(getPartyLabel(item.partyID))"></td>
+            <td class="col-info1" v-html="highlight(item.info1)"></td>
+            <td class="col-info2" v-html="highlight(item.info2)"></td>
+            <td v-if="isBillsSelected" class="col-dta">
               <span
                 v-if="item.indicatorDTA === 1"
                 class="dta-badge"
               >
-                {{ formatDate(item.dtaDate) }}
+                {{ formatDate(item.dtaDate, "text") }}
               </span>
             </td>
-            <td v-if="isBillsSelected" class="amount">
+            <td v-if="isBillsSelected" class="col-amount">
               {{ formatAmount(item.refAmount) }}
             </td>
           </tr>
@@ -827,13 +827,14 @@ onMounted(async () => {
 }
 
 /* =========================================================
-   TABLE WRAPPER (KEY FIX)
+   TABLE WRAPPER
 ========================================================= */
 
 .archives-table-wrapper {
-  height: calc(100vh - 220px); /* adapte si nécessaire */
+  height: calc(100vh - 220px);
   overflow-y: auto;
-  padding: 0 1.5rem 1.5rem 1rem;
+  padding: 1.5rem;
+  scrollbar-gutter: stable;
 }
 
 /* =========================================================
@@ -842,22 +843,60 @@ onMounted(async () => {
 
 .archive-table {
   width: 100%;
-  border-collapse: collapse;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.85rem;
 }
+
+/* colonnes explicites */
+.archive-table col.col-date   { width: 130px; }
+.archive-table col.col-party  { width: 30%; }
+.archive-table col.col-info1  { width: 18%; }
+.archive-table col.col-info2  { width: 16%; }
+.archive-table col.col-dta    { width: 130px; }
+.archive-table col.col-amount { width: 140px; }
 
 .archive-table thead th {
   position: sticky;
   top: 0;
-  background: var(--bg);
   z-index: 50;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
+  font-weight: 700;
 }
 
 .archive-table th,
 .archive-table td {
   padding: 0.5rem 0.6rem;
   border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* alignements par classe, plus robustes que nth-child */
+.archive-table th.col-date,
+.archive-table td.col-date,
+.archive-table th.col-dta,
+.archive-table td.col-dta {
+  text-align: center;
+}
+
+.archive-table th.col-party,
+.archive-table td.col-party,
+.archive-table th.col-info1,
+.archive-table td.col-info1,
+.archive-table th.col-info2,
+.archive-table td.col-info2 {
+  text-align: left;
+}
+
+.archive-table th.col-amount,
+.archive-table td.col-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .amount {
