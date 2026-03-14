@@ -8,6 +8,7 @@ import { useRouter } from "vue-router"
 import { useAppParameters } from "@/composables/useAppParameters"
 import { loadJSONFromFolder } from "@/services/google/driveRepository"
 
+import { useParties } from "@/composables/useParties"
 import { formatDate } from "@/utils/dateFormat"
 
 /* =========================
@@ -83,7 +84,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 
 const archive = ref<ArchiveItem[]>([])
-const parties = ref<Party[]>([])
+const partiesStore = useParties()
 
 const filtersOpen = ref(true)
 
@@ -98,7 +99,7 @@ const searchText = ref("")
 
 const partyMap = computed(() => {
   const map = new Map<number, string>()
-  for (const p of parties.value) {
+  for (const p of partiesStore.parties.value) {
     map.set(p.id, p.label)
   }
   return map
@@ -212,28 +213,6 @@ async function loadArchive() {
   } finally {
 
     loading.value = false
-  }
-}
-
-async function loadParty() {
-
-  if ( driveStatus.value !== "CONNECTED")
-    return
-
-  try {
-
-    const raw = await loadJSONFromFolder<PartyFile>(
-      folders.value.settings,
-      "party.json"
-    )
-
-    if (!raw) return
-
-    parties.value = raw.parties ?? []
-
-  } catch (err) {
-
-    console.error("party.json load failed", err)
   }
 }
 
@@ -501,18 +480,13 @@ const headerCountLabel = computed(() => {
 ========================= */
 
 onMounted(async () => {
-
   if (driveStatus.value !== "CONNECTED") {
-
     router.replace({ name: "authentication" })
-
     return
   }
 
-  await loadArchive()
-
-  await loadParty()
-
+  await partiesStore.load()
+await loadArchive()
 })
 </script>
 

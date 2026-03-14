@@ -38,7 +38,7 @@ export function useParties() {
 
     const raw = await loadJSONFromFolder<PartiesFile>(
       folders.value.settings,
-      "Parties.json"
+      "parties.json"
     );
 
     if (
