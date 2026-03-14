@@ -79,6 +79,18 @@ const fxPopover = ref<{
 
 let fxTimer: number | null = null;
 
+
+const partyMap = computed(() => {
+
+  const map = new Map<number,string>()
+
+  for (const p of partiesStore.parties.value) {
+    map.set(p.id, p.label)
+  }
+
+  return map
+})
+
 /* =========================================================
    LOAD
 ========================================================= */
@@ -199,10 +211,8 @@ function subCategoryLabel(
 }
 
 function partyLabel(partyId: number | null) {
-  // force dépendance reactive
-  const _ = partiesStore.parties.value
   if (partyId == null) return ""
-  return partiesStore.getParty(partyId)?.label ?? `#${partyId}`
+  return partyMap.value.get(partyId) ?? `#${partyId}`
 }
 
 function getTag(tagId: number | null) {
