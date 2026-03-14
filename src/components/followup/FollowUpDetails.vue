@@ -19,6 +19,7 @@ interface FollowUpDetailItem {
   allocationDate: string; // YYYY-MM-DD
   amount: number;
   amountCcy: number;
+  currency:string;
   description: string;
   bankDescription: string;
   partyId: number | null;
@@ -68,6 +69,14 @@ const raw = ref<FollowUpDetailsFile | null>(null);
 
 const loading = ref(false);
 const error = ref<string | null>(null);
+
+const fxPopover = ref<{
+  item: FollowUpDetailItem;
+  x: number;
+  y: number;
+} | null>(null);
+
+let fxTimer: number | null = null;
 
 /* =========================================================
    LOAD
@@ -139,6 +148,22 @@ function fmtInt(n: number) {
     .toLocaleString("en-GB");
 }
 
+function fmtForeign(it: FollowUpDetailItem) {
+  if (!it.amountCcy) return "";
+
+  const val = it.amountCcy.toLocaleString(
+    "en-GB",
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }
+  );
+
+  return it.currency
+    ? `${val} ${it.currency}`
+    : val;
+}
+
 function monthKey(date: string) {
   return date.slice(0, 7);
 }
@@ -185,7 +210,34 @@ function getTag(tagId: number | null) {
 function tagLabel(tagId: number | null) {
   return getTag(tagId)?.tagName ?? ""
 }
+function isForeign(it: FollowUpDetailItem) {
+  return it.amountCcy !== 0;
+}
 
+function showFxPopover(event: MouseEvent, item: FollowUpDetailItem) {
+  if (!isForeign(item)) return;
+
+  const rect =
+    (event.currentTarget as HTMLElement)
+      .getBoundingClientRect();
+
+  fxPopover.value = {
+    item,
+    x: rect.right - 10,
+    y: rect.top - 8,
+  };
+
+  if (fxTimer) clearTimeout(fxTimer);
+
+  fxTimer = window.setTimeout(() => {
+    fxPopover.value = null;
+  }, 2000);
+}
+
+function closeFxPopover() {
+  fxPopover.value = null;
+  if (fxTimer) clearTimeout(fxTimer);
+}
 
 /* =========================================================
    FILTERED ITEMS
@@ -423,8 +475,19 @@ onMounted(async () => {
             </div>
           </div>  
 
-          <div class="col-spent amount">
-            {{ fmt(it.amount) }}
+          <div
+            class="col-spent amount amount-cell"
+            @mouseenter="showFxPopover($event, it)"
+            @mouseleave="closeFxPopover"
+          >
+            <span class="amount-value">
+              {{ fmt(it.amount) }}
+            </span>
+
+            <span
+              v-if="isForeign(it)"
+              class="ccy-dot"
+            ></span>
           </div>
 
           <div></div>
@@ -437,6 +500,16 @@ onMounted(async () => {
       No allocations for this selection
     </div>
 
+  </div>
+  <div
+    v-if="fxPopover"
+    class="fx-popover"
+    :style="{
+      left: fxPopover.x + 'px',
+      top: fxPopover.y + 'px'
+    }"
+  >
+    {{ fmtForeign(fxPopover.item) }}
   </div>
 </section>
 </template>
@@ -573,6 +646,58 @@ onMounted(async () => {
   font-weight: 700;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
+}
+/* =========================================================
+   Amount cell
+========================================================= */
+.amount-cell {
+  position: relative;
+  text-align: right;
+}
+
+/* valeur principale */
+.amount-value {
+  display: inline-block;
+}
+
+/* =========================================================
+   Currency indicator
+========================================================= */
+
+.ccy-dot {
+  position: absolute;
+
+  right: -12px;   /* décale le point à droite du montant */
+  top: 50%;
+
+  transform: translateY(-50%);
+
+  width: 6px;
+  height: 6px;
+
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+/* =========================================================
+   FX popover
+========================================================= */
+.fx-popover {
+  position: fixed;
+
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  padding: 4px 8px;
+
+  font-size: 0.75rem;
+  font-weight: 600;
+
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+
+  pointer-events: none;
+  z-index: 1000;
 }
 
 /* =========================================================
