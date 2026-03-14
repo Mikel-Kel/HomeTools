@@ -7,6 +7,7 @@ import { formatDate } from "@/utils/dateFormat";
 
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags"
+import { useParties } from "@/composables/useParties"
 
 /* =========================================================
    TYPES
@@ -17,7 +18,9 @@ interface FollowUpDetailItem {
   subCategoryId: number;
   allocationDate: string; // YYYY-MM-DD
   amount: number;
+  amountCcy: number;
   description: string;
+  bankDescription: string;
   partyId: number | null;
   tagId: number | null;
 }
@@ -59,6 +62,7 @@ const { appParameters, load } = useAppParameters();
 
 const categoriesStore = useCategories();
 const tagsStore = useAllocationTags()
+const partiesStore = useParties()
 
 const raw = ref<FollowUpDetailsFile | null>(null);
 
@@ -166,6 +170,11 @@ function subCategoryLabel(
       ?.label ??
     `#${subId}`
   );
+}
+
+function partyLabel(partyId: number | null) {
+  if (partyId == null) return ""
+  return partiesStore.getParty(partyId)?.label ?? `#${partyId}`
 }
 
 function getTag(tagId: number | null) {
@@ -332,6 +341,7 @@ function monthStatusClass(
 onMounted(async () => {
   await load();
   await tagsStore.load();
+  await partiesStore.load();
 });
 </script>
 
@@ -393,7 +403,10 @@ onMounted(async () => {
                 {{ it.description || "—" }}
               </div>
               <div class="sub muted">
-                {{ subCategoryLabel(it.categoryId, it.subCategoryId) }}
+                {{ partyLabel(it.partyId) }}
+                <span v-if="it.bankDescription">
+                  · {{ it.bankDescription }}
+                </span>
               </div>
             </div>
             <div
