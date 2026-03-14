@@ -141,6 +141,39 @@ watch(
   loadDetails,
   { immediate: true }
 );
+/*DEBUG"*/
+watch(
+  () => partiesStore.parties.value.length,
+  (len) => {
+    console.log("PARTIES STORE LENGTH =", len)
+
+    if (len > 0) {
+      console.log(
+        "TEST PARTY 835 FROM STORE =",
+        partiesStore.getParty(835)
+      )
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => raw.value,
+  (r) => {
+    if (!r) return
+
+    console.log(
+      "FOLLOWUP ITEMS LOADED =",
+      r.items.length
+    )
+
+    console.log(
+      "FIRST ITEM PARTY ID =",
+      r.items[0]?.partyId,
+      typeof r.items[0]?.partyId
+    )
+  }
+)
 
 /* =========================================================
    HELPERS
@@ -209,11 +242,27 @@ function subCategoryLabel(
     `#${subId}`
   );
 }
+function partyLabel(partyId: number | null) {
 
+  if (partyId == null) return ""
+
+  const party = partiesStore.getParty(partyId)
+
+  console.log(
+    "RESOLVE PARTY",
+    partyId,
+    "→",
+    party
+  )
+
+  return party?.label ?? `#${partyId}`
+}
+/*
 function partyLabel(partyId: number | null) {
   if (partyId == null) return ""
   return partyMap.value.get(partyId) ?? `#${partyId}`
 }
+*/
 
 function getTag(tagId: number | null) {
   if (tagId === null) return null
@@ -472,6 +521,9 @@ onMounted(async () => {
                   · {{ it.bankDescription }}
                 </span>
               </div>
+              <div class="sub muted">
+  DEBUG: {{ it.partyId }}
+</div>
             </div>
             <div
               v-if="it.tagId !== null"
