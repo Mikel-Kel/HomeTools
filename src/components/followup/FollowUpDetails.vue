@@ -521,9 +521,6 @@ onMounted(async () => {
                   · {{ it.bankDescription }}
                 </span>
               </div>
-              <div class="sub muted">
-  DEBUG: {{ it.partyId }}
-</div>
             </div>
             <div
               v-if="it.tagId !== null"
