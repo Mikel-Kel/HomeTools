@@ -8,6 +8,7 @@ import { formatDate } from "@/utils/dateFormat";
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags"
 import { useParties } from "@/composables/useParties"
+import { loadSettings } from "@/services/loadSettings";
 
 /* =========================================================
    TYPES
@@ -393,9 +394,8 @@ function monthStatusClass(
 }
 
 onMounted(async () => {
+  await loadSettings();
   await load();
-  await tagsStore.load();
-  await partiesStore.load();
 });
 </script>
 
