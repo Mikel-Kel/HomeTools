@@ -24,7 +24,7 @@ async function load(): Promise<void> {
 
   const raw = await loadJSONFromFolder<any>(
     folders.value.settings,
-    "Parties.json"
+    "parties.json"
   );
 
   console.log("PARTIES RAW =", raw);
@@ -48,7 +48,7 @@ async function load(): Promise<void> {
 
     const raw = await loadJSONFromFolder<PartiesFile>(
       folders.value.settings,
-      "Parties.json"
+      "parties.json"
     );
 
     if (!raw || !Array.isArray(raw.parties)) {
