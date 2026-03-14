@@ -479,6 +479,7 @@ onMounted(async () => {
             class="col-spent amount amount-cell"
             @mouseenter="showFxPopover($event, it)"
             @mouseleave="closeFxPopover"
+            @click="showFxPopover($event, it)"
           >
             <span class="amount-value">
               {{ fmt(it.amount) }}
