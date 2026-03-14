@@ -198,6 +198,8 @@ function subCategoryLabel(
 }
 
 function partyLabel(partyId: number | null) {
+  // force dépendance reactive
+  const _ = partiesStore.parties.value
   if (partyId == null) return ""
   return partiesStore.getParty(partyId)?.label ?? `#${partyId}`
 }
