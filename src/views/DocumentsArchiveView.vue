@@ -678,8 +678,8 @@ onMounted(async () => {
     <div class="archives-table-wrapper">
       <table v-if="!loading && !error" class="archive-table">
         <colgroup>
-          <col class="col-action" />
-          <col class="col-date" />
+          <col class="col-action" style="width: 28px"/>
+          <col class="col-date" style="width: 110px"/>
           <col class="col-party" />
           <col class="col-info1" />
           <col class="col-info2" />
@@ -938,18 +938,15 @@ onMounted(async () => {
 .archive-table {
   width: 100%;
   table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0;
   font-size: 0.85rem;
 }
 
 /* colonnes explicites */
-.archive-table col.col-date   { width: 130px; }
-.archive-table col.col-party  { width: 30%; }
-.archive-table col.col-info1  { width: 18%; }
-.archive-table col.col-info2  { width: 16%; }
-.archive-table col.col-dta    { width: 130px; }
-.archive-table col.col-amount { width: 140px; }
+.archive-table col.col-party  { width: auto; }
+.archive-table col.col-info1  { width: auto; }
+.archive-table col.col-info2  { width: auto; }
+.archive-table col.col-dta    { width: 100px; }
+.archive-table col.col-amount { width: 80px; }
 
 .archive-table thead th {
   position: sticky;
@@ -1020,8 +1017,8 @@ mark {
 }
 
 .col-action {
-  width: 40px;
-  text-align: center;
+  width: 30px;
+  text-align: right;
 }
 
 .classify-btn {
