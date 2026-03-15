@@ -12,6 +12,11 @@ import { useParties } from "@/composables/useParties"
 import { formatDate } from "@/utils/dateFormat"
 import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vue"
 
+import { useDocumentTags } from "@/composables/useDocumentTags"
+import type { DocumentTag } from "@/composables/useDocumentTags"
+
+const tagsStore = useDocumentTags()
+
 /* =========================
    Types
 ========================= */
@@ -28,6 +33,7 @@ interface ArchiveItem {
   partyID: number
   refAmount: number
   googleFileId: string
+  tags?:number[]
 }
 
 interface ArchiveFile {
@@ -458,6 +464,54 @@ function rowClick(e: MouseEvent, item: ArchiveItem) {
   openDocument(item)
 }
 
+const tagMap = computed(() => {
+
+  const map = new Map<number, DocumentTag>()
+
+  for (const t of tagsStore.tags.value)
+    map.set(t.id, t)
+
+  return map
+
+})
+
+const tooltip = ref<{
+  text: string
+  x: number
+  y: number
+} | null>(null)
+
+let tooltipTimer: ReturnType<typeof setTimeout> | null = null
+
+function showTagTooltip(e: MouseEvent, tagId: number) {
+  const tag = tagMap.value.get(tagId)
+  if (!tag) return
+
+  const target = e.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+
+  tooltip.value = {
+    text: tag.tagName,
+    x: rect.left + rect.width / 2,
+    y: rect.top - 8
+  }
+
+  if (tooltipTimer) clearTimeout(tooltipTimer)
+
+  tooltipTimer = setTimeout(() => {
+    tooltip.value = null
+    tooltipTimer = null
+  }, 2000)
+}
+
+function hideTagTooltip() {
+  if (tooltipTimer) {
+    clearTimeout(tooltipTimer)
+    tooltipTimer = null
+  }
+  tooltip.value = null
+}
+
 /* =========================
    Formatting
 ========================= */
@@ -505,9 +559,9 @@ onMounted(async () => {
     router.replace({ name: "authentication" })
     return
   }
-
   await partiesStore.load()
-await loadArchive()
+  await tagsStore.load()
+  await loadArchive()
 })
 </script>
 
@@ -663,7 +717,28 @@ await loadArchive()
             <td class="col-date">{{ formatDate(item.documentDate, "text") }}</td>
             <td class="col-party" v-html="highlight(getPartyLabel(item.partyID))"></td>
             <td class="col-info1" v-html="highlight(item.info1)"></td>
-            <td class="col-info2" v-html="highlight(item.info2)"></td>
+            <td class="col-info2">
+              <div class="info2-cell">
+                <span
+                  class="info2-text"
+                  v-html="highlight(item.info2)"
+                ></span>
+
+                <span
+                  v-if="item.tags?.length"
+                  class="tag-squares"
+                >
+                  <span
+                    v-for="tagId in item.tags"
+                    :key="tagId"
+                    class="tag-square"
+                    :style="{backgroundColor: tagMap.get(tagId)?.color }"
+                    @mouseenter="showTagTooltip($event, tagId)"
+                    @mouseleave="hideTagTooltip"
+                  ></span>
+                </span>
+              </div>
+            </td>
             <td v-if="isBillsSelected" class="col-dta">
               <span
                 v-if="item.indicatorDTA === 1"
@@ -694,6 +769,16 @@ await loadArchive()
     :doc="selectedItem"
     @close="closeClassification"
   />  
+  <div
+  v-if="tooltip"
+  class="tag-tooltip"
+  :style="{
+    left: tooltip.x + 'px',
+    top: tooltip.y + 'px'
+  }"
+>
+  {{ tooltip.text }}
+</div>
 </template>
 
 <style scoped>
@@ -945,6 +1030,46 @@ mark {
   background: transparent;
   cursor: pointer;
   font-size: 16px;
+}
+.info2-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.info2-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.tag-squares {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tag-square {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+
+.tag-tooltip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.88);
+  color: white;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3000;
 }
 
 /* =========================================================

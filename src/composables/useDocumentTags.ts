@@ -9,7 +9,7 @@ export interface DocumentTag {
   id: number
   tagName: string
   seqNb: number
-  color: number
+  color: string
 }
 
 interface DocumentTagsFile {
