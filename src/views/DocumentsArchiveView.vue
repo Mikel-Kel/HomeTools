@@ -10,6 +10,7 @@ import { loadJSONFromFolder } from "@/services/google/driveRepository"
 
 import { useParties } from "@/composables/useParties"
 import { formatDate } from "@/utils/dateFormat"
+import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vue"
 
 /* =========================
    Types
@@ -438,6 +439,26 @@ const resultCount = computed(
 )
 
 /* =========================
+   Classification sheet
+========================= */
+
+const selectedItem = ref<ArchiveItem | null>(null)
+
+function openClassification(item: ArchiveItem) {
+  selectedItem.value = item
+}
+
+function closeClassification() {
+  selectedItem.value = null
+}
+
+function rowClick(e: MouseEvent, item: ArchiveItem) {
+  const el = e.target as HTMLElement
+  if (el.closest(".classify-btn")) return
+  openDocument(item)
+}
+
+/* =========================
    Formatting
 ========================= */
 
@@ -603,6 +624,7 @@ await loadArchive()
     <div class="archives-table-wrapper">
       <table v-if="!loading && !error" class="archive-table">
         <colgroup>
+          <col class="col-action" />
           <col class="col-date" />
           <col class="col-party" />
           <col class="col-info1" />
@@ -613,6 +635,7 @@ await loadArchive()
 
         <thead>
           <tr>
+            <th class="col-action"></th>
             <th class="col-date">Date</th>
             <th class="col-party">Party</th>
             <th class="col-info1">Info1</th>
@@ -627,8 +650,16 @@ await loadArchive()
             v-for="item in filteredItems"
             :key="item.tocid"
             class="clickable-row"
-            @click="openDocument(item)"
+            @click="rowClick($event, item)"
           >
+            <td class="col-action">
+              <button
+                class="classify-btn"
+                @click.stop="openClassification(item)"
+              >
+                📂
+              </button>
+            </td>            
             <td class="col-date">{{ formatDate(item.documentDate, "text") }}</td>
             <td class="col-party" v-html="highlight(getPartyLabel(item.partyID))"></td>
             <td class="col-info1" v-html="highlight(item.info1)"></td>
@@ -657,7 +688,12 @@ await loadArchive()
       </div>
 
     </div>
-  </div>  
+  </div>
+  <ArchiveDocumentSheet
+    v-if="selectedItem"
+    :doc="selectedItem"
+    @close="closeClassification"
+  />  
 </template>
 
 <style scoped>
@@ -897,6 +933,18 @@ mark {
   color: var(--primary);
   padding: 0 2px;
   border-radius: 3px;
+}
+
+.col-action {
+  width: 40px;
+  text-align: center;
+}
+
+.classify-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
 }
 
 /* =========================================================

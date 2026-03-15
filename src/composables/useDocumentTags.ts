@@ -1,0 +1,63 @@
+import { ref } from "vue"
+import { loadJSONFromFolder } from "@/services/google/driveRepository"
+import { useDrive } from "@/composables/useDrive"
+
+/* =========================
+   Types
+========================= */
+export interface DocumentTag {
+  id: number
+  tagName: string
+  seqNb: number
+  color: number
+}
+
+interface DocumentTagsFile {
+  version: number
+  updatedAt?: string
+  tags: DocumentTag[]
+}
+
+/* =========================
+   State
+========================= */
+const tags = ref<DocumentTag[]>([])
+const loaded = ref(false)
+
+/* =========================
+   Composable
+========================= */
+export function useDocumentTags() {
+
+  const { folders } = useDrive()
+
+  async function load(): Promise<void> {
+    if (loaded.value) return
+    const raw = await loadJSONFromFolder<DocumentTagsFile>(
+      folders.value.settings,
+      "documentTags.json"
+    )
+    if (
+      !raw ||
+      raw.version !== 1 ||
+      !Array.isArray(raw.tags)
+    ) {
+      throw new Error("Invalid documentTags.json format")
+    }
+    tags.value =
+      raw.tags
+        .slice()
+        .sort((a, b) => a.seqNb - b.seqNb)
+    loaded.value = true
+  }
+
+  function getTag(id: number) {
+    return tags.value.find(t => t.id === id)
+  }
+
+  return {
+    tags,
+    load,
+    getTag
+  }
+}
