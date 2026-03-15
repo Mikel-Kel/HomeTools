@@ -33,7 +33,7 @@ interface ArchiveItem {
   partyID: number
   refAmount: number
   googleFileId: string
-  tags?:number[]
+  tagIDs?:number[]
 }
 
 interface ArchiveFile {
@@ -468,11 +468,11 @@ const tagMap = computed(() => {
 
   const map = new Map<number, DocumentTag>()
 
-  for (const t of tagsStore.tags.value)
+  tagsStore.tags.value.forEach(t => {
     map.set(t.id, t)
+  })
 
   return map
-
 })
 
 const tooltip = ref<{
@@ -723,20 +723,19 @@ onMounted(async () => {
                   class="info2-text"
                   v-html="highlight(item.info2)"
                 ></span>
-
+              <span
+                v-if="item.tagIDs?.length"
+                class="tag-squares"
+              >
                 <span
-                  v-if="item.tags?.length"
-                  class="tag-squares"
-                >
-                  <span
-                    v-for="tagId in item.tags"
-                    :key="tagId"
-                    class="tag-square"
-                    :style="{backgroundColor: tagMap.get(tagId)?.color }"
-                    @mouseenter="showTagTooltip($event, tagId)"
-                    @mouseleave="hideTagTooltip"
-                  ></span>
-                </span>
+                  v-for="tagId in item.tagIDs"
+                  :key="tagId"
+                  class="tag-square"
+                  :style="{ backgroundColor: tagMap.get(tagId)?.color ?? '#ccc' }"
+                  @mouseenter="showTagTooltip($event, tagId)"
+                  @mouseleave="hideTagTooltip"
+                ></span>
+              </span>
               </div>
             </td>
             <td v-if="isBillsSelected" class="col-dta">
@@ -1051,10 +1050,12 @@ mark {
 }
 
 .tag-square {
-  width: 10px;
-  height: 10px;
+  display: inline-block;
+  width: 11px;
+  height: 11px;
   border-radius: 2px;
   border: 1px solid rgba(0, 0, 0, 0.15);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
   cursor: pointer;
 }
 
