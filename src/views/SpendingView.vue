@@ -19,6 +19,7 @@ import { releaseDraftsBatch } from "@/composables/allocations/releaseBatch";
 import { useDriveWatcher } from "@/composables/useDriveWatcher";
 
 import { formatDate } from "@/utils/dateFormat";
+import { formatAmount } from "@/utils/amountFormat"
 
 /* =========================
    Router & Stores
@@ -242,20 +243,6 @@ async function releaseAllDrafts() {
 
   // 🔁 refresh spending (statuts + données)
   await loadFromDrive();
-}
-
-/* =========================
-   Formatting
-========================= */
-function formatAmount(amount: number) {
-  const sign = amount > 0 ? "+" : "";
-  return (
-    sign +
-    amount.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  );
 }
 
 /* =========================
@@ -490,7 +477,7 @@ onBeforeUnmount(() => {
             class="total right"
             :class="totalFor(account.id) >= 0 ? 'positive' : 'negative'"
           >
-            {{ formatAmount(totalFor(account.id)) }}
+            {{ formatAmount(totalFor(account.id), { showPlus: true }) }}
           </div>
         </header>
         <!-- ✅ TABLE ALIGNÉE -->
@@ -549,7 +536,7 @@ onBeforeUnmount(() => {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2
                         })
-                      : formatAmount(record.amount)
+                      : formatAmount(record.amount, { showPlus: true })
                   }}
                 </span>
               </td>  
@@ -566,7 +553,7 @@ onBeforeUnmount(() => {
   :style="{ top: fxPopover.y + 'px', left: fxPopover.x + 'px' }"
   @click.stop="closeFxPopover"
 >
-  {{ formatAmount(fxPopover.record.amount) }} CHF
+  {{ formatAmount(fxPopover.record.amount, { showPlus: true }) }} CHF
 </div>
 </template>
 

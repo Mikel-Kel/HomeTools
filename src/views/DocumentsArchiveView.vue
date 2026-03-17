@@ -10,6 +10,8 @@ import { loadJSONFromFolder } from "@/services/google/driveRepository"
 
 import { useParties } from "@/composables/useParties"
 import { formatDate } from "@/utils/dateFormat"
+import { formatAmount } from "@/utils/amountFormat"
+
 import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vue"
 
 import { useDocumentTags } from "@/composables/useDocumentTags"
@@ -70,23 +72,13 @@ interface FolderView {
 /* =========================
    Drive
 ========================= */
-
 const router = useRouter()
-
 const { folders, driveStatus } = useDrive()
-
 const { appParameters } = useAppParameters()
-
-/* =========================
-   Constants
-========================= */
-
-const BILLS_FOLDER = "Factures"
 
 /* =========================
    State
 ========================= */
-
 const loading = ref(false)
 const error = ref<string | null>(null)
 
@@ -103,7 +95,6 @@ const searchText = ref("")
 /* =========================
    Party map
 ========================= */
-
 const partyMap = computed(() => {
   const map = new Map<number, string>()
   for (const p of partiesStore.parties.value) {
@@ -119,19 +110,17 @@ function getPartyLabel(partyID: number) {
 /* =========================
    Visibility rules
 ========================= */
-
 const isPayDateVisible = computed(
-  () => selectedFolder.value === BILLS_FOLDER
+  () => selectedFolder.value === billsFolderSource.value
 )
 
 const isBillsSelected = computed(
-  () => selectedFolder.value === BILLS_FOLDER
+  () => selectedFolder.value === billsFolderSource.value
 )
 
 /* =========================
    Drive session watcher
 ========================= */
-
 watch(driveStatus, status => {
   if (status !== "CONNECTED") {
     router.replace({ name: "authentication" })
@@ -141,10 +130,9 @@ watch(driveStatus, status => {
 /* =========================
    Folder watcher
 ========================= */
-
 watch(selectedFolder, val => {
-  if (val !== BILLS_FOLDER) {
-    selectedDTADate.value = null
+  if (val !== billsFolderSource.value) {
+        selectedDTADate.value = null
     return
   }
 
@@ -153,15 +141,14 @@ watch(selectedFolder, val => {
 })
 
 watch(selectedDTADate, val => {
-  if (val && selectedFolder.value !== BILLS_FOLDER) {
-    selectedFolder.value = BILLS_FOLDER
+  if (val && selectedFolder.value !== billsFolderSource.value) {
+    selectedFolder.value = billsFolderSource.value
   }
 })
 
 /* =========================
    Platform detection
 ========================= */
-
 function isRealMacDesktop() {
   const ua = navigator.userAgent
   const isMac = ua.includes("Macintosh")
@@ -172,7 +159,6 @@ function isRealMacDesktop() {
 /* =========================
    Open document
 ========================= */
-
 function openDocument(item: ArchiveItem) {
   if (isRealMacDesktop()) {
     const url =
@@ -180,7 +166,6 @@ function openDocument(item: ArchiveItem) {
     window.location.href = url
     return
   }
-
   if (item.googleFileId) {
     const driveUrl =
       `https://drive.google.com/file/d/${item.googleFileId}/view`
@@ -191,34 +176,22 @@ function openDocument(item: ArchiveItem) {
 /* =========================
    Load archive
 ========================= */
-
 async function loadArchive() {
-
   if ( driveStatus.value !== "CONNECTED")
     return
-
   loading.value = true
   error.value = null
-
   try {
-
     const raw = await loadJSONFromFolder<ArchiveFile>(
       folders.value.archive,
       "archivetoc.json"
     )
-
     if (!raw) return
-
     archive.value = raw.items ?? []
-
     selectDefaultPayDateForQuarter()
-
   } catch (err: any) {
-
     error.value = err.message ?? "Failed to load archive"
-
   } finally {
-
     loading.value = false
   }
 }
@@ -226,44 +199,38 @@ async function loadArchive() {
 /* =========================
    Folder configuration
 ========================= */
-
 const folderConfigMap = computed(() => {
-
   const map = new Map<string, { label: string; order: number }>()
-
   const configs =
     (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
-
   for (const f of configs) {
-
     map.set(f.source, {
       label: f.label,
       order: f.order
     })
-
   }
-
   return map
 })
 
 const archiveFolders = computed<FolderView[]>(() => {
-
   const unique = [...new Set(archive.value.map(i => i.folder))]
-
   return unique
     .map((f): FolderView => {
-
       const cfg = folderConfigMap.value.get(f)
-
       return {
         source: f,
         label: cfg?.label ?? f,
         order: cfg?.order ?? 999
       }
-
     })
     .sort((a, b) => a.order - b.order)
+})
 
+const billsFolderSource = computed(() => {
+  const configs =
+    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
+  const bills = configs.find(f => f.label === "Bills")
+  return bills?.source ?? null
 })
 
 /* =========================
@@ -515,15 +482,6 @@ function hideTagTooltip() {
 /* =========================
    Formatting
 ========================= */
-
-function formatAmount(a: number) {
-
-  return a.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })
-}
-
 function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -678,12 +636,12 @@ onMounted(async () => {
     <div class="archives-table-wrapper">
       <table v-if="!loading && !error" class="archive-table">
         <colgroup>
-          <col class="col-action" style="width: 28px"/>
+          <col class="col-action" style="width: 35px"/>
           <col class="col-date" style="width: 110px"/>
           <col class="col-party" />
           <col class="col-info1" />
           <col class="col-info2" />
-          <col v-if="isBillsSelected" class="col-dta" />
+          <col v-if="isBillsSelected" class="col-dta" style="width: 125px";/>
           <col v-if="isBillsSelected" class="col-amount" />
         </colgroup>
 
@@ -894,7 +852,6 @@ onMounted(async () => {
 /* =========================================================
    COUNTER (NO GREY BAND)
 ========================================================= */
-
 .archive-counter-wrapper {
   margin-top: 4px;
 }
@@ -923,7 +880,6 @@ onMounted(async () => {
 /* =========================================================
    TABLE WRAPPER
 ========================================================= */
-
 .archives-table-wrapper {
   height: calc(100vh - 220px);
   overflow-y: auto;
@@ -1018,7 +974,7 @@ mark {
 
 .col-action {
   width: 30px;
-  text-align: right;
+  text-align: center;
 }
 
 .classify-btn {

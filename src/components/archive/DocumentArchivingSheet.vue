@@ -5,6 +5,10 @@ import { useAppParameters } from "@/composables/useAppParameters"
 import { useParties } from "@/composables/useParties"
 import { useDocumentTags } from "@/composables/useDocumentTags"
 
+import { formatDate } from "@/utils/dateFormat"
+import { formatAmount } from "@/utils/amountFormat"
+
+
 /* =========================
    Emits
 ========================= */
@@ -19,18 +23,42 @@ const folders = computed(() =>
   (appParameters.value?.archiveFolders ?? [])
 )
 
+interface ArchiveFolderConfig {
+  id: number
+  source: string
+  label: string
+  order: number
+}
+
+const billsFolderSource = computed(() => {
+  const configs =
+    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
+  const bills = configs.find(f => f.label === "Bills")
+  return bills?.source ?? null
+})
+
+const isBillsFolder = computed(() => {
+  return localDoc.value.folder === billsFolderSource.value
+})
+
 /* =========================
    Parties
 ========================= */
 const partiesStore = useParties()
+
 const parties = computed(() =>
   partiesStore.parties.value
 )
 
+const relationSearch = ref("")
+const relationOpen = ref(false)
+
 /* =========================
    Tags
 ========================= */
+
 const tagsStore = useDocumentTags()
+
 const tags = computed(() =>
   tagsStore.tags.value
 )
@@ -38,25 +66,23 @@ const tags = computed(() =>
 /* =========================
    Types
 ========================= */
+
 interface ArchiveDocument {
   tocid: number
   folder: string
   partyID: number
-
   documentDate: string
   dtaDate: string | null
-
   info1: string
   info2: string
-
   refAmount: number
-
-  tags?: number[]
+  tagIDs?: number[]
 }
 
 /* =========================
    Props
 ========================= */
+
 const props = defineProps<{
   doc: ArchiveDocument
 }>()
@@ -68,17 +94,77 @@ const localDoc = ref<ArchiveDocument>({ ...props.doc })
 
 watch(
   () => props.doc,
-  d => {
+  (d) => {
     localDoc.value = { ...d }
-    selectedTags.value = d.tags ?? []
+    selectedTags.value = [...(d.tagIDs ?? [])]   // 👈 IMPORTANT (copie)
+  },
+  { immediate: true }   // 👈 LE FIX
+)
+
+watch(
+  parties,
+  () => {
+    const p = parties.value.find(
+      x => x.id === localDoc.value.partyID
+    )
+
+    if (p)
+      relationSearch.value = p.label
+  },
+  { immediate: true }
+)
+
+watch(
+  () => localDoc.value.folder,
+  (folder) => {
+
+    if (folder !== billsFolderSource.value) {
+      localDoc.value.dtaDate = null
+      localDoc.value.refAmount = 0
+    }
+
   }
 )
 
 /* =========================
+   Date pickers
+========================= */
+const docDateInput = ref<HTMLInputElement | null>(null)
+const dtaDateInput = ref<HTMLInputElement | null>(null)
+
+function openDocDatePicker() {
+  docDateInput.value?.showPicker()
+}
+
+function openDTADatePicker() {
+  dtaDateInput.value?.showPicker()
+}
+
+/* =========================
+   Ref Amount input
+========================= */
+const amountDisplay = computed<string>({
+  get: () => {
+    const v = localDoc.value.refAmount
+    if (v === null || v === undefined) return ""
+    return v.toFixed(2)
+  },
+  set: (raw: string) => {
+    const normalized =
+      raw
+        .replace(/\s/g, "")
+        .replace(",", ".")
+    const n = Number(normalized)
+    if (Number.isFinite(n)) {
+      localDoc.value.refAmount = n
+    }
+  }
+})
+
+/* =========================
    Tags selection
 ========================= */
-
-const selectedTags = ref<number[]>(props.doc.tags ?? [])
+const selectedTags = ref<number[]>(props.doc.tagIDs ?? [])
 
 function toggleTag(id: number) {
   const i = selectedTags.value.indexOf(id)
@@ -89,101 +175,178 @@ function toggleTag(id: number) {
 }
 
 /* =========================
+   Relation search
+========================= */
+const filteredParties = computed(() => {
+
+  const q = relationSearch.value.trim().toLowerCase()
+
+  if (!q)
+    return parties.value.slice(0, 15)
+
+  return parties.value
+    .filter(p =>
+      p.label.toLowerCase().includes(q)
+    )
+    .slice(0, 15)
+
+})
+
+function selectParty(p: any) {
+
+  localDoc.value.partyID = p.id
+  relationSearch.value = p.label
+  relationOpen.value = false
+
+}
+
+function closeRelationDropdown() {
+
+  setTimeout(() => {
+    relationOpen.value = false
+  }, 150)
+
+}
+
+/* =========================
    Lifecycle
 ========================= */
+
 onMounted(async () => {
+
   await load()
   await tagsStore.load()
   await partiesStore.load()
+
 })
 </script>
 
 <template>
 <div class="overlay" @click="emit('close')"></div>
 <div class="sheet">
+
   <header class="sheet-header">
     <h2>Document classification</h2>
-    <button class="close-btn" @click="emit('close')">
-      ✕
-    </button>
+    <button class="close-btn" @click="emit('close')">✕</button>
   </header>
+
   <!-- Folder -->
-  <div class="folder-row" with label>
-    <span class="folder-label">Folder</span>
+  <div class="row folder-row">
+    <span class="label">Folder</span>
     <div class="folder-chips">
-      <button
-        v-for="f in folders"
-        :key="f.id"
-        class="chip"
-        :class="{ active: localDoc.folder === f.source }"
-        @click="localDoc.folder = f.source"
+    <button
+      v-for="f in folders"
+      :key="f.id"
+      class="chip"
+      :class="{ active: localDoc.folder === f.source }"
+      @click="localDoc.folder = f.source"
       >
-        {{ f.label }}
+      {{ f.label }}
       </button>
     </div>
   </div>
 
   <!-- Relation -->
-  <div class="field">
-    <label>Relation</label>
-    <select v-model="localDoc.partyID">
-      <option
-        v-for="p in parties"
-        :key="p.id"
-        :value="p.id"
+  <div class="row relation-field">
+    <span class="label">Relation</span>
+    <div class="relation-select">
+      <div class="relation-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input
+          v-model="relationSearch"
+          type="text"
+          placeholder="Search relation..."
+          @focus="relationOpen = true"
+          @input="relationOpen = true"
+          @blur="closeRelationDropdown"
+        />
+      </div>
+      <div
+        v-if="relationOpen"
+        class="relation-dropdown"
       >
-        {{ p.label }}
-      </option>
-    </select>
+        <div
+          v-for="p in filteredParties"
+          :key="p.id"
+          class="relation-item"
+          @click="selectParty(p)"
+        >
+          {{ p.label }}
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Document date -->
-  <div class="field">
-    <label>Document date</label>
-    <input
-      type="date"
-      v-model="localDoc.documentDate"
-    >
-  </div>
-
-  <!-- DTA date -->
-  <div class="field">
-    <label>DTA date</label>
-    <input
-      type="date"
-      v-model="localDoc.dtaDate"
-    >
+  <!-- Dates -->
+  <div class="row">
+    <span class="label">Dates</span>
+    <div class="dates-row">
+      <span
+        class="date-chip clickable"
+        @click="openDocDatePicker"
+        >
+        {{ localDoc.documentDate }}
+      </span>
+      <input
+        ref="docDateInput"
+        type="date"
+        v-model="localDoc.documentDate"
+        class="hidden-date-input"
+      />
+      <span
+        v-if="isBillsFolder"
+        class="date-chip clickable"
+        @click="openDTADatePicker"
+        >
+        {{ localDoc.dtaDate }}
+      </span>
+      <input
+        v-if="isBillsFolder"
+          ref="dtaDateInput"
+          type="date"
+          v-model="localDoc.dtaDate"
+          class="hidden-date-input"
+        />
+    </div>
   </div>
 
   <!-- Description -->
-  <div class="field">
-    <label>Description</label>
-    <input v-model="localDoc.info1">
+  <div class="row input-row">
+    <span class="label">Description</span>
+    <input
+      class="text-input"
+      v-model="localDoc.info1"
+    />
   </div>
 
   <!-- Additional info -->
-  <div class="field">
-    <label>Additional info</label>
-    <input v-model="localDoc.info2">
+  <div class="row input-row">
+    <span class="label">Additional info</span>
+    <input
+      class="text-input"
+      v-model="localDoc.info2"
+    />
   </div>
 
-  <!-- Amount -->
-  <div class="field">
-    <label>Reference amount</label>
+  <!-- Reference amount -->
+  <div v-if="isBillsFolder" class="row input-row">
+    <span class="label">Amount</span>
     <input
-      type="number"
-      step="0.01"
-      v-model="localDoc.refAmount"
-    >
+      v-model="amountDisplay"
+      type="text"
+      inputmode="decimal"
+      class="text-input amount-input"
+    />
   </div>
 
   <!-- Tags -->
   <div class="tags">
     <button
-      v-for="t in tags" :key="t.id"
+      v-for="t in tags"
+      :key="t.id"
       :class="{ active: selectedTags.includes(t.id) }"
       @click="toggleTag(t.id)"
-    >
+      >
       {{ t.tagName }}
     </button>
   </div>
@@ -191,123 +354,218 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* =========================
-   Overlay
-========================= */
+
+/* Overlay */
 .overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.35);
-  z-index: 999;
+position: fixed;
+inset: 0;
+background: rgba(0,0,0,0.35);
+z-index: 999;
 }
 
-/* =========================
-   Sheet
-========================= */
+/* Sheet */
 .sheet {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 520px;
-  max-width: 90vw;
-  background: var(--surface, white);
-  padding: 20px;
-  border-radius: 14px;
-  box-shadow: 0 15px 40px rgba(0,0,0,0.25);
-  z-index: 1000;
+position: fixed;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+width: 560px;
+max-width: 92vw;
+background: var(--surface, white);
+padding: 22px;
+border-radius: 14px;
+box-shadow: 0 15px 40px rgba(0,0,0,0.25);
+z-index: 1000;
 }
 
-/* =========================
-   Header
-========================= */
+/* Header */
+
 .sheet-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-bottom: 16px;
 }
 
 .close-btn {
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  cursor: pointer;
+border: none;
+background: transparent;
+font-size: 18px;
+cursor: pointer;
 }
 
-/* =========================
-   Fields
-========================= */
-.folder-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+/* Rows */
+.row {
+display: flex;
+align-items: center;
+gap: 12px;
+margin-bottom: 14px;
 }
 
-.folder-label {
-  width: 90px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  opacity: 0.8;
+.label {
+width: 110px;
+flex-shrink: 0;
+font-size: 0.9rem;
+color: #666;
 }
 
+/* Folder chips */
 .folder-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+display: flex;
+flex-wrap: wrap;
+gap: 6px;
 }
 
 .chip {
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border, #ccc);
-  background: var(--surface, white);
-  font-size: 0.75rem;
-  font-weight: 600;
-  opacity: 0.7;
-  cursor: pointer;
-  white-space: nowrap;
+padding: 6px 10px;
+border-radius: 999px;
+border: 1px solid var(--border,#ccc);
+background: var(--surface,white);
+font-size: 0.75rem;
+font-weight: 600;
+opacity: 0.7;
+cursor: pointer;
+white-space: nowrap;
 }
 
 .chip.active {
-  opacity: 1;
-  background: var(--primary-soft, #eef3ff);
-  border-color: var(--primary, #4c6fff);
+opacity: 1;
+background: var(--primary-soft,#eef3ff);
+border-color: var(--primary,#4c6fff);
 }
 
-.field {
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
+/* Relation */
+.relation-field {
+  align-items: center;
 }
 
-.field label {
-  font-size: 0.9rem;
-  color: #666;
-  margin-bottom: 2px;
+.relation-select {
+  position: relative;
+  flex: 1;
+  min-width: 0;      /* IMPORTANT */
 }
 
-/* =========================
-   Tags
-========================= */
-.tags {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.relation-input-wrapper {
+  position: relative;
+  width: 100%;
+  min-width: 0;      /* IMPORTANT */
 }
 
-.tags button {
-  border-radius: 8px;
-  padding: 6px 10px;
-  border: 1px solid #ccc;
+.relation-input-wrapper input {
+  width: 100%;
+  min-width: 0;      /* IMPORTANT */
+  padding: 6px 8px 6px 28px;
+  box-sizing: border-box;
+}
+
+.search-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+/* dropdown */
+.relation-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+
   background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  max-height: 200px;
+  overflow-y: auto;
+
+  margin-top: 3px;
+  z-index: 2000;
+}
+
+.relation-item {
+  padding: 6px 8px;
   cursor: pointer;
 }
 
-.tags button.active {
-  border: 2px solid #444;
-  background: #f3f3f3;
+.relation-item:hover {
+  background: var(--primary-soft);
 }
+
+/* Dates */
+.dates-row {
+display: flex;
+gap: 10px;
+}
+
+.date-chip {
+padding: 6px 10px;
+border-radius: 999px;
+border: 1px solid var(--border,#ccc);
+background: var(--surface,white);
+font-size: 0.8rem;
+font-weight: 600;
+}
+
+.date-chip.clickable {
+cursor: pointer;
+}
+
+.date-chip.clickable:hover {
+background: var(--primary-soft);
+}
+
+.hidden-date-input {
+position: absolute;
+opacity: 0;
+pointer-events: none;
+}
+
+/* =========================
+Inputs
+========================= */
+.input-row {
+align-items: center;
+}
+
+.text-input {
+flex: 1;
+min-width: 0;
+padding: 6px 8px;
+border: 1px solid var(--border,#ccc);
+border-radius: 6px;
+background: var(--surface,white);
+}
+
+.amount-input {
+width: 80px;
+padding: 6px 8px;
+border: 1px solid var(--border,#ccc);
+border-radius: 6px;
+text-align: right;
+}
+
+/* Tags */
+.tags {
+margin-top: 16px;
+display: flex;
+flex-wrap: wrap;
+gap: 8px;
+}
+
+.tags button {
+border-radius: 8px;
+padding: 6px 10px;
+border: 1px solid #ccc;
+background: white;
+cursor: pointer;
+}
+
+.tags button.active {
+border: 2px solid #444;
+background: #f3f3f3;
+}
+
 </style>

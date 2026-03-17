@@ -12,6 +12,7 @@ import { useAllocationTags } from "@/composables/allocations/useAllocationTags"
 import { useDrive } from "@/composables/useDrive";
 
 import { formatDate } from "@/utils/dateFormat";
+import { formatAmount } from "@/utils/amountFormat"
 
 import type { SpendingRecord } from "@/composables/spending/useSpending";
 
@@ -314,13 +315,6 @@ function subCategoryLabel(
       .getSubcategories(categoryID)
       .find(sc => sc.id === subCategoryID)?.label ?? ""
   );
-}
-
-function formatAmount(a: number) {
-  return a.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 }
 
 function tagLabel(id: number | null) {
