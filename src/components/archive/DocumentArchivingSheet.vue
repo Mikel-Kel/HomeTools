@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue"
+import AppIcon from "@/components/AppIcon.vue"
 
 import { useAppParameters } from "@/composables/useAppParameters"
 import { useParties } from "@/composables/useParties"
@@ -45,7 +46,6 @@ const isBillsFolder = computed(() => {
    Parties
 ========================= */
 const partiesStore = useParties()
-
 const parties = computed(() =>
   partiesStore.parties.value
 )
@@ -125,6 +125,20 @@ watch(
 
   }
 )
+/* =========================
+   Party map
+========================= */
+const partyMap = computed(() => {
+  const map = new Map<number, string>()
+  for (const p of partiesStore.parties.value) {
+    map.set(p.id, p.label)
+  }
+  return map
+})
+
+function getPartyLabel(partyID: number) {
+  return partyMap.value.get(partyID) ?? `#${partyID}`
+}
 
 /* =========================
    Date pickers
@@ -226,8 +240,21 @@ onMounted(async () => {
 <div class="sheet">
 
   <header class="sheet-header">
-    <h2>Document classification</h2>
-    <button class="close-btn" @click="emit('close')">✕</button>
+    <div class="sheet-title-block">
+      <span class="sheet-icon">📂</span>
+      <div class="sheet-title-texts">
+        <h2>Document classification</h2>
+        <div class="sheet-subtitle">
+          {{(getPartyLabel(localDoc.partyID)) + " - " + (localDoc.info1 || "New classification") +
+            (localDoc.info2 ? " " + localDoc.info2 : "")
+          }}
+        </div>
+      </div>
+    </div>
+
+    <button class="close-btn" @click="emit('close')" aria-label="Close">
+      ✕
+    </button>
   </header>
 
   <!-- Folder -->
@@ -335,7 +362,7 @@ onMounted(async () => {
       v-model="amountDisplay"
       type="text"
       inputmode="decimal"
-      class="text-input amount-input"
+      class="amount-input"
     />
   </div>
 
@@ -378,20 +405,57 @@ box-shadow: 0 15px 40px rgba(0,0,0,0.25);
 z-index: 1000;
 }
 
-/* Header */
+.sheet-icon {
+  font-size: 48px;
+  line-height: 1;
+}
 
+/* Header */
 .sheet-header {
-display: flex;
-justify-content: space-between;
-align-items: center;
-margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border, #ddd);
+}
+
+.sheet-title-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sheet-title-texts {
+  min-width: 0;
+}
+
+.sheet-title-texts h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.sheet-subtitle {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--text-soft, #666);
 }
 
 .close-btn {
-border: none;
-background: transparent;
-font-size: 18px;
-cursor: pointer;
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.close-btn:hover {
+  background: var(--primary-soft, #eef3ff);
 }
 
 /* Rows */
@@ -540,11 +604,13 @@ background: var(--surface,white);
 }
 
 .amount-input {
-width: 80px;
+flex: 0 0 40px;
+max-width: 90px;
 padding: 6px 8px;
 border: 1px solid var(--border,#ccc);
 border-radius: 6px;
 text-align: right;
+font-variant-numeric: tabular-nums;
 }
 
 /* Tags */
