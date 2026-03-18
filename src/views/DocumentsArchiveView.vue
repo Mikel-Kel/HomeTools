@@ -7,6 +7,7 @@ import { useRouter } from "vue-router"
 
 import { useAppParameters } from "@/composables/useAppParameters"
 import { loadJSONFromFolder } from "@/services/google/driveRepository"
+import { useDriveJsonFile } from "@/composables/useDriveJsonFile"
 
 import { useParties } from "@/composables/useParties"
 import { formatDate } from "@/utils/dateFormat"
@@ -425,6 +426,127 @@ function closeClassification() {
   selectedItem.value = null
 }
 
+/* =========================
+   Save classification
+========================= */
+
+function buildEventFileName(tocid: number): string {
+
+  const now = new Date()
+
+  const YYYY = now.getFullYear()
+  const MM = String(now.getMonth() + 1).padStart(2, "0")
+  const DD = String(now.getDate()).padStart(2, "0")
+
+  const HH = String(now.getHours()).padStart(2, "0")
+  const mm = String(now.getMinutes()).padStart(2, "0")
+
+  return `TOC_${YYYY}${MM}${DD}${HH}${mm}_${tocid}.json`
+}
+
+function buildPhysicalName(item: ArchiveItem): string {
+  const year = item.documentDate.slice(0, 4)
+  const relation = `P${item.partyID}`
+  const docDate = item.documentDate
+  const dta =
+    item.dtaDate
+      ? `-DTA${item.dtaDate.replace(/-/g, "")}`
+      : ""
+  const if1 =
+    item.info1
+      ? `-IF1${sanitize(item.info1)}`
+      : ""
+  const if2 =
+    item.info2
+      ? `-IF2${sanitize(item.info2)}`
+      : ""
+  const tags =
+    item.tagIDs?.length
+      ? `-TAG${item.tagIDs.join("_")}`
+      : ""
+  const amount =
+    item.refAmount
+      ? `-AMT${Math.round(item.refAmount * 100)}`
+      : ""
+  // ⚠️ extension inconnue ici → à adapter si besoin
+  const ext = ".pdf"
+  return `${year}/${item.folder}/${relation}/${docDate}${dta}${if1}${if2}${tags}${amount}${ext}`
+}
+
+/* sanitize minimal */
+function sanitize(str: string): string {
+  return str
+    .replace(/\s+/g, "")
+    .replace(/[^\w\-]/g, "")
+}
+
+async function saveClassification(updated: ArchiveItem) {
+
+  try {
+
+    // =========================
+    // 1. Optimistic UI
+    // =========================
+    const idx = archive.value.findIndex(
+      x => x.tocid === updated.tocid
+    )
+
+    if (idx !== -1) {
+      archive.value[idx] = { ...updated }
+    }
+
+    // =========================
+    // 2. Build physicalName
+    // =========================
+    const physicalName = buildPhysicalName(updated)
+
+    // =========================
+    // 3. Build event
+    // =========================
+    const event = {
+      eventType: "ARCHIVE_DOCUMENT_UPDATED",
+      version: 1,
+      timestamp: new Date().toISOString(),
+
+      archiveMetadata: {
+        tocid: updated.tocid,
+        googleFileId: updated.googleFileId,
+        physicalName,
+        folder: updated.folder,
+        partyID: updated.partyID,
+        documentDate: updated.documentDate,
+        dtaDate: updated.dtaDate,
+        info1: updated.info1,
+        info2: updated.info2,
+        refAmount: updated.refAmount,
+        tagIDs: updated.tagIDs ?? []
+      }
+    }
+
+    // =========================
+    // 4. File name
+    // =========================
+    const fileName = buildEventFileName(updated.tocid)
+
+    // =========================
+    // 5. Write via composable
+    // =========================
+    const { save } = useDriveJsonFile(
+      folders.value.events,
+      fileName
+    )
+
+    await save(event)
+
+    console.log("Event created:", fileName)
+
+  } catch (e) {
+
+    console.error("Save failed", e)
+  }
+}
+
+
 function rowClick(e: MouseEvent, item: ArchiveItem) {
   const el = e.target as HTMLElement
   if (el.closest(".classify-btn")) return
@@ -725,7 +847,8 @@ onMounted(async () => {
     v-if="selectedItem"
     :doc="selectedItem"
     @close="closeClassification"
-  />  
+    @save="saveClassification"
+  />
   <div
   v-if="tooltip"
   class="tag-tooltip"

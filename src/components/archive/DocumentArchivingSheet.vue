@@ -8,7 +8,7 @@ import { useDocumentTags } from "@/composables/useDocumentTags"
 /* =========================
    Emits
 ========================= */
-const emit = defineEmits(["close"])
+const emit = defineEmits(["save","close"])
 
 /* =========================
    Types
@@ -125,6 +125,20 @@ const filteredParties = computed(() => {
 })
 
 /* =========================
+   Dirty state
+========================= */
+const isDirty = computed(() => {
+  const docChanged =
+    JSON.stringify(localDoc.value) !== JSON.stringify(props.doc)
+
+  const tagsChanged =
+    JSON.stringify(selectedTags.value.sort()) !==
+    JSON.stringify((props.doc.tagIDs ?? []).slice().sort())
+
+  return docChanged || tagsChanged
+})
+
+/* =========================
    Watchers
 ========================= */
 
@@ -204,6 +218,22 @@ onMounted(async () => {
   await tagsStore.load()
   await partiesStore.load()
 })
+
+function onCancel() {
+  localDoc.value = { ...props.doc }
+  selectedTags.value = [...(props.doc.tagIDs ?? [])]
+
+  emit("close")
+}
+
+function onSave() {
+  emit("save", {
+    ...localDoc.value,
+    tagIDs: [...selectedTags.value]
+  })
+
+  emit("close")
+}
 </script>
 
 <template>
@@ -348,6 +378,22 @@ onMounted(async () => {
       {{ t.tagName }}
     </button>
   </div>
+
+  <!-- Actions -->
+  <div class="actions-bar">
+    <button class="btn cancel" @click="onCancel">
+      Cancel
+    </button>
+
+    <button
+      class="btn save"
+      :disabled="!isDirty"
+      @click="onSave"
+    >
+      Save
+    </button>
+  </div>
+
 </div>
 </template>
 
@@ -605,4 +651,38 @@ border: 2px solid #444;
 background: #f3f3f3;
 }
 
+.actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, #ddd);
+}
+
+.btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+/* Cancel */
+.btn.cancel {
+  background: var(--surface-soft, #f3f3f3);
+  color: var(--text, #333);
+}
+
+/* Save */
+.btn.save {
+  background: #007aff;
+  color: white;
+}
+
+.btn.save:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 </style>
