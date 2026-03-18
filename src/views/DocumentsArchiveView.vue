@@ -524,17 +524,17 @@ onMounted(async () => {
 </script>
 
 <template>
-  <PageHeader title="Documents archives" icon="bookshelf" />
+  <!-- =========================
+      STICKY STACK
+  ========================= -->
+  <div class="sticky-stack">
+    <PageHeader title="Documents archives" icon="bookshelf" />
 
-  <div v-if="driveStatus !== 'CONNECTED'" class="archives-view muted">
-    Drive session not available.
-  </div>
+    <div v-if="driveStatus !== 'CONNECTED'" class="archives-view muted">
+      Drive session not available.
+    </div>
 
-  <div v-else>  
-    <!-- =========================
-        STICKY STACK
-    ========================= -->
-    <div class="sticky-stack">
+    <div v-else>  
 
       <section class="filters">
         <header
@@ -739,6 +739,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+
 /* =========================================================
    BASE LAYOUT
 ========================================================= */
@@ -746,8 +747,13 @@ onMounted(async () => {
 .sticky-stack {
   position: sticky;
   top: 0;
-  z-index: 200;
+  z-index: 100;
   background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+  backdrop-filter: blur(6px);
+  background: rgba(255,255,255,0.92);
+    --sticky-offset: 0px;
 }
 
 /* =========================================================
@@ -850,8 +856,9 @@ onMounted(async () => {
 }
 
 /* =========================================================
-   COUNTER (NO GREY BAND)
+   COUNTER
 ========================================================= */
+
 .archive-counter-wrapper {
   margin-top: 4px;
 }
@@ -880,10 +887,14 @@ onMounted(async () => {
 /* =========================================================
    TABLE WRAPPER
 ========================================================= */
+
 .archives-table-wrapper {
   height: calc(100vh - 220px);
   overflow-y: auto;
-  padding: 1.5rem;
+
+  /* 👇 FIX IMPORTANT */
+  padding: 0 1.5rem 1.5rem 1.5rem;
+
   scrollbar-gutter: stable;
 }
 
@@ -897,21 +908,23 @@ onMounted(async () => {
   font-size: 0.85rem;
 }
 
-/* colonnes explicites */
 .archive-table col.col-party  { width: auto; }
 .archive-table col.col-info1  { width: auto; }
 .archive-table col.col-info2  { width: auto; }
 .archive-table col.col-dta    { width: 100px; }
 .archive-table col.col-amount { width: 80px; }
 
+/* 👇 FIX PRINCIPAL */
 .archive-table thead th {
   position: sticky;
-  top: 0;
+  top: var(--sticky-offset);
   z-index: 50;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   font-weight: 700;
 }
+
+/* cellules */
 
 .archive-table th,
 .archive-table td {
@@ -923,7 +936,8 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-/* alignements par classe, plus robustes que nth-child */
+/* alignements */
+
 .archive-table th.col-date,
 .archive-table td.col-date,
 .archive-table th.col-dta,
@@ -946,10 +960,9 @@ onMounted(async () => {
   font-variant-numeric: tabular-nums;
 }
 
-.amount {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
+/* =========================================================
+   ROWS
+========================================================= */
 
 .clickable-row {
   cursor: pointer;
@@ -959,18 +972,9 @@ onMounted(async () => {
   background: var(--primary-soft);
 }
 
-.dta-badge {
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--primary-soft);
-  font-size: 0.75rem;
-}
-mark {
-  background: var(--primary-soft);
-  color: var(--primary);
-  padding: 0 2px;
-  border-radius: 3px;
-}
+/* =========================================================
+   CELLS
+========================================================= */
 
 .col-action {
   width: 30px;
@@ -983,6 +987,14 @@ mark {
   cursor: pointer;
   font-size: 16px;
 }
+
+.dta-badge {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--primary-soft);
+  font-size: 0.75rem;
+}
+
 .info2-cell {
   display: flex;
   align-items: center;
@@ -1003,32 +1015,39 @@ mark {
 }
 
 .tag-square {
-  display: inline-block;
   width: 11px;
   height: 11px;
   border-radius: 2px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0,0,0,0.15);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
   cursor: pointer;
 }
+
+/* tooltip */
 
 .tag-tooltip {
   position: fixed;
   transform: translate(-50%, -100%);
   padding: 4px 8px;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.88);
+  background: rgba(0,0,0,0.88);
   color: white;
   font-size: 0.75rem;
-  line-height: 1.2;
   white-space: nowrap;
   pointer-events: none;
   z-index: 3000;
 }
 
 /* =========================================================
-   STATES
+   MISC
 ========================================================= */
+
+mark {
+  background: var(--primary-soft);
+  color: var(--primary);
+  padding: 0 2px;
+  border-radius: 3px;
+}
 
 .muted {
   opacity: 0.6;
@@ -1037,4 +1056,5 @@ mark {
 .error {
   color: var(--negative);
 }
+
 </style>

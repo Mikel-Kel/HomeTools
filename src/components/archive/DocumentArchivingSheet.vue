@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue"
-import AppIcon from "@/components/AppIcon.vue"
 
 import { useAppParameters } from "@/composables/useAppParameters"
 import { useParties } from "@/composables/useParties"
 import { useDocumentTags } from "@/composables/useDocumentTags"
-
-import { formatDate } from "@/utils/dateFormat"
-import { formatAmount } from "@/utils/amountFormat"
-
 
 /* =========================
    Emits
@@ -16,57 +11,8 @@ import { formatAmount } from "@/utils/amountFormat"
 const emit = defineEmits(["close"])
 
 /* =========================
-   App parameters
-========================= */
-const { appParameters, load } = useAppParameters()
-
-const folders = computed(() =>
-  (appParameters.value?.archiveFolders ?? [])
-)
-
-interface ArchiveFolderConfig {
-  id: number
-  source: string
-  label: string
-  order: number
-}
-
-const billsFolderSource = computed(() => {
-  const configs =
-    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
-  const bills = configs.find(f => f.label === "Bills")
-  return bills?.source ?? null
-})
-
-const isBillsFolder = computed(() => {
-  return localDoc.value.folder === billsFolderSource.value
-})
-
-/* =========================
-   Parties
-========================= */
-const partiesStore = useParties()
-const parties = computed(() =>
-  partiesStore.parties.value
-)
-
-const relationSearch = ref("")
-const relationOpen = ref(false)
-
-/* =========================
-   Tags
-========================= */
-
-const tagsStore = useDocumentTags()
-
-const tags = computed(() =>
-  tagsStore.tags.value
-)
-
-/* =========================
    Types
 ========================= */
-
 interface ArchiveDocument {
   tocid: number
   folder: string
@@ -79,58 +25,69 @@ interface ArchiveDocument {
   tagIDs?: number[]
 }
 
+interface ArchiveFolderConfig {
+  id: number
+  source: string
+  label: string
+  order: number
+}
+
 /* =========================
    Props
 ========================= */
-
 const props = defineProps<{
   doc: ArchiveDocument
 }>()
 
 /* =========================
-   Local editable state
+   Stores
+========================= */
+const { appParameters, load } = useAppParameters()
+const partiesStore = useParties()
+const tagsStore = useDocumentTags()
+
+/* =========================
+   Reactive state
 ========================= */
 const localDoc = ref<ArchiveDocument>({ ...props.doc })
+const selectedTags = ref<number[]>([...(props.doc.tagIDs ?? [])])
 
-watch(
-  () => props.doc,
-  (d) => {
-    localDoc.value = { ...d }
-    selectedTags.value = [...(d.tagIDs ?? [])]   // 👈 IMPORTANT (copie)
-  },
-  { immediate: true }   // 👈 LE FIX
-)
+const relationSearch = ref("")
+const relationOpen = ref(false)
 
-watch(
-  parties,
-  () => {
-    const p = parties.value.find(
-      x => x.id === localDoc.value.partyID
-    )
+const docDateInput = ref<HTMLInputElement | null>(null)
+const dtaDateInput = ref<HTMLInputElement | null>(null)
 
-    if (p)
-      relationSearch.value = p.label
-  },
-  { immediate: true }
-)
-
-watch(
-  () => localDoc.value.folder,
-  (folder) => {
-
-    if (folder !== billsFolderSource.value) {
-      localDoc.value.dtaDate = null
-      localDoc.value.refAmount = 0
-    }
-
-  }
-)
 /* =========================
-   Party map
+   Computed
 ========================= */
+const folders = computed(() =>
+  appParameters.value?.archiveFolders ?? []
+)
+
+const parties = computed(() =>
+  partiesStore.parties.value
+)
+
+const tags = computed(() =>
+  tagsStore.tags.value
+)
+
+const billsFolderSource = computed(() => {
+  const configs =
+    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
+  const bills = configs.find(f => f.label === "Bills")
+  return bills?.source ?? null
+})
+
+const isBillsFolder = computed(() =>
+  localDoc.value.folder === billsFolderSource.value
+)
+
+/* ---------- Party map ---------- */
 const partyMap = computed(() => {
   const map = new Map<number, string>()
-  for (const p of partiesStore.parties.value) {
+  for (const p of parties.value) {
     map.set(p.id, p.label)
   }
   return map
@@ -140,12 +97,75 @@ function getPartyLabel(partyID: number) {
   return partyMap.value.get(partyID) ?? `#${partyID}`
 }
 
-/* =========================
-   Date pickers
-========================= */
-const docDateInput = ref<HTMLInputElement | null>(null)
-const dtaDateInput = ref<HTMLInputElement | null>(null)
+/* ---------- Amount ---------- */
+const amountDisplay = computed<string>({
+  get: () => {
+    const v = localDoc.value.refAmount
+    return v != null ? v.toFixed(2) : ""
+  },
+  set: (raw: string) => {
+    const normalized =
+      raw.replace(/\s/g, "").replace(",", ".")
+    const n = Number(normalized)
+    if (Number.isFinite(n)) {
+      localDoc.value.refAmount = n
+    }
+  }
+})
 
+/* ---------- Relation filtering ---------- */
+const filteredParties = computed(() => {
+  const q = relationSearch.value.trim().toLowerCase()
+
+  if (!q) return parties.value.slice(0, 15)
+
+  return parties.value
+    .filter(p => p.label.toLowerCase().includes(q))
+    .slice(0, 15)
+})
+
+/* =========================
+   Watchers
+========================= */
+
+/* Props → local sync */
+watch(
+  () => props.doc,
+  (d) => {
+    localDoc.value = { ...d }
+    selectedTags.value = [...(d.tagIDs ?? [])]
+  },
+  { immediate: true }
+)
+
+/* Parties loaded → update label */
+watch(
+  parties,
+  () => {
+    const p = parties.value.find(
+      x => x.id === localDoc.value.partyID
+    )
+    if (p) relationSearch.value = p.label
+  },
+  { immediate: true }
+)
+
+/* Folder change → reset Bills fields */
+watch(
+  () => localDoc.value.folder,
+  (folder) => {
+    if (folder !== billsFolderSource.value) {
+      localDoc.value.dtaDate = null
+      localDoc.value.refAmount = 0
+    }
+  }
+)
+
+/* =========================
+   Actions
+========================= */
+
+/* Dates */
 function openDocDatePicker() {
   docDateInput.value?.showPicker()
 }
@@ -154,32 +174,7 @@ function openDTADatePicker() {
   dtaDateInput.value?.showPicker()
 }
 
-/* =========================
-   Ref Amount input
-========================= */
-const amountDisplay = computed<string>({
-  get: () => {
-    const v = localDoc.value.refAmount
-    if (v === null || v === undefined) return ""
-    return v.toFixed(2)
-  },
-  set: (raw: string) => {
-    const normalized =
-      raw
-        .replace(/\s/g, "")
-        .replace(",", ".")
-    const n = Number(normalized)
-    if (Number.isFinite(n)) {
-      localDoc.value.refAmount = n
-    }
-  }
-})
-
-/* =========================
-   Tags selection
-========================= */
-const selectedTags = ref<number[]>(props.doc.tagIDs ?? [])
-
+/* Tags */
 function toggleTag(id: number) {
   const i = selectedTags.value.indexOf(id)
   if (i >= 0)
@@ -188,50 +183,26 @@ function toggleTag(id: number) {
     selectedTags.value.push(id)
 }
 
-/* =========================
-   Relation search
-========================= */
-const filteredParties = computed(() => {
-
-  const q = relationSearch.value.trim().toLowerCase()
-
-  if (!q)
-    return parties.value.slice(0, 15)
-
-  return parties.value
-    .filter(p =>
-      p.label.toLowerCase().includes(q)
-    )
-    .slice(0, 15)
-
-})
-
+/* Relation */
 function selectParty(p: any) {
-
   localDoc.value.partyID = p.id
   relationSearch.value = p.label
   relationOpen.value = false
-
 }
 
 function closeRelationDropdown() {
-
   setTimeout(() => {
     relationOpen.value = false
   }, 150)
-
 }
 
 /* =========================
    Lifecycle
 ========================= */
-
 onMounted(async () => {
-
   await load()
   await tagsStore.load()
   await partiesStore.load()
-
 })
 </script>
 
