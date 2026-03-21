@@ -86,7 +86,7 @@ interface FollowUpItem {
 ========================= */
 
 const router = useRouter();
-const { folders, driveStatus } = useDrive();
+const { driveStatus } = useDrive();
 
 const categoriesStore = useCategories();
 

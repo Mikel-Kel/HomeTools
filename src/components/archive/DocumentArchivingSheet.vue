@@ -281,6 +281,7 @@ function onSave() {
       <div class="relation-input-wrapper">
         <span class="search-icon">🔍</span>
         <input
+          ref="relationInput"
           v-model="relationSearch"
           type="text"
           placeholder="Search relation..."

@@ -56,8 +56,6 @@ const categories: Ref<Category[]> = ref([]);
 
 export function useCategories() {
 
-  const { folders } = useDrive();
-
   async function load(): Promise<void> {
 
     const raw = await loadJSONFromFolder<CategoriesFile>(

@@ -74,7 +74,7 @@ interface FolderView {
    Drive
 ========================= */
 const router = useRouter()
-const { folders, driveStatus } = useDrive()
+const { driveStatus } = useDrive()
 const { appParameters } = useAppParameters()
 
 /* =========================
@@ -444,53 +444,69 @@ function buildEventFileName(tocid: number): string {
   return `TOC_${YYYY}${MM}${DD}${HH}${mm}_${tocid}.json`
 }
 
+
+function formatPartyID(partyID: number): string {
+  return "P" + String(partyID).padStart(5, "0")
+}
+
+
 function buildPhysicalName(item: ArchiveItem): string {
-  const year = item.documentDate.slice(0, 4)
-  const relation = `P${item.partyID}`
+
   const docDate = item.documentDate
+
   const dta =
     item.dtaDate
       ? `-DTA${item.dtaDate.replace(/-/g, "")}`
       : ""
+
   const if1 =
     item.info1
-      ? `-IF1${sanitize(item.info1)}`
+      ? `-IF1${item.info1}`
       : ""
+
   const if2 =
     item.info2
-      ? `-IF2${sanitize(item.info2)}`
+      ? `-IF2${item.info2}`
       : ""
+
   const tags =
     item.tagIDs?.length
       ? `-TAG${item.tagIDs.join("_")}`
       : ""
+
   const amount =
     item.refAmount
       ? `-AMT${Math.round(item.refAmount * 100)}`
       : ""
-  // ⚠️ extension inconnue ici → à adapter si besoin
+
   const ext = ".pdf"
+
+  // 🟥 CASE: TO FILE (ROOT)
+  console.log("FOLDER =", item.folder)
+  if (item.folder === "A Classer") {
+    const relationLabel =
+      getPartyLabel(item.partyID) || `${item.partyID}`
+    return `${docDate}-${relationLabel}${if1}${if2}${tags}${amount}${ext}`
+  }
+
+  // 🟩 NORMAL CASE
+  const year = item.documentDate.slice(0, 4)
+  const relation = formatPartyID(item.partyID)
   return `${year}/${item.folder}/${relation}/${docDate}${dta}${if1}${if2}${tags}${amount}${ext}`
 }
 
-/* sanitize minimal */
-function sanitize(str: string): string {
-  return str
-    .replace(/\s+/g, "")
-    .replace(/[^\w\-]/g, "")
-}
 
 async function saveClassification(updated: ArchiveItem) {
 
-  try {
+  const processedFilePhysicalName = updated.physicalName
 
+  try {
     // =========================
     // 1. Optimistic UI
     // =========================
     const idx = archive.value.findIndex(
       x => x.tocid === updated.tocid
     )
-
     if (idx !== -1) {
       archive.value[idx] = { ...updated }
     }
@@ -498,20 +514,21 @@ async function saveClassification(updated: ArchiveItem) {
     // =========================
     // 2. Build physicalName
     // =========================
-    const physicalName = buildPhysicalName(updated)
+    const newPhysicalName = buildPhysicalName(updated)
 
     // =========================
     // 3. Build event
     // =========================
     const event = {
-      eventType: "ARCHIVE_DOCUMENT_UPDATED",
+      eventType: "ARCHIVE_UPDATED",
       version: 1,
       timestamp: new Date().toISOString(),
+      processedFile: processedFilePhysicalName,
 
       archiveMetadata: {
         tocid: updated.tocid,
         googleFileId: updated.googleFileId,
-        physicalName,
+        newPhysicalName,
         folder: updated.folder,
         partyID: updated.partyID,
         documentDate: updated.documentDate,

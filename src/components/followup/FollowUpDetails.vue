@@ -58,7 +58,6 @@ const props = defineProps<{
    STATE
 ========================================================= */
 
-const { folders } = useDrive();
 const { appParameters, load } = useAppParameters();
 
 const categoriesStore = useCategories();

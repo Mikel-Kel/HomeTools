@@ -27,8 +27,6 @@ export function useDriveWatcher({
 
 }: DriveWatcherOptions) {
 
-  const { driveStatus } = useDrive();
-
   const timer = ref<number | null>(null);
 
   const paused = ref(false);

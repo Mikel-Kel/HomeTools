@@ -7,8 +7,6 @@ interface AppVersionFile {
 
 export async function loadAppVersion(): Promise<string> {
 
-  const { folders } = useDrive();
-
   const folder =
     "settings";
 

@@ -13,7 +13,6 @@ const tags = ref<AllocationTag[]>([])
 const loaded = ref(false)
 
 export function useAllocationTags() {
-  const { folders } = useDrive()
 
   async function load() {
     if (loaded.value) return

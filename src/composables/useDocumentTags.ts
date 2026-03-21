@@ -29,8 +29,6 @@ const loaded = ref(false)
 ========================= */
 export function useDocumentTags() {
 
-  const { folders } = useDrive()
-
   async function load(): Promise<void> {
     if (loaded.value) return
     const raw = await loadJSONFromFolder<DocumentTagsFile>(
