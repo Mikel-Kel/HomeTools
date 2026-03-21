@@ -3,18 +3,16 @@ import {
   loadJSONFromFolder,
   saveJSONToFolder,
   deleteFileFromFolder
-} from "@/services/google/driveRepository";
+} from "@/services/driveAdapter";
 
 import { useDrive } from "@/composables/useDrive";
 
 export function useAllocationDrive() {
 
-  const { folders } = useDrive();
-
   async function moveReleasedToDraft(spendingId: string) {
 
-    const releasedFolder = folders.value.allocations.released;
-    const draftsFolder = folders.value.allocations.drafts;
+    const releasedFolder = "allocations/released";
+    const draftsFolder = "allocations/drafts";
 
     const filename = `${spendingId}.json`;
 

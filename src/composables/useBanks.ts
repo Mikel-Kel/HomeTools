@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { loadJSONFromFolder } from "@/services/google/driveRepository";
+import { loadJSONFromFolder } from "@/services/driveAdapter";
 import { useDrive } from "@/composables/useDrive";
 
 /* =========================
@@ -29,8 +29,6 @@ const banks = ref<Bank[]>([]);
 
 export function useBanks() {
 
-  const { folders } = useDrive();
-
   /* =========================
      Load banks
   ========================= */
@@ -38,7 +36,7 @@ export function useBanks() {
   async function load(): Promise<void> {
 
     const raw = await loadJSONFromFolder<BanksFile>(
-      folders.value.settings,
+      "settings",
       "banks.json"
     );
 

@@ -11,11 +11,13 @@
  * =========================================================
  */
 
-import { ref, computed } from "vue";
+import { ref } from "vue";
 
 import { connectGoogle, clearAccessToken } from "@/services/google/googleInit";
 
-import { DRIVE_STATE, LOCAL_FOLDERS } from "@/config/driveState";
+import { DRIVE_STATE } from "@/config/driveState";
+import { preloadDriveStructure } from "@/config/driveResolver";
+
 import type { HomeToolsDriveState } from "@/config/driveState";
 
 import { useStorageBackend } from "@/composables/useStorageBackend";
@@ -23,7 +25,6 @@ import { useStorageBackend } from "@/composables/useStorageBackend";
 /* =========================
    Types
 ========================= */
-
 export type DriveStatus =
   | "DISCONNECTED"
   | "CONNECTED"
@@ -32,7 +33,6 @@ export type DriveStatus =
 /* =========================
    Shared reactive state
 ========================= */
-
 const driveStatus = ref<DriveStatus>("DISCONNECTED");
 const driveBusy = ref(false);
 const driveError = ref<string | null>(null);
@@ -43,7 +43,6 @@ const { backend } = useStorageBackend();
 /* =========================
    LOCAL backend bootstrap
 ========================= */
-
 if (backend.value === "LOCAL_DRIVE") {
   driveStatus.value = "CONNECTED";
   driveState.value = DRIVE_STATE;
@@ -52,16 +51,14 @@ if (backend.value === "LOCAL_DRIVE") {
 /* =========================
    Public composable
 ========================= */
-
 export function useDrive() {
 
-  /**
-   * Connect Google Drive
-   */
+  /* =========================
+     Connect Google Drive
+  ========================= */
   async function connect() {
 
     if (backend.value === "LOCAL_DRIVE") {
-      // Local mode → already connected
       return;
     }
 
@@ -76,12 +73,14 @@ export function useDrive() {
 
       driveState.value = DRIVE_STATE;
 
+      // 🔥 preload complet (cache folders)
+      await preloadDriveStructure();
+
       driveStatus.value = "CONNECTED";
 
     } catch (e: any) {
 
       driveError.value = e?.message ?? String(e);
-
       driveStatus.value = "DISCONNECTED";
 
     } finally {
@@ -92,10 +91,9 @@ export function useDrive() {
 
   }
 
-  /**
-   * Force expiration
-   * (called by googleDrive.ts on 401)
-   */
+  /* =========================
+     Force expiration
+  ========================= */
   function expire(reason = "Drive session expired") {
 
     console.warn("🔐 Drive expired:", reason);
@@ -107,30 +105,10 @@ export function useDrive() {
     clearAccessToken();
 
     driveStatus.value = "EXPIRED";
-
     driveState.value = null;
-
     driveError.value = reason;
 
   }
-
-  /* =========================
-     Folders helper
-  ========================= */
-
-  const folders = computed(() => {
-
-    if (backend.value === "LOCAL_DRIVE") {
-      return LOCAL_FOLDERS;
-    }
-
-    if (driveStatus.value === "CONNECTED" && driveState.value) {
-      return driveState.value.folders;
-    }
-
-    return LOCAL_FOLDERS;
-
-  });
 
   return {
 
@@ -139,7 +117,6 @@ export function useDrive() {
     driveBusy,
     driveError,
     driveState,
-    folders,
 
     // actions
     connect,

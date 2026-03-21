@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { loadJSONFromFolder } from "@/services/google/driveRepository";
+import { loadJSONFromFolder } from "@/services/driveAdapter";
 import { useDrive } from "@/composables/useDrive";
 
 /* =========================
@@ -30,14 +30,12 @@ const loaded = ref(false);
 
 export function useParties() {
 
-  const { folders } = useDrive();
-
   async function load(): Promise<void> {
 
     if (loaded.value) return;
 
     const raw = await loadJSONFromFolder<PartiesFile>(
-      folders.value.settings,
+      "settings",
       "parties.json"
     );
 

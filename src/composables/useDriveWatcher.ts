@@ -1,6 +1,6 @@
 import { onMounted, onBeforeUnmount, ref } from "vue";
 
-import { getFileModifiedTime } from "@/services/google/driveRepository";
+import { getFileModifiedTime } from "@/services/driveAdapter";
 import { useDrive } from "@/composables/useDrive";
 
 interface DriveWatcherOptions {

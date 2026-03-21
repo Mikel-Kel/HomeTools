@@ -5,7 +5,7 @@ import {
   loadJSONFromFolder,
   saveJSONToFolder,
   deleteFileFromFolder
-} from "@/services/google/driveRepository";
+} from "@/services/driveAdapter";
 
 import { useDrive } from "@/composables/useDrive";
 
@@ -61,8 +61,6 @@ export function useAllocation(
   partyID: number | null,
   spendingDate: string
 ) {
-
-  const { folders } = useDrive();
 
   /* =========================
      Mutex
@@ -178,7 +176,7 @@ export function useAllocation(
   async function deleteDraftFileIfExists(): Promise<void> {
 
     const folder =
-      folders.value.allocations.drafts;
+      "allocations/drafts";
 
     const filename = `${spendingId}.json`;
 
@@ -192,7 +190,7 @@ export function useAllocation(
   async function saveDraftInternal(): Promise<void> {
 
     const draftsFolder =
-      folders.value.allocations.drafts;
+      "allocations/drafts";
 
     const filename = `${spendingId}.json`;
 
@@ -227,10 +225,10 @@ export function useAllocation(
       try {
 
         const draftsFolder =
-          folders.value.allocations.drafts;
+          "allocations/drafts";
 
         const releasedFolder =
-          folders.value.allocations.released;
+          "allocations/released";
 
         const filename =
           `${spendingId}.json`;

@@ -1,4 +1,4 @@
-import { loadJSONFromFolder } from "@/services/google/driveRepository";
+import { loadJSONFromFolder } from "@/services/driveAdapter";
 import { useDrive } from "@/composables/useDrive";
 
 interface AppVersionFile {
@@ -10,7 +10,7 @@ export async function loadAppVersion(): Promise<string> {
   const { folders } = useDrive();
 
   const folder =
-    folders.value.settings;
+    "settings";
 
   const raw =
     await loadJSONFromFolder<AppVersionFile>(

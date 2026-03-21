@@ -9,7 +9,7 @@ import CategorySheet from "@/components/followup/CategorySheet.vue";
 import { useDrive } from "@/composables/useDrive";
 import { useRouter } from "vue-router";
 
-import { loadJSONFromFolder } from "@/services/google/driveRepository";
+import { loadJSONFromFolder } from "@/services/driveAdapter";
 
 import { useCategories } from "@/composables/useCategories";
 import type { CategoryNature } from "@/composables/useCategories";
@@ -116,7 +116,7 @@ watch(driveStatus, (status) => {
 });
 
 useDriveWatcher({
-  folderId: folders.value.allocations.budget,
+  folderId: "allocations/budget",
   fileName: "FollowUp.json",
   lastKnownModified: followUpLastModified,
   onChanged: loadFollowUp,
@@ -613,7 +613,7 @@ const detailsMaxMonth = computed<number | null>(() => {
 async function loadFollowUp() {
 
   const folderId =
-    folders.value.allocations.budget;
+    "allocations/budget";
 
   const data =
     await loadJSONFromFolder<FollowUpFile>(
@@ -630,7 +630,7 @@ async function loadFollowUp() {
 async function loadBudget() {
 
   const folderId =
-    folders.value.allocations.budget;
+    "allocations/budget";
 
   const data =
     await loadJSONFromFolder<BudgetFile>(

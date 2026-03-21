@@ -6,7 +6,7 @@ import { useDrive } from "@/composables/useDrive"
 import { useRouter } from "vue-router"
 
 import { useAppParameters } from "@/composables/useAppParameters"
-import { loadJSONFromFolder } from "@/services/google/driveRepository"
+import { loadJSONFromFolder } from "@/services/driveAdapter"
 import { useDriveJsonFile } from "@/composables/useDriveJsonFile"
 
 import { useParties } from "@/composables/useParties"
@@ -184,7 +184,7 @@ async function loadArchive() {
   error.value = null
   try {
     const raw = await loadJSONFromFolder<ArchiveFile>(
-      folders.value.archive,
+      "archive",
       "archivetoc.json"
     )
     if (!raw) return
@@ -532,7 +532,7 @@ async function saveClassification(updated: ArchiveItem) {
     // 5. Write via composable
     // =========================
     const { save } = useDriveJsonFile(
-      folders.value.events,
+      "events",
       fileName
     )
 

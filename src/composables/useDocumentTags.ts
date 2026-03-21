@@ -1,5 +1,5 @@
 import { ref } from "vue"
-import { loadJSONFromFolder } from "@/services/google/driveRepository"
+import { loadJSONFromFolder } from "@/services/driveAdapter"
 import { useDrive } from "@/composables/useDrive"
 
 /* =========================
@@ -34,7 +34,7 @@ export function useDocumentTags() {
   async function load(): Promise<void> {
     if (loaded.value) return
     const raw = await loadJSONFromFolder<DocumentTagsFile>(
-      folders.value.settings,
+      "settings",
       "documentTags.json"
     )
     if (

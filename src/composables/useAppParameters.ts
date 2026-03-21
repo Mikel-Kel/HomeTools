@@ -5,7 +5,7 @@ import { useDrive } from "@/composables/useDrive";
 import {
   listFiles,
   loadJSONFromFolder
-} from "@/services/google/driveRepository";
+} from "@/services/driveAdapter";
 
 /* =========================
    Types
@@ -39,14 +39,12 @@ const error = ref<string | null>(null);
 
 export function useAppParameters() {
 
-  const { folders } = useDrive();
-
   async function load() {
     if (appParameters.value) return;
     loading.value = true;
     error.value = null;
     try {
-      const folderId = folders.value.settings;
+      const folderId = "settings";
       const files = await listFiles(folderId);
       const file = files.find(
         f => f.name === "AppParameters.json"

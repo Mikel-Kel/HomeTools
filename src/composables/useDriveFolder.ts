@@ -1,8 +1,9 @@
 import { ref, computed } from "vue";
 import type { Ref, ComputedRef } from "vue";
 
-import { listFiles } from "@/services/google/driveRepository";
+import { listFiles } from "@/services/driveAdapter";
 import { useStorageBackend } from "@/composables/useStorageBackend";
+import { resolveFolderId as resolvePath } from "@/config/driveResolver";
 
 /* =========================
    Types
@@ -32,7 +33,7 @@ export interface UseDriveFolder {
 ========================= */
 
 export function useDriveFolder(
-  parentId: string,
+  pathOrParentId: string,
   folderName?: string
 ): UseDriveFolder {
 
@@ -52,23 +53,38 @@ export function useDriveFolder(
 
   async function resolveFolderId(): Promise<string> {
 
-    // LOCAL_DRIVE → folder names are already paths
+    // =========================
+    // LOCAL MODE
+    // =========================
     if (backend.value === "LOCAL_DRIVE") {
-      return parentId;
+      // path direct (ex: "events/processed")
+      return pathOrParentId;
     }
 
-    if (!folderName) return parentId;
+    // =========================
+    // NEW MODE (path-based)
+    // =========================
+    if (!folderName) {
 
-    let current = folder.value;
+      const id = await resolvePath(pathOrParentId);
 
-    if (!current) {
-      throw new Error(
-        "[Drive] Folder resolution not supported in LOCAL mode"
-      );
+      // on alimente folder pour cohérence UI/debug
+      folder.value = {
+        id,
+        name: pathOrParentId.split("/").pop() ?? pathOrParentId,
+      };
+
+      return id;
     }
 
-    return current.id;
+    // =========================
+    // LEGACY MODE (temporary)
+    // =========================
+    if (!folder.value) {
+      throw new Error("[Drive] Folder resolution failed (legacy mode)");
+    }
 
+    return folder.value.id;
   }
 
   /* =========================
@@ -90,6 +106,7 @@ export function useDriveFolder(
       _files.value = filesList.map((f: any) => ({
         id: f.id ?? f.name,
         name: f.name,
+        mimeType: f.mimeType,
       }));
 
     }

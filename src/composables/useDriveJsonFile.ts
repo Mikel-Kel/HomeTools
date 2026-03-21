@@ -3,7 +3,7 @@ import {
   loadJSONFromFolder,
   saveJSONToFolder,
   listFiles
-} from "@/services/google/driveRepository";
+} from "@/services/driveAdapter";
 
 /* =========================
   Types locaux

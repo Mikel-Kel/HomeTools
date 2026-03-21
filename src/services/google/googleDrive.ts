@@ -98,7 +98,7 @@ export async function findFolderByName(
 /* =========================
    List files in folder
 ========================= */
-export async function listFilesInFolder(
+export async function listGoogleFilesInFolder(
   folderId: string
 ): Promise<DriveItem[]> {
   const q = `'${folderId}' in parents and trashed=false`;
@@ -123,24 +123,22 @@ export async function listFilesInFolder(
 /* =========================
    Read JSON file
 ========================= */
-export async function readJSON<T = any>(
+export async function readGoogleJSON<T = any>(
   fileId: string
 ): Promise<T> {
   const res = await driveFetch(
     `${DRIVE_BASE}/files/${fileId}?alt=media`
   );
-
   if (!res.ok) {
     throw new Error(`[Drive] readJSON HTTP ${res.status}`);
   }
-
   return res.json();
 }
 
 /* =========================
    Write JSON file (create / update)
 ========================= */
-export async function writeJSON(
+export async function saveGoogleJSON(
   folderId: string,
   filename: string,
   data: any,
@@ -150,17 +148,14 @@ export async function writeJSON(
   if (driveStatus.value !== "CONNECTED") {
     throw new Error("DRIVE_UNAVAILABLE");
   }
-
   const token = getAccessToken();
   if (!token) {
     throw new Error("DRIVE_UNAUTHORIZED");
   }
-
   const metadata = {
     name: filename,
     parents: existingFileId ? undefined : [folderId],
   };
-
   const form = new FormData();
   form.append(
     "metadata",
@@ -174,11 +169,9 @@ export async function writeJSON(
       type: "application/json",
     })
   );
-
   const url = existingFileId
     ? `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart&supportsAllDrives=true`
     : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
-
   const res = await fetch(url, {
     method: existingFileId ? "PATCH" : "POST",
     headers: {
@@ -186,17 +179,14 @@ export async function writeJSON(
     },
     body: form,
   });
-
   if (res.status === 401) {
     const { expire } = useDrive();
     expire("HTTP 401 during writeJSON");
     throw new Error("DRIVE_UNAUTHORIZED");
   }
-
   if (!res.ok) {
     throw new Error(`[Drive] writeJSON HTTP ${res.status}`);
   }
-
   const result = await res.json();
   return result.id;
 }
@@ -204,7 +194,7 @@ export async function writeJSON(
 /* =========================
    Delete file
 ========================= */
-export async function deleteFile(fileId: string): Promise<void> {
+export async function deleteGoogleFile(fileId: string): Promise<void> {
   const { driveStatus, expire } = useDrive();
 
   if (driveStatus.value !== "CONNECTED") {
@@ -264,4 +254,45 @@ export async function getFileMetadataByName(
 
   const json = await res.json();
   return json.files?.[0] ?? null;
+}
+
+/* =========================
+   Find file by name
+========================= */
+export async function findGoogleFileByName(
+  parentId: string,
+  fileName: string
+): Promise<DriveItem | null> {
+  const q =
+    `'${parentId}' in parents and ` +
+    `name='${fileName}' and ` +
+    `trashed=false`;
+  const url =
+    `${DRIVE_BASE}/files` +
+    `?q=${encodeURIComponent(q)}` +
+    `&spaces=drive` +
+    `&includeItemsFromAllDrives=true` +
+    `&supportsAllDrives=true` +
+    `&fields=files(id,name,mimeType)`;
+  const res = await driveFetch(url);
+  if (!res.ok) {
+    throw new Error(`[Drive] findFileByName HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return data.files?.[0] ?? null;
+}
+
+/* =========================
+   Download file
+========================= */
+export async function downloadGoogleFile(
+  fileId: string
+): Promise<string> {
+  const url =
+    `${DRIVE_BASE}/files/${fileId}?alt=media`;
+  const res = await driveFetch(url);
+  if (!res.ok) {
+    throw new Error(`[Drive] downloadFile HTTP ${res.status}`);
+  }
+  return await res.text();
 }

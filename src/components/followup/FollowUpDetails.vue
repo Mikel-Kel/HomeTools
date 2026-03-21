@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
 import { useAppParameters } from "@/composables/useAppParameters";
-import { loadJSONFromFolder } from "@/services/google/driveRepository";
+import { loadJSONFromFolder } from "@/services/driveAdapter";
 import { useDrive } from "@/composables/useDrive";
 import { formatDate } from "@/utils/dateFormat";
 
@@ -93,7 +93,7 @@ async function loadDetails() {
 
   try {
     const folderId =
-      folders.value.allocations.budget;
+      "allocations/budget";
     const filename =
       `FollowUpDetails-${props.year}.json`;
     const data =

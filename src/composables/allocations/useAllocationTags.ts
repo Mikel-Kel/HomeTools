@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { loadJSONFromFolder } from "@/services/google/driveRepository";
+import { loadJSONFromFolder } from "@/services/driveAdapter";
 import { useDrive } from "@/composables/useDrive";
 
 export interface AllocationTag {
@@ -18,7 +18,7 @@ export function useAllocationTags() {
   async function load() {
     if (loaded.value) return
     const raw = await loadJSONFromFolder<any>(
-      folders.value.settings,
+      "settings",
       "allocationTags.json"
     )
     tags.value =

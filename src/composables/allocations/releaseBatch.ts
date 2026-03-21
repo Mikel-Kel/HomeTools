@@ -3,7 +3,7 @@ import {
   loadJSONFromFolder,
   saveJSONToFolder,
   deleteFileFromFolder
-} from "@/services/google/driveRepository";
+} from "@/services/driveAdapter";
 
 import { useDrive } from "@/composables/useDrive";
 
@@ -15,13 +15,11 @@ export async function releaseDraftsBatch(
   drafts: DraftRecord[]
 ) {
 
-  const { folders } = useDrive();
-
   const draftsFolder =
-    folders.value.allocations.drafts;
+    "allocations/drafts";
 
   const releasedFolder =
-    folders.value.allocations.released;
+    "allocations/released";
 
   const draftFiles = await listFiles(draftsFolder);
   const releasedFiles = await listFiles(releasedFolder);

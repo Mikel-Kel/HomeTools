@@ -5,7 +5,10 @@ import { useRouter } from "vue-router";
 import PageHeader from "@/components/PageHeader.vue";
 import AppIcon from "@/components/AppIcon.vue";
 
-import { listFiles, loadJSONFromFolder } from "@/services/google/driveRepository";
+import { useDrive } from "@/composables/useDrive";
+const { driveStatus } = useDrive();
+
+import { listFiles, loadJSONFromFolder } from "@/services/driveAdapter";
 
 import {
   useSpending,
@@ -13,7 +16,6 @@ import {
   type AllocationStatus,
 } from "@/composables/spending/useSpending";
 
-import { useDrive } from "@/composables/useDrive";
 import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
 import { releaseDraftsBatch } from "@/composables/allocations/releaseBatch";
 import { useDriveWatcher } from "@/composables/useDriveWatcher";
@@ -27,15 +29,13 @@ import { formatAmount } from "@/utils/amountFormat"
 const router = useRouter();
 const statusFilter = ref<Set<AllocationStatus>>(new Set());
 
-const { folders, driveStatus } = useDrive();
-
 const spending = useSpending();
 
 /* =========================
    Drive watcher
 ========================= */
 useDriveWatcher({
-  folderId: folders.value.spending,
+  folderId: "spending",
   fileName: "spending.json",
   lastKnownModified: spending.spendingLastModified,
   onChanged: loadFromDrive,
@@ -259,7 +259,7 @@ function openAllocation(record: SpendingWithStatus) {
    Drive loader
 ========================= */
 async function loadFromDrive() {
-  const folderId = folders.value.spending;
+  const folderId = "spending";
 
   const raw = await loadJSONFromFolder<any>(
     folderId,
@@ -280,9 +280,9 @@ async function loadFromDrive() {
 
 async function loadAllocationStatusFromDrive() {
   const draftsFolder =
-    folders.value.allocations.drafts;
+    "allocations/drafts";
   const releasedFolder =
-    folders.value.allocations.released;
+    "allocations/released";
 
   const [draftFiles, releasedFiles] =
     await Promise.all([

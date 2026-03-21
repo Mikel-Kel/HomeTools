@@ -1,5 +1,5 @@
 import { ref, computed, type Ref } from "vue";
-import { loadJSONFromFolder } from "@/services/google/driveRepository";
+import { loadJSONFromFolder } from "@/services/driveAdapter";
 import { useDrive } from "@/composables/useDrive";
 
 /* =========================
@@ -61,7 +61,7 @@ export function useCategories() {
   async function load(): Promise<void> {
 
     const raw = await loadJSONFromFolder<CategoriesFile>(
-      folders.value.settings,
+      "settings",
       "categories.json"
     );
 
