@@ -188,7 +188,8 @@ async function loadArchive() {
       "archivetoc.json"
     )
     if (!raw) return
-    archive.value = raw.items ?? []
+    archive.value = (raw.items ?? []).slice(0, 100)
+/*    archive.value = raw.items ?? []*/
     selectDefaultPayDateForQuarter()
   } catch (err: any) {
     error.value = err.message ?? "Failed to load archive"
