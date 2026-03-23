@@ -4,6 +4,7 @@ import { ref, computed, onMounted, watch } from "vue"
 import { useAppParameters } from "@/composables/useAppParameters"
 import { useParties } from "@/composables/useParties"
 import { useDocumentTags } from "@/composables/useDocumentTags"
+import { useAmountInput } from "@/composables/useAmountInput"
 
 /* =========================
    Emits
@@ -98,20 +99,19 @@ function getPartyLabel(partyID: number) {
 }
 
 /* ---------- Amount ---------- */
-const amountDisplay = computed<string>({
-  get: () => {
-    const v = localDoc.value.refAmount
-    return v != null ? v.toFixed(2) : ""
-  },
-  set: (raw: string) => {
-    const normalized =
-      raw.replace(/\s/g, "").replace(",", ".")
-    const n = Number(normalized)
-    if (Number.isFinite(n)) {
-      localDoc.value.refAmount = n
+const {
+  input: amountInput,
+  onFocus: onAmountFocus,
+  onInput: onAmountInput,
+  onBlur: onAmountBlur
+} = useAmountInput(
+  computed({
+    get: () => localDoc.value.refAmount,
+    set: (v) => {
+      localDoc.value.refAmount = v ?? 0
     }
-  }
-})
+  })
+)
 
 /* ---------- Relation filtering ---------- */
 const filteredParties = computed(() => {
@@ -168,11 +168,32 @@ watch(
 watch(
   () => localDoc.value.folder,
   (folder) => {
-    if (folder !== billsFolderSource.value) {
-      localDoc.value.dtaDate = null
-      localDoc.value.refAmount = 0
+
+    if (folder === billsFolderSource.value) {
+
+      if (!localDoc.value.dtaDate) {
+
+        const dta = computeNextDTADate()
+
+        console.log("AUTO DTA =", dta)
+
+        localDoc.value = {
+          ...localDoc.value,
+          dtaDate: dta
+        }
+      }
+
+    } else {
+
+      localDoc.value = {
+        ...localDoc.value,
+        dtaDate: null,
+        refAmount: 0
+      }
+
     }
-  }
+  },
+  { immediate: true } // 👈 ⭐ LA CLÉ
 )
 
 /* =========================
@@ -180,6 +201,74 @@ watch(
 ========================= */
 
 /* Dates */
+function adjustToBusinessDay(date: Date): Date {
+  const d = new Date(date)
+
+  const day = d.getDay()
+
+  // samedi → vendredi
+  if (day === 6) {
+    d.setDate(d.getDate() - 1)
+  }
+
+  // dimanche → vendredi
+  if (day === 0) {
+    d.setDate(d.getDate() - 2)
+  }
+
+  return d
+}
+
+function getMonthEnd(year: number, month: number): Date {
+  return new Date(year, month + 1, 0)
+}
+
+function toISO(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+function computeNextDTADate(): string {
+
+  const today = new Date()
+
+  const baseToday = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  )
+
+  const candidates: Date[] = []
+
+  for (let offset = 0; offset <= 1; offset++) {
+
+    const base = new Date(
+      today.getFullYear(),
+      today.getMonth() + offset,
+      1
+    )
+
+    const y = base.getFullYear()
+    const m = base.getMonth()
+
+    candidates.push(new Date(y, m, 15))
+    candidates.push(new Date(y, m + 1, 0))
+  }
+
+  const future = candidates
+    .filter(d => d >= baseToday)
+    .sort((a, b) => a.getTime() - b.getTime())
+
+  const selected =
+    future.length ? adjustToBusinessDay(future[0]) : baseToday
+
+  // 🔥 FORCER format ISO sûr
+  const yyyy = selected.getFullYear()
+  const mm = String(selected.getMonth() + 1).padStart(2, "0")
+  const dd = String(selected.getDate()).padStart(2, "0")
+
+  return `${yyyy}-${mm}-${dd}`
+}
+
 function openDocDatePicker() {
   docDateInput.value?.showPicker()
 }
@@ -331,11 +420,12 @@ function onSave() {
       </span>
       <input
         v-if="isBillsFolder"
-          ref="dtaDateInput"
-          type="date"
-          v-model="localDoc.dtaDate"
-          class="hidden-date-input"
-        />
+        ref="dtaDateInput"
+        type="date"
+        :value="localDoc.dtaDate || ''"
+        @input="localDoc.dtaDate = ($event.target as HTMLInputElement).value"
+        class="hidden-date-input"
+      />
     </div>
   </div>
 
@@ -361,7 +451,10 @@ function onSave() {
   <div v-if="isBillsFolder" class="row input-row">
     <span class="label">Amount</span>
     <input
-      v-model="amountDisplay"
+      :value="amountInput"
+      @input="onAmountInput(($event.target as HTMLInputElement).value)"
+      @focus="onAmountFocus($event)"
+      @blur="onAmountBlur"
       type="text"
       inputmode="decimal"
       class="amount-input"
