@@ -187,9 +187,16 @@ async function loadArchive() {
       "archive",
       "archivetoc.json"
     )
-    if (!raw) return
-    archive.value = (raw.items ?? []).slice(0, 100)
-/*    archive.value = raw.items ?? []*/
+    if (!raw) {
+      console.error("❌ RAW IS NULL")
+      error.value = "Archive not loaded"
+      return
+    }
+    console.log("📦 RAW =", raw)
+    console.log("📦 ITEMS =", raw.items?.length)
+
+/*    if (!raw) return*/
+    archive.value = raw.items ?? []
     selectDefaultPayDateForQuarter()
   } catch (err: any) {
     error.value = err.message ?? "Failed to load archive"
