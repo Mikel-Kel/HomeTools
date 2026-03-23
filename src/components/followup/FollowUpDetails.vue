@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
+
+import { useAppBootstrap } from "@/composables/useAppBootstrap"
+const { loadSettings } = useAppBootstrap()
+
 import { useAppParameters } from "@/composables/useAppParameters";
 import { loadJSONFromFolder } from "@/services/driveAdapter";
-import { useDrive } from "@/composables/useDrive";
 import { formatDate } from "@/utils/dateFormat";
 
 import { useCategories } from "@/composables/useCategories";
@@ -58,7 +61,7 @@ const props = defineProps<{
    STATE
 ========================================================= */
 
-const { appParameters, load } = useAppParameters();
+const { appParameters } = useAppParameters();
 
 const categoriesStore = useCategories();
 const tagsStore = useAllocationTags()
@@ -390,9 +393,7 @@ function monthStatusClass(
 }
 
 onMounted(async () => {
-  await load();
-  await tagsStore.load();
-  await partiesStore.load();
+  await loadSettings();
 });
 </script>
 

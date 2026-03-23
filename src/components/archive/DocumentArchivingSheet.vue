@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue"
 
+import { useAppBootstrap } from "@/composables/useAppBootstrap"
+const { loadSettings } = useAppBootstrap()
+
 import { useAppParameters } from "@/composables/useAppParameters"
 import { useParties } from "@/composables/useParties"
 import { useDocumentTags } from "@/composables/useDocumentTags"
@@ -43,7 +46,7 @@ const props = defineProps<{
 /* =========================
    Stores
 ========================= */
-const { appParameters, load } = useAppParameters()
+const { appParameters } = useAppParameters()
 const partiesStore = useParties()
 const tagsStore = useDocumentTags()
 
@@ -301,9 +304,7 @@ function closeRelationDropdown() {
    Lifecycle
 ========================= */
 onMounted(async () => {
-  await load()
-  await tagsStore.load()
-  await partiesStore.load()
+  await loadSettings()
 })
 
 function onCancel() {

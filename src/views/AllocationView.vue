@@ -5,11 +5,15 @@ import { useRouter } from "vue-router";
 import PageHeader from "@/components/PageHeader.vue";
 import AppIcon from "@/components/AppIcon.vue";
 
+import { useDrive } from "@/composables/useDrive";
+
+import { useAppBootstrap } from "@/composables/useAppBootstrap"
+const { loadSettings } = useAppBootstrap()
+
 import { useSpending } from "@/composables/spending/useSpending";
 import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags" 
-import { useDrive } from "@/composables/useDrive";
 
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount } from "@/utils/amountFormat"
@@ -230,9 +234,8 @@ onMounted(async () => {
     return;
   }
 
-  await categoriesStore.load();
-  await tagsStore.load();
-
+  await loadSettings()
+  
   if (allocation.value) {
     await allocation.value.loadDraft();
 

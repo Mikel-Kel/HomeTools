@@ -9,6 +9,9 @@ import CategorySheet from "@/components/followup/CategorySheet.vue";
 import { useDrive } from "@/composables/useDrive";
 import { useRouter } from "vue-router";
 
+import { useAppBootstrap } from "@/composables/useAppBootstrap"
+const { loadSettings } = useAppBootstrap()
+
 import { loadJSONFromFolder } from "@/services/driveAdapter";
 
 import { useCategories } from "@/composables/useCategories";
@@ -657,8 +660,7 @@ watch(
       return;
     }
 
-    await load();
-    await categoriesStore.load();
+    await loadSettings();
     await loadFollowUp();
     await loadBudget();
 /*    await FollowUpDetails();*/

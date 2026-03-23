@@ -5,6 +5,9 @@ import PageHeader from "@/components/PageHeader.vue"
 import { useDrive } from "@/composables/useDrive"
 import { useRouter } from "vue-router"
 
+import { useAppBootstrap } from "@/composables/useAppBootstrap"
+const { loadSettings } = useAppBootstrap()
+
 import { useAppParameters } from "@/composables/useAppParameters"
 import { loadJSONFromFolder } from "@/services/driveAdapter"
 import { useDriveJsonFile } from "@/composables/useDriveJsonFile"
@@ -192,8 +195,6 @@ async function loadArchive() {
       error.value = "Archive not loaded"
       return
     }
-    console.log("📦 RAW =", raw)
-    console.log("📦 ITEMS =", raw.items?.length)
 
 /*    if (!raw) return*/
     archive.value = raw.items ?? []
@@ -661,8 +662,7 @@ onMounted(async () => {
     router.replace({ name: "authentication" })
     return
   }
-  await partiesStore.load()
-  await tagsStore.load()
+  await loadSettings()
   await loadArchive()
 })
 </script>

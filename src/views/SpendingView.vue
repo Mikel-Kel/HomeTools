@@ -8,6 +8,9 @@ import AppIcon from "@/components/AppIcon.vue";
 import { useDrive } from "@/composables/useDrive";
 const { driveStatus } = useDrive();
 
+import { useAppBootstrap } from "@/composables/useAppBootstrap"
+const { loadSettings } = useAppBootstrap()
+
 import { listFiles, loadJSONFromFolder } from "@/services/driveAdapter";
 
 import {

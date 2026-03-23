@@ -10,7 +10,10 @@ const device = detectDevice();
 import { useStorageBackend } from "@/composables/useStorageBackend";
 const { backend } = useStorageBackend();
 
-import { pickLocalDirectory, getLocalDirectory } from "@/services/local/localDirectory"
+import { useAppBootstrap } from "@/composables/useAppBootstrap"
+const { loadSettings } = useAppBootstrap()
+
+import { getLocalDirectory } from "@/services/local/localDirectory"
 
 const uiDriveStatus = computed(() => {
 
@@ -36,7 +39,7 @@ import { useAppParameters } from "@/composables/useAppParameters";
 const { load } = useAppParameters();
 
 onMounted(async () => {
-  await load();
+  await loadSettings();
 });
 
 /* =========================
