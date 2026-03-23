@@ -175,8 +175,6 @@ watch(
 
         const dta = computeNextDTADate()
 
-        console.log("AUTO DTA =", dta)
-
         localDoc.value = {
           ...localDoc.value,
           dtaDate: dta

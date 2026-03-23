@@ -4,7 +4,7 @@ import router from "./router";
 import "@/assets/theme.css";
 
 import { restoreLocalDirectory } from "@/services/local/localDirectory";
-import { initGoogleAPI } from "@/services/google/googleInit";
+import { initGoogleAPI, handleRedirectToken } from "@/services/google/googleInit";
 
 import { log } from "./utils/logger";
 import PageHeader from "@/components/PageHeader.vue";
@@ -52,11 +52,11 @@ async function bootstrap() {
   } catch (e) {
     log.warn("[Google] init failed", e);
   }
-
+  handleRedirectToken()
+  
   /* ============================
      Lancement de l'app Vue
   ============================ */
-
   app.use(router).mount("#app");
 }
 

@@ -37,8 +37,6 @@ export async function pickLocalDirectory(): Promise<FileSystemDirectoryHandle> {
 
   await saveLocalDirectory(dir);
 
-  console.log("📁 Local directory selected");
-
   return dir;
 }
 
@@ -69,13 +67,9 @@ export async function restoreLocalDirectory(): Promise<FileSystemDirectoryHandle
 
     setLocalDirectory(handle);
 
-    console.log("📁 Local directory restored");
-
     return handle;
 
   }
-
-  console.log("📁 Local directory permission not granted");
 
   return null;
 }

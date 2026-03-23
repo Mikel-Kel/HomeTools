@@ -482,7 +482,6 @@ function buildPhysicalName(item: ArchiveItem): string {
   const ext = ".pdf"
 
   // 🟥 CASE: TO FILE (ROOT)
-  console.log("FOLDER =", item.folder)
   if (item.folder === "A Classer") {
     const relationLabel =
       getPartyLabel(item.partyID) || `${item.partyID}`
@@ -554,8 +553,6 @@ async function saveClassification(updated: ArchiveItem) {
     )
 
     await save(event)
-
-    console.log("Event created:", fileName)
 
   } catch (e) {
 

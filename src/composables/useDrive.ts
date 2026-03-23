@@ -57,7 +57,6 @@ export function useDrive() {
      Connect Google Drive
   ========================= */
   async function connect() {
-
     if (backend.value === "LOCAL_DRIVE") {
       return;
     }
@@ -70,23 +69,18 @@ export function useDrive() {
     try {
 
       await connectGoogle();
-
       driveState.value = DRIVE_STATE;
-
+      driveStatus.value = "CONNECTED";
       // 🔥 preload complet (cache folders)
       await preloadDriveStructure();
 
-      driveStatus.value = "CONNECTED";
-
     } catch (e: any) {
-
       driveError.value = e?.message ?? String(e);
       driveStatus.value = "DISCONNECTED";
 
     } finally {
 
       driveBusy.value = false;
-
     }
 
   }

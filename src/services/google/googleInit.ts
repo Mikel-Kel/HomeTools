@@ -104,24 +104,65 @@ export async function connectGoogle(): Promise<void> {
         ux_mode: useRedirect ? "redirect" : "popup",
         redirect_uri: useRedirect ? getRedirectUri() : undefined,
 
-        callback: (resp: any) => {
-          if (resp?.error) {
-            reject(resp);
-          } else if (resp?.access_token) {
-            accessToken = resp.access_token;
+callback: (resp: any) => {
 
-            if (resp.expires_in) {
-              tokenExpiresAt = Date.now() + (resp.expires_in - 30) * 1000;
-            }
+  if (resp?.error) {
+    reject(resp)
+  } else if (resp?.access_token) {
 
-            googleAuthenticated.value = true;
-            resolve();
-          }
-        },
+    accessToken = resp.access_token
+
+    if (resp.expires_in) {
+      tokenExpiresAt = Date.now() + (resp.expires_in - 30) * 1000
+    }
+
+    googleAuthenticated.value = true
+    resolve()
+
+  } else {
+
+    console.error("❌ NO TOKEN IN RESPONSE", resp)
+    reject("No access_token")
+  }
+}
+
       });
 
     tokenClient.requestAccessToken({ prompt: "consent" });
   });
+}
+
+export function handleRedirectToken(): boolean {
+
+  const fullUrl = window.location.href
+
+  // 🔥 extraire TOUT ce qui est après #
+  const hashIndex = fullUrl.indexOf("#")
+
+  if (hashIndex === -1) return false
+
+  const hashPart = fullUrl.substring(hashIndex + 1)
+
+  // 🔥 chercher access_token dans toute la chaîne
+  if (!hashPart.includes("access_token")) return false
+
+  const params = new URLSearchParams(hashPart.replace(/^.*#/, ""))
+
+  const token = params.get("access_token")
+
+  if (!token) return false
+
+  accessToken = token
+  googleAuthenticated.value = true
+
+  // 🔥 nettoyage URL propre
+  window.history.replaceState(
+    {},
+    document.title,
+    window.location.pathname + window.location.search + "#/authentication"
+  )
+
+  return true
 }
 
 export function isTokenValid(): boolean {
