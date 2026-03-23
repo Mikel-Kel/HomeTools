@@ -785,7 +785,7 @@ onMounted(async () => {
           <col class="col-party" />
           <col class="col-info1" />
           <col class="col-info2" />
-          <col v-if="isBillsSelected" class="col-dta" style="width: 125px";/>
+          <col v-if="isBillsSelected" class="col-dta" style="width: 125px"/>
           <col v-if="isBillsSelected" class="col-amount" />
         </colgroup>
 
