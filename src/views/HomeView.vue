@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, watch,onMounted } from "vue";
 
 /* =========================
    Device detection

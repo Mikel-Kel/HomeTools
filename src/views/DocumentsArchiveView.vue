@@ -223,10 +223,25 @@ const folderConfigMap = computed(() => {
 })
 
 const archiveFolders = computed<FolderView[]>(() => {
+
   const unique = [...new Set(archive.value.map(i => i.folder))]
+
+  console.log("📁 UNIQUE FOLDERS FROM ARCHIVE =", unique)
+
+  const configs =
+    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
+
+  console.log("⚙️ CONFIG SOURCES =", configs.map(c => c.source))
+
   return unique
     .map((f): FolderView => {
+
       const cfg = folderConfigMap.value.get(f)
+
+      if (!cfg) {
+        console.warn("❌ NO MATCH FOR:", f)
+      }
+
       return {
         source: f,
         label: cfg?.label ?? f,
@@ -656,16 +671,20 @@ const headerCountLabel = computed(() => {
 /* =========================
    Init
 ========================= */
+watch(
+  driveStatus,
+  async (status) => {
 
-onMounted(async () => {
-  if (driveStatus.value !== "CONNECTED") {
-    router.replace({ name: "authentication" })
-    return
-  }
-  await loadSettings()
-  await loadArchive()
-})
-</script>
+    if (status !== "CONNECTED") return
+
+    console.log("🟢 DRIVE READY → LOAD SETTINGS")
+
+    await loadSettings()
+    await loadArchive()
+
+  },
+  { immediate: true }
+)</script>
 
 <template>
   <!-- =========================
