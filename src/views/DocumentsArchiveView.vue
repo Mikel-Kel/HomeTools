@@ -684,7 +684,8 @@ watch(
 
   },
   { immediate: true }
-)</script>
+)
+</script>
 
 <template>
   <!-- =========================
