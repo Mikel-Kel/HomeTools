@@ -40,60 +40,55 @@ const error = ref<string | null>(null);
 export function useAppParameters() {
 
   async function load() {
-    if (appParameters.value) return;
-    loading.value = true;
-    error.value = null;
+
+    if (appParameters.value && Object.keys(appParameters.value).length > 0) {
+      return
+    }
+
+    loading.value = true
+    error.value = null
+
     try {
-      const folderId = "settings";
-      const files = await listFiles(folderId);
-      const file = files.find(
-        f => f.name === "AppParameters.json"
-      );
-      if (!file) {
-        appParameters.value = {};
-        return;
-      }
-      const data =
-        await loadJSONFromFolder<any>(
-          folderId,
-          "AppParameters.json"
-        );
+
+      const folderId = "settings"
+
+      const data = await loadJSONFromFolder<any>(
+        folderId,
+        "AppParameters.json"
+      )
+
+      console.log("⚙️ RAW APP PARAMETERS =", data)
+
       if (!data) {
-        appParameters.value = {};
-        return;
+        throw new Error("AppParameters empty")
       }
-      /* =========================
-         Normalize JSON structure
-         (runtime → flat parameters)
-      ========================= */
+
       appParameters.value = {
         version: data.version,
-
         followUpSpreadLimit:
           data?.runtime?.followUpSpreadLimit ??
           data?.followUpSpreadLimit,
-
         offBudgetTagId:
           data?.runtime?.offBudgetTagId ??
           data?.offBudgetTagId,
-
         archiveFolders:
           data?.archiveFolders
-      };
-    }
+      }
 
-    catch (e: any) {
-      error.value =
-        e?.message ??
-        "Unable to load AppParameters.json";
-      appParameters.value = {};
-    }
+      console.log("✅ NORMALIZED APP PARAMETERS =", appParameters.value)
 
-    finally {
-      loading.value = false;
-    }
-  }
+    } catch (e: any) {
 
+      console.error("❌ AppParameters LOAD FAILED", e)
+
+      error.value = e?.message ?? "Unable to load AppParameters.json"
+      appParameters.value = {}
+
+    } finally {
+      loading.value = false
+    }
+  }  
+ 
   return {
     appParameters,
     load,
