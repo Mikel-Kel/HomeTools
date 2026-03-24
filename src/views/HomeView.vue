@@ -17,7 +17,7 @@ import { getLocalDirectory } from "@/services/local/localDirectory"
 
 const uiDriveStatus = computed(() => {
 
-  if (backend === "LOCAL_DRIVE") {
+  if (backend.value === "LOCAL_DRIVE") {
 
     if (getLocalDirectory()) return "connected"
 
