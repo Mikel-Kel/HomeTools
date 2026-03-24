@@ -17,7 +17,7 @@ import { getLocalDirectory } from "@/services/local/localDirectory"
 
 const uiDriveStatus = computed(() => {
 
-  if (backend.value === "LOCAL_DRIVE") {
+  if (backend === "LOCAL_DRIVE") {
 
     if (getLocalDirectory()) return "connected"
 
@@ -30,13 +30,6 @@ const uiDriveStatus = computed(() => {
     : "disconnected"
 
 })
-
-
-/* =========================
-   App parameters
-========================= */
-import { useAppParameters } from "@/composables/useAppParameters";
-const { load } = useAppParameters();
 
 onMounted(async () => {
   await loadSettings();

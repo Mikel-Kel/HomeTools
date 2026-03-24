@@ -1,5 +1,4 @@
 import { createRouter, createWebHashHistory } from "vue-router";
-import LocalFolderRequiredView from "@/views/LocalFolderRequiredView.vue";
 import { getLocalDirectory } from "@/services/local/localDirectory";
 import { detectStorageBackend } from "@/utils/storageBackend";
 
@@ -22,12 +21,6 @@ const router = createRouter({
       name: "home",
       component: HomeView,
       meta: { level: 0, title: "Home" },
-    },
-    {
-      path: "/select-folder",
-      name: "selectFolder",
-      component: LocalFolderRequiredView,
-      meta: { level: 0, title: "Select folder" },
     },
     {
       path: "/authentication",
