@@ -57,8 +57,6 @@ export function useAppParameters() {
         "AppParameters.json"
       )
 
-      console.log("⚙️ RAW APP PARAMETERS =", data)
-
       if (!data) {
         throw new Error("AppParameters empty")
       }
@@ -74,8 +72,6 @@ export function useAppParameters() {
         archiveFolders:
           data?.archiveFolders
       }
-
-      console.log("✅ NORMALIZED APP PARAMETERS =", appParameters.value)
 
     } catch (e: any) {
 

@@ -23,7 +23,6 @@ export function useAppBootstrap() {
     if (loaded) {
       return
     }
-    console.log("🚀 GLOBAL SETTINGS LOAD START")
     try {
       // 🔴 1. AppParameters FIRST (critical)
       await loadAppParameters()
@@ -37,7 +36,6 @@ export function useAppBootstrap() {
         partiesStore.load()
       ])
       loaded = true
-      console.log("✅ GLOBAL SETTINGS LOADED")
     } catch (e) {
       console.error("❌ GLOBAL SETTINGS FAILED", e)
       throw e

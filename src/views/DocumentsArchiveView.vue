@@ -226,12 +226,8 @@ const archiveFolders = computed<FolderView[]>(() => {
 
   const unique = [...new Set(archive.value.map(i => i.folder))]
 
-  console.log("📁 UNIQUE FOLDERS FROM ARCHIVE =", unique)
-
   const configs =
     (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
-
-  console.log("⚙️ CONFIG SOURCES =", configs.map(c => c.source))
 
   return unique
     .map((f): FolderView => {
@@ -676,8 +672,6 @@ watch(
   async (status) => {
 
     if (status !== "CONNECTED") return
-
-    console.log("🟢 DRIVE READY → LOAD SETTINGS")
 
     await loadSettings()
     await loadArchive()
