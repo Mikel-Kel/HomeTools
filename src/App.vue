@@ -11,7 +11,7 @@ const { backend } = useStorageBackend();
 ========================= */
 
 async function login() {
-  if (backend !== "GOOGLE_DRIVE") return;
+  if (backend.value !== "GOOGLE_DRIVE") return;
 
   try {
     await connectGoogle();
@@ -26,7 +26,7 @@ async function login() {
 
 onMounted(async () => {
 
-  if (backend !== "GOOGLE_DRIVE") {
+  if (backend.value !== "GOOGLE_DRIVE") {
     log.info("LOCAL_DRIVE mode → Google API skipped");
     return;
   }
