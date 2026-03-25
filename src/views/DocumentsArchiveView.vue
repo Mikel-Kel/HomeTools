@@ -80,6 +80,16 @@ const router = useRouter()
 const { driveStatus } = useDrive()
 const { appParameters } = useAppParameters()
 
+const folderLabelToSourceMap = computed(() => {
+  const map = new Map<string, string>()
+  const configs =
+    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
+  for (const f of configs) {
+    map.set(f.label, f.source)
+  }
+  return map
+})
+
 /* =========================
    State
 ========================= */
@@ -135,18 +145,17 @@ watch(driveStatus, status => {
    Folder watcher
 ========================= */
 watch(selectedFolder, val => {
-  if (val !== billsFolderSource.value) {
-        selectedDTADate.value = null
-    return
-  }
 
-  selectedQuarterOffset.value = 0
-  selectDefaultPayDateForQuarter()
-})
+  if (val === billsFolderSource.value) {
 
-watch(selectedDTADate, val => {
-  if (val && selectedFolder.value !== billsFolderSource.value) {
-    selectedFolder.value = billsFolderSource.value
+    selectedQuarterOffset.value = 0
+    selectDefaultPayDateForQuarter()
+
+  } else {
+
+    // 🔥 IMPORTANT : reset
+    selectedDTADate.value = null
+
   }
 })
 
@@ -181,30 +190,65 @@ function openDocument(item: ArchiveItem) {
    Load archive
 ========================= */
 async function loadArchive() {
-  if ( driveStatus.value !== "CONNECTED")
-    return
+
+  if (driveStatus.value !== "CONNECTED") return
   loading.value = true
   error.value = null
   try {
-    const raw = await loadJSONFromFolder<ArchiveFile>(
+    // 1️⃣ index
+    const index = await loadJSONFromFolder<any>(
       "archive",
-      "archivetoc.json"
+      "index.json"
     )
-    if (!raw) {
-      console.error("❌ RAW IS NULL")
-      error.value = "Archive not loaded"
-      return
+    if (!index) throw new Error("Index not loaded")
+    const years: number[] = index.years ?? []
+    let allItems: ArchiveItem[] = []
+    // 2️⃣ toFile (A Classer)
+    const toFile = await loadJSONFromFolder<any>(
+      "archive",
+      "toFile.json"
+    )
+    if (toFile?.items) {
+      const mapped = toFile.items.map((i: any) => ({
+        ...i,
+        folder: "A Classer"
+      }))
+      allItems.push(...mapped)
+    }
+    // 3️⃣ yearly files
+    for (const year of years) {
+      const data = await loadJSONFromFolder<any>(
+        "archive",
+        `${year}.json`
+      )
+      if (!data?.groups) continue
+      for (const [groupName, group] of Object.entries(data.groups)) {
+        const items = (group as any).items ?? []
+        const mapped = items.map((i: any) => ({
+          ...i,
+          folder:
+            folderLabelToSourceMap.value.get(groupName)
+            ?? groupName // fallback sécurité
+        }))    
+        allItems.push(...mapped)
+      }
     }
 
-/*    if (!raw) return*/
-    archive.value = raw.items ?? []
-    selectDefaultPayDateForQuarter()
+    archive.value = allItems
+    if (selectedFolder.value === billsFolderSource.value) {
+      selectDefaultPayDateForQuarter()
+    }
+
   } catch (err: any) {
+
     error.value = err.message ?? "Failed to load archive"
+
   } finally {
+
     loading.value = false
   }
 }
+
 
 /* =========================
    Folder configuration
@@ -679,6 +723,16 @@ watch(
   },
   { immediate: true }
 )
+
+onMounted(() => {
+  const configs =
+    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
+
+  if (configs.length) {
+    const sorted = [...configs].sort((a, b) => a.order - b.order)
+    selectedFolder.value = sorted[0].source
+  }
+})
 </script>
 
 <template>

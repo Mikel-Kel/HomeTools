@@ -404,18 +404,17 @@ function onSave() {
     </div>
   </div>
 
-  <!-- Dates -->
+  <!-- Document date -->
   <div class="row">
-    <span class="label">Dates</span>
-    <div class="dates-row">
-      <DateChip v-model="localDoc.documentDate" />
-      <DateChip
-        v-if="isBillsFolder"
-        v-model="localDoc.dtaDate"
-      />
-    </div> 
-  </div> 
+    <span class="label">Document date</span>
+    <DateChip v-model="localDoc.documentDate" />
+  </div>
 
+  <!-- Payment date -->
+  <div v-if="isBillsFolder" class="row">
+    <span class="label">Payment date</span>
+    <DateChip v-model="localDoc.dtaDate" />
+  </div>
 
   <!-- Description -->
   <div class="row input-row">
@@ -449,17 +448,21 @@ function onSave() {
     />
   </div>
 
-  <!-- Tags -->
+<!-- Tags -->
+<div class="row tags-row">
+  <span class="label">Tag(s)</span>
+
   <div class="tags">
     <button
       v-for="t in tags"
       :key="t.id"
       :class="{ active: selectedTags.includes(t.id) }"
       @click="toggleTag(t.id)"
-      >
+    >
       {{ t.tagName }}
     </button>
   </div>
+</div>
 
   <!-- Actions -->
   <div class="actions-bar">
@@ -722,6 +725,7 @@ gap: 8px;
 .tags button {
 border-radius: 8px;
 padding: 6px 10px;
+font-size: var(--font-size-xs);
 border: 1px solid var(--border);
 background: var(--surface-soft);
 color: var(--text-soft);
