@@ -6,6 +6,7 @@ const { loadSettings } = useAppBootstrap()
 
 import { useAppParameters } from "@/composables/useAppParameters"
 import { useParties } from "@/composables/useParties"
+import DateChip from "@/components/DateChip.vue"
 import { useDocumentTags } from "@/composables/useDocumentTags"
 import { useAmountInput } from "@/composables/useAmountInput"
 
@@ -59,8 +60,9 @@ const selectedTags = ref<number[]>([...(props.doc.tagIDs ?? [])])
 const relationSearch = ref("")
 const relationOpen = ref(false)
 
-const docDateInput = ref<HTMLInputElement | null>(null)
+/*const docDateInput = ref<HTMLInputElement | null>(null)
 const dtaDateInput = ref<HTMLInputElement | null>(null)
+*/
 
 /* =========================
    Computed
@@ -220,14 +222,6 @@ function adjustToBusinessDay(date: Date): Date {
   return d
 }
 
-function getMonthEnd(year: number, month: number): Date {
-  return new Date(year, month + 1, 0)
-}
-
-function toISO(date: Date): string {
-  return date.toISOString().slice(0, 10)
-}
-
 function computeNextDTADate(): string {
 
   const today = new Date()
@@ -270,13 +264,29 @@ function computeNextDTADate(): string {
   return `${yyyy}-${mm}-${dd}`
 }
 
+/*function openPicker(el: HTMLInputElement | null) {
+  if (!el) return
+
+  try {
+    if (typeof el.showPicker === "function") {
+      el.showPicker()
+    } else {
+      el.focus()
+      el.click() // 👈 bonus iOS
+    }
+  } catch {
+    el.focus()
+  }
+}
+
 function openDocDatePicker() {
-  docDateInput.value?.showPicker()
+  openPicker(docDateInput.value)
 }
 
 function openDTADatePicker() {
-  dtaDateInput.value?.showPicker()
+  openPicker(dtaDateInput.value)
 }
+*/ 
 
 /* Tags */
 function toggleTag(id: number) {
@@ -398,35 +408,14 @@ function onSave() {
   <div class="row">
     <span class="label">Dates</span>
     <div class="dates-row">
-      <span
-        class="date-chip clickable"
-        @click="openDocDatePicker"
-        >
-        {{ localDoc.documentDate }}
-      </span>
-      <input
-        ref="docDateInput"
-        type="date"
-        v-model="localDoc.documentDate"
-        class="hidden-date-input"
-      />
-      <span
+      <DateChip v-model="localDoc.documentDate" />
+      <DateChip
         v-if="isBillsFolder"
-        class="date-chip clickable"
-        @click="openDTADatePicker"
-        >
-        {{ localDoc.dtaDate }}
-      </span>
-      <input
-        v-if="isBillsFolder"
-        ref="dtaDateInput"
-        type="date"
-        :value="localDoc.dtaDate || ''"
-        @input="localDoc.dtaDate = ($event.target as HTMLInputElement).value"
-        class="hidden-date-input"
+        v-model="localDoc.dtaDate"
       />
-    </div>
-  </div>
+    </div> 
+  </div> 
+
 
   <!-- Description -->
   <div class="row input-row">
@@ -496,7 +485,7 @@ function onSave() {
 .overlay {
 position: fixed;
 inset: 0;
-background: rgba(0,0,0,0.35);
+background: var(--overlay);
 z-index: 999;
 }
 
@@ -508,10 +497,10 @@ left: 50%;
 transform: translate(-50%, -50%);
 width: 560px;
 max-width: 92vw;
-background: var(--surface, white);
+background: var(--surface);
 padding: 22px;
 border-radius: 14px;
-box-shadow: 0 15px 40px rgba(0,0,0,0.25);
+box-shadow: var(--shadow-lg);
 z-index: 1000;
 }
 
@@ -565,7 +554,8 @@ z-index: 1000;
 }
 
 .close-btn:hover {
-  background: var(--primary-soft, #eef3ff);
+  background: var(--primary-soft);
+  color:var(--text)
 }
 
 /* Rows */
@@ -580,7 +570,7 @@ margin-bottom: 14px;
 width: 110px;
 flex-shrink: 0;
 font-size: 0.9rem;
-color: #666;
+color: var(--text-soft);
 }
 
 /* Folder chips */
@@ -593,8 +583,9 @@ gap: 6px;
 .chip {
 padding: 6px 10px;
 border-radius: 999px;
-border: 1px solid var(--border,#ccc);
-background: var(--surface,white);
+border: 1px solid var(--border);
+background: var(--surface-soft);
+color:var(--text);
 font-size: 0.75rem;
 font-weight: 600;
 opacity: 0.7;
@@ -604,8 +595,9 @@ white-space: nowrap;
 
 .chip.active {
 opacity: 1;
-background: var(--primary-soft,#eef3ff);
-border-color: var(--primary,#4c6fff);
+background: var(--primary-soft);
+color:var(--primary);
+border-color: var(--primary);
 }
 
 /* Relation */
@@ -627,9 +619,18 @@ border-color: var(--primary,#4c6fff);
 
 .relation-input-wrapper input {
   width: 100%;
-  min-width: 0;      /* IMPORTANT */
+  min-width: 0;
   padding: 6px 8px 6px 28px;
   box-sizing: border-box;
+
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  /* 🔥 CRITIQUE Safari */
+  -webkit-text-fill-color: var(--text);
+  appearance: none;
 }
 
 .search-icon {
@@ -648,7 +649,8 @@ border-color: var(--primary,#4c6fff);
   left: 0;
   right: 0;
 
-  background: white;
+  background: var(--surface-soft);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
 
@@ -666,35 +668,13 @@ border-color: var(--primary,#4c6fff);
 
 .relation-item:hover {
   background: var(--primary-soft);
+  color: var(--text);
 }
 
 /* Dates */
 .dates-row {
 display: flex;
 gap: 10px;
-}
-
-.date-chip {
-padding: 6px 10px;
-border-radius: 999px;
-border: 1px solid var(--border,#ccc);
-background: var(--surface,white);
-font-size: 0.8rem;
-font-weight: 600;
-}
-
-.date-chip.clickable {
-cursor: pointer;
-}
-
-.date-chip.clickable:hover {
-background: var(--primary-soft);
-}
-
-.hidden-date-input {
-position: absolute;
-opacity: 0;
-pointer-events: none;
 }
 
 /* =========================
@@ -708,19 +688,27 @@ align-items: center;
 flex: 1;
 min-width: 0;
 padding: 6px 8px;
-border: 1px solid var(--border,#ccc);
+border: 1px solid var(--border);
 border-radius: 6px;
-background: var(--surface,white);
+background: var(--surface-soft);
+color:var(--text)
 }
-
 .amount-input {
-flex: 0 0 40px;
-max-width: 90px;
-padding: 6px 8px;
-border: 1px solid var(--border,#ccc);
-border-radius: 6px;
-text-align: right;
-font-variant-numeric: tabular-nums;
+  flex: 0 0 40px;
+  max-width: 90px;
+  padding: 6px 8px;
+
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+
+  /* 🔥 Safari */
+  -webkit-text-fill-color: var(--text);
+  appearance: none;
 }
 
 /* Tags */
@@ -734,14 +722,16 @@ gap: 8px;
 .tags button {
 border-radius: 8px;
 padding: 6px 10px;
-border: 1px solid #ccc;
-background: white;
+border: 1px solid var(--border);
+background: var(--surface-soft);
+color: var(--text-soft);
 cursor: pointer;
 }
 
 .tags button.active {
-border: 2px solid #444;
-background: #f3f3f3;
+border: 2px solid var(--primary);
+color:var(--primary);
+background: var(--primary-soft);
 }
 
 .actions-bar {
@@ -750,7 +740,7 @@ background: #f3f3f3;
   gap: 10px;
   margin-top: 18px;
   padding-top: 12px;
-  border-top: 1px solid var(--border, #ddd);
+  border-top: 1px solid var(--border);
 }
 
 .btn {
@@ -764,14 +754,14 @@ background: #f3f3f3;
 
 /* Cancel */
 .btn.cancel {
-  background: var(--surface-soft, #f3f3f3);
-  color: var(--text, #333);
+  background: var(--surface-soft);
+  color: var(--text);
 }
 
 /* Save */
 .btn.save {
-  background: #007aff;
-  color: white;
+background: var(--primary);
+color: var(--text);
 }
 
 .btn.save:disabled {

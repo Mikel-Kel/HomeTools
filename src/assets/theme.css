@@ -1,68 +1,117 @@
 /* =========================================================
-   HomeTools – Design System v1
-   Single source of truth for colors, typography & UI tokens
+   HomeTools – Design System v2
+   Clean, scalable, dark-mode safe
 ========================================================= */
 
 /* =========================================================
-   Base theme (Light – default)
+   LIGHT THEME (default)
 ========================================================= */
 :root {
-  /* ---------- Surfaces ---------- */
-  --bg: #ffffff;                 /* main background */
-  --bg-soft: #f2f2f2;            /* headers, bands, chips */
-  --surface: #ffffff;            /* cards, pills */
-  --surface-soft: #f8fafc;
 
-  /* ---------- Text ---------- */
-  --text: #0f172a;               /* primary text */
-  --text-soft: #475569;          /* secondary text */
-  --text-muted: #94a3b8;         /* hints, placeholders */
+  /* =====================================================
+     SURFACES (hierarchy)
+  ===================================================== */
+  --surface-0: #ffffff;   /* app background */
+  --surface-1: #ffffff;   /* cards / tables */
+  --surface-2: #f8fafc;   /* sheets / modals */
+  --surface-3: #f1f5f9;   /* hover / subtle */
 
-  /* ---------- Brand / Accent ---------- */
+  /* aliases (compatibilité avec ton code existant) */
+  --bg: var(--surface-0);
+  --bg-soft: #f2f2f2;
+  --surface: var(--surface-1);
+  --surface-soft: var(--surface-2);
+
+  /* =====================================================
+     TEXT
+  ===================================================== */
+  --text: #0f172a;
+  --text-soft: #475569;
+  --text-muted: #94a3b8;
+
+  /* =====================================================
+     BRAND
+  ===================================================== */
   --primary: #1e40af;
   --primary-soft: #eef2ff;
 
-  /* ---------- Status ---------- */
+  /* =====================================================
+     STATUS
+  ===================================================== */
   --positive: #15803d;
   --negative: #b91c1c;
   --neutral: #cfd8dc;
 
-  /* ---------- Borders ---------- */
+  /* =====================================================
+     BORDERS
+  ===================================================== */
   --border: #e5e7eb;
   --border-strong: #cbd5e1;
 
-  /* ---------- Shadows ---------- */
+  /* =====================================================
+     SHADOWS
+  ===================================================== */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.18);
 
-  /* ---------- Typography ---------- */
+  /* =====================================================
+     OVERLAY
+  ===================================================== */
+  --overlay: rgba(0, 0, 0, 0.35);
+
+  /* =====================================================
+     COMPONENT TOKENS
+  ===================================================== */
+
+  /* chips */
+  --chip-bg: var(--surface-1);
+  --chip-border: var(--border);
+  --chip-active-bg: var(--primary-soft);
+  --chip-active-border: var(--primary);
+
+  /* inputs */
+  --input-bg: var(--surface-1);
+  --input-border: var(--border);
+
+  /* sheet / modal */
+  --sheet-bg: var(--surface-2);
+
+  /* buttons */
+  --btn-primary-bg: var(--primary);
+  --btn-primary-text: #ffffff;
+
+  --btn-secondary-bg: var(--surface-3);
+  --btn-secondary-text: var(--text);
+
+  /* =====================================================
+     TYPOGRAPHY
+  ===================================================== */
   --font-family-base: system-ui, -apple-system, BlinkMacSystemFont,
                       "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
-  --font-size-xs: 0.75rem;   /* badges, tiny labels */
-  --font-size-sm: 0.85rem;   /* filters, metadata */
-  --font-size-md: 0.95rem;   /* default content */
-  --font-size-lg: 1.05rem;   /* section titles */
-  --font-size-xl: 1.25rem;   /* page titles */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.85rem;
+  --font-size-md: 0.95rem;
+  --font-size-lg: 1.05rem;
+  --font-size-xl: 1.25rem;
 
   --line-height-base: 1.45;
 
-  /* Positive gradient */
+  /* =====================================================
+     DATA VISUAL (unchanged)
+  ===================================================== */
   --delta-pos-soft: #b7e26d;
   --delta-pos-strong: #2e7d32;
 
-  /* Negative gradient */
   --delta-neg-soft: #ffeb3b;
   --delta-neg-strong: #d32f2f;
 
-  /* Neutral bar */
   --delta-neutral: #cfd8dc;
 }
 
-
 /* =========================================================
-   Global base application rules
-   (intentional & minimal)
+   BASE GLOBAL
 ========================================================= */
 html {
   font-family: var(--font-family-base);
@@ -72,41 +121,60 @@ html {
   background: var(--bg);
 }
 
-/* Optional: smooth rendering without enforcing colors */
 body {
   background: var(--bg);
   color: var(--text);
 }
 
 /* =========================================================
-   Dark theme override
+   DARK THEME
 ========================================================= */
 [data-theme="dark"] {
-  /* ---------- Surfaces ---------- */
-  --bg: #020617;
-  --bg-soft: #0f172a;
-  --surface: #020617;
-  --surface-soft: #0f172a;
 
-  /* ---------- Text ---------- */
+  /* =====================================================
+     SURFACES (CRITICAL FIX)
+  ===================================================== */
+  --surface-0: #020617;   /* background */
+  --surface-1: #020617;   /* cards */
+  --surface-2: #0f172a;   /* sheets */
+  --surface-3: #1e293b;   /* hover */
+
+  /* =====================================================
+     TEXT
+  ===================================================== */
   --text: #e5e7eb;
   --text-soft: #cbd5f5;
   --text-muted: #94a3b8;
 
-  /* ---------- Brand ---------- */
+  /* =====================================================
+     BRAND
+  ===================================================== */
   --primary: #93c5fd;
   --primary-soft: #1e293b;
 
-  /* ---------- Status ---------- */
+  /* =====================================================
+     STATUS
+  ===================================================== */
   --positive: #22c55e;
   --negative: #f87171;
   --neutral: #475569;
 
-  /* ---------- Borders ---------- */
+  /* =====================================================
+     BORDERS
+  ===================================================== */
   --border: #334155;
   --border-strong: #475569;
 
-  /* ---------- Shadows ---------- */
+  /* =====================================================
+     SHADOWS
+  ===================================================== */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.6);
+
+  /* =====================================================
+     OVERLAY
+  ===================================================== */
+  --overlay: rgba(0, 0, 0, 0.6);
+
 }

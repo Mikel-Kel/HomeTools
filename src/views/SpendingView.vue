@@ -12,6 +12,7 @@ import { useAppBootstrap } from "@/composables/useAppBootstrap"
 const { loadSettings } = useAppBootstrap()
 
 import { listFiles, loadJSONFromFolder } from "@/services/driveAdapter";
+import DateChip from "@/components/DateChip.vue"
 
 import {
   useSpending,
@@ -375,7 +376,6 @@ onBeforeUnmount(() => {
       </div>
     </template>
   </PageHeader>
-
   <div class="spending-scroll">
     <!-- Sticky zone (Filters) -->
     <div ref="stickyRef" class="sticky-zone">
@@ -435,10 +435,13 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Period -->
-          <div class="filter-row">
+           <div class="filter-row">
             <span class="label">Period</span>
-            <input type="date" v-model="dateFrom" />
-            <input type="date" v-model="dateTo" />
+
+            <div class="dates-row">
+              <DateChip v-model="dateFrom" placeholder="From" />
+              <DateChip v-model="dateTo" placeholder="To" />
+            </div>
           </div>
 
           <!-- Amount -->
@@ -550,58 +553,58 @@ onBeforeUnmount(() => {
     </div>
   </div>
   <!-- FX micro popover -->
-<div
-  v-if="fxPopover"
-  class="fx-popover"
-  :style="{ top: fxPopover.y + 'px', left: fxPopover.x + 'px' }"
-  @click.stop="closeFxPopover"
->
-  {{ formatAmount(fxPopover.record.amount, { showPlus: true }) }} CHF
-</div>
+  <div
+    v-if="fxPopover"
+    class="fx-popover"
+    :style="{ top: fxPopover.y + 'px', left: fxPopover.x + 'px' }"
+    @click.stop="closeFxPopover"
+  >
+    {{ formatAmount(fxPopover.record.amount, { showPlus: true }) }} CHF
+  </div>
 </template>
 
 <style scoped>
 /* =========================================================
-   Header actions layout
+   1️⃣ HEADER ACTIONS
 ========================================================= */
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px; /* espace entre groupes */
+  gap: 12px;
 }
 
 .header-group {
   display: flex;
   align-items: center;
   cursor: pointer;
+  transition: opacity 0.15s ease;
 }
 
-/* Séparateur visuel très léger */
+/* séparateur */
 .header-group + .header-group {
   padding-left: 12px;
   border-left: 1px solid var(--border);
 }
 
-/* Action "dangereuse" (release) */
+/* danger */
 .header-group.danger .header-icon {
   color: var(--negative);
 }
 
-/* Hover uniquement si actif */
 .header-group.danger:not(.disabled):hover .header-icon {
-  background: var(--negative-soft, rgba(255, 0, 0, 0.08));
+  background: var(--primary-soft); /* 🔥 FIX (neutralisé) */
   border-radius: 6px;
 }
 
-/* État désactivé */
+/* disabled */
 .header-group.disabled {
   opacity: 0.35;
   cursor: default;
-  pointer-events: none; /* 🔑 BLOQUE TOUT */
+  pointer-events: none;
 }
 
 /* =========================================================
-   Root scroll area
+   2️⃣ ROOT SCROLL
 ========================================================= */
 .spending-scroll {
   height: calc(100vh - 64px);
@@ -611,16 +614,17 @@ onBeforeUnmount(() => {
 }
 
 /* =========================================================
-   Sticky zone (Filters)
+   3️⃣ STICKY ZONE
 ========================================================= */
 .sticky-zone {
   position: sticky;
   top: 0;
   z-index: 200;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
 
-  /* mis à jour par ResizeObserver */
+  /* 🔥 FIX dark translucide */
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+
+  border-bottom: 1px solid var(--border);
   --sticky-height: 48px;
 }
 
@@ -630,7 +634,7 @@ onBeforeUnmount(() => {
 }
 
 .filters-header {
-  padding: 0.5rem 0.5rem;
+  padding: 0.5rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -643,21 +647,22 @@ onBeforeUnmount(() => {
   color: var(--text-soft);
 }
 
-/* pousse le bouton à droite */
+.dates-row {
+  display: flex;
+  gap: 10px;
+}
+
+/* reset */
 .reset-button {
-
   padding: 2px 20px;
-
   border-radius: 999px;
   border: 1px solid var(--border);
-
   background: var(--surface-soft);
   color: var(--text-soft);
-
   font-size: var(--font-size-xs);
   font-weight: 600;
-
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .reset-button:hover {
@@ -679,11 +684,12 @@ onBeforeUnmount(() => {
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+
 /* =========================================================
-   Filter inputs
+   4️⃣ INPUTS
 ========================================================= */
 
-.filter-row input {
+.filter-row input:not(.hidden-date-input) {
   height: 30px;
   padding: 0 8px;
 
@@ -695,7 +701,6 @@ onBeforeUnmount(() => {
 
   font-size: var(--font-size-xs);
   font-weight: 600;
-
   font-family: inherit;
 }
 
@@ -708,7 +713,6 @@ onBeforeUnmount(() => {
   width: 80px;
 }
 
-/* focus */
 .filter-row input:focus {
   outline: none;
   border-color: var(--primary);
@@ -717,24 +721,19 @@ onBeforeUnmount(() => {
 
 .label {
   width: 70px;
-  opacity: 0.7;
+  color: var(--text-soft); /* 🔥 FIX */
   flex: 0 0 auto;
 }
 
-.reset {
-  margin-left: auto;
-}
-
 /* =========================================================
-   Chips (generic)
+   5️⃣ CHIPS
 ========================================================= */
 .chip {
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  border-color: var(--border);
-  background: var(--surface--soft);
-  color:var(--text-soft);
+  background: var(--surface-soft); /* 🔥 FIX typo */
+  color: var(--text-soft);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -744,17 +743,22 @@ onBeforeUnmount(() => {
   font-weight: 600;
   text-transform: uppercase;
   opacity: 0.7;
+  transition: all 0.15s ease;
+}
+
+.chip:hover {
+  opacity: 0.9;
 }
 
 .chip.active {
   opacity: 1;
   background: var(--primary-soft);
-  color:var(--primary);
+  color: var(--primary);
   border-color: var(--primary);
 }
 
 /* =========================================================
-   Status styles (shared by chips & pills)
+   6️⃣ STATUS
 ========================================================= */
 .status.none {
   background: var(--bg-soft);
@@ -769,7 +773,7 @@ onBeforeUnmount(() => {
 }
 
 .status.released {
-  background: #e6f7ed;
+  background: color-mix(in srgb, var(--positive) 15%, transparent); /* 🔥 FIX */
   color: var(--positive);
   border-color: var(--positive);
 }
@@ -787,7 +791,7 @@ onBeforeUnmount(() => {
 }
 
 /* =========================================================
-   Accounts
+   7️⃣ ACCOUNT HEADER
 ========================================================= */
 .spending-view {
   padding-bottom: 1rem;
@@ -803,70 +807,56 @@ onBeforeUnmount(() => {
   margin: 0.25rem 0 0.5rem;
 }
 
-/* ✅ sticky account headers (Excel style) */
 .account-header {
   position: sticky;
   top: var(--sticky-height);
   z-index: 120;
-  background: color-mix(in srgb, var(--primary) 20%, var(--surface-soft));
-/*  background: linear-gradient(
-    to bottom,
-    var(--primary) 1%,
-    var(--surface)
-  );*/
+
+  /* 🔥 FIX dark */
+  background: color-mix(in srgb, var(--surface-soft) 90%, transparent);
+
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 
-  /* 🔑 EXACTEMENT la même grille que le tableau */
   display: grid;
-  grid-template-columns: 110px auto 110px 100px 120px; /* date | party | owner | status | amount */
+  grid-template-columns: 110px auto 110px 100px 120px;
   column-gap: 0.5rem;
 
   padding: 0.25rem 0;
   align-items: center;
 }
 
-/* bloc gauche = prend les 4 premières colonnes */
 .account-title {
   grid-column: 1 / 5;
-
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
-
   padding-left: 0.5rem;
-
-  /* ✅ sur une ligne si possible, wrap si nécessaire */
   flex-wrap: wrap;
-  min-width: 0; /* important pour éviter débordements en grid */
+  min-width: 0;
 }
 
 .account-title h2 {
   font-size: var(--font-size-lg);
   font-weight: 600;
   margin: 0;
-  min-width: 0;
 }
 
-/* ops : petit et discret */
 .ops-count {
   font-size: var(--font-size-sm);
   opacity: 0.6;
   white-space: nowrap;
 }
 
-/* bloc droite = 5e colonne (Amount) */
 .total {
   grid-column: 5 / 6;
-
   font-weight: 600;
   text-align: right;
   padding-right: 0.5rem;
-  white-space: nowrap;
 }
 
 /* =========================================================
-   Table (GLOBAL & FIXED LAYOUT)
+   8️⃣ TABLE
 ========================================================= */
 .spending-table {
   width: 100%;
@@ -875,14 +865,12 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-md);
 }
 
-/* Column widths (must match account-header grid) */
 .spending-table col.col-date   { width: 110px; }
 .spending-table col.col-party  { width: auto; }
 .spending-table col.col-owner  { width: 110px; }
 .spending-table col.col-status { width: 100px; }
 .spending-table col.col-amount { width: 120px; }
 
-/* Cells */
 .spending-table th,
 .spending-table td {
   padding: 8px;
@@ -890,59 +878,40 @@ onBeforeUnmount(() => {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  vertical-align: middle;
 }
 
 .spending-table tbody tr:nth-child(even) {
   background: var(--surface-soft);
 }
 
-/* =========================================================
-   Column alignment (KEY FIX)
-========================================================= */
+/* alignements */
 .spending-table th:nth-child(1),
-.spending-table td:nth-child(1){
-  text-align: center;
-}
+.spending-table td:nth-child(1) { text-align: center; }
+
 .spending-table th:nth-child(2),
-.spending-table td:nth-child(2) {
-  text-align: left;
-}
+.spending-table td:nth-child(2) { text-align: left; }
 
 .spending-table th:nth-child(3),
 .spending-table td:nth-child(3),
 .spending-table th:nth-child(4),
-.spending-table td:nth-child(4) {
-  text-align: center;
-}
+.spending-table td:nth-child(4) { text-align: center; }
 
 .spending-table th:nth-child(5),
-.spending-table td:nth-child(5) {
-  text-align: right;
-}
-
-/* center status pill visually */
-.spending-table td:nth-child(4) {
-  display: flex;
-}
+.spending-table td:nth-child(5) { text-align: right; }
 
 /* =========================================================
-   Status pill (table)
+   STATUS PILL
 ========================================================= */
 .status-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
   padding: 2px 8px;
   border-radius: 999px;
-
   font-size: var(--font-size-xs);
   font-weight: 600;
   text-transform: uppercase;
-  line-height: 1.2;
-
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   margin: 0 auto;
 }
 
@@ -959,59 +928,43 @@ onBeforeUnmount(() => {
 }
 
 .status-pill.released {
-  background: #e6f7ed;
+  background: color-mix(in srgb, var(--positive) 15%, transparent);
   color: var(--positive);
   border-color: var(--positive);
 }
-/* =========================================================
-   Misc
-========================================================= */
-.right { text-align: right; }
-.arrow { opacity: 0.5; }
-
-.positive { color: var(--positive); }
-.negative { color: var(--negative); }
-
-.row:hover {
-  background: var(--primary-soft);
-}
 
 /* =========================================================
-   FX indicator & popover
+   FX
 ========================================================= */
 
-/* Devise affichée avant le montant */
 .fx-code {
   display: inline-block;
-  min-width: 34px; /* garde l'alignement vertical */
+  min-width: 34px;
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--primary);
   margin-right: 6px;
-  text-align: left;
 }
 
-/* Cell clickable */
 .amount-cell.foreign {
   cursor: pointer;
 }
 
-/* Micro popover */
 .fx-popover {
   position: fixed;
   transform: translate(-100%, -100%);
   background: var(--surface);
+  color: var(--text);
   padding: 6px 10px;
   border-radius: 10px;
   font-size: var(--font-size-xs);
   font-weight: 600;
   white-space: nowrap;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-md); /* 🔥 FIX */
   animation: fxFade 0.15s ease-out;
   z-index: 1000;
 }
 
-/* Subtle animation */
 @keyframes fxFade {
   from {
     opacity: 0;
@@ -1022,4 +975,5 @@ onBeforeUnmount(() => {
     transform: translate(-100%, -100%) scale(1);
   }
 }
+
 </style>

@@ -15,6 +15,7 @@ import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags" 
 
+import DateChip from "@/components/DateChip.vue"
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount } from "@/utils/amountFormat"
 
@@ -171,6 +172,12 @@ const remainingAmount = computed(
 const isBalanced = computed(
   () => allocation.value?.isBalanced.value ?? false
 );
+
+const isLocked = computed(() =>
+  allocation?.value?.state.value === "DRAFTED" ||
+  allocation?.value?.state.value === "BUSY" ||
+  allocation?.value?.state.value === "READONLY"
+)
 
 const canSaveDraft = computed(
   () => allocation.value?.canSaveDraft.value ?? false
@@ -417,16 +424,12 @@ function closeView() {
         2. Allocation form
     ========================== -->
     <section class="allocation-form">
-
       <!-- CATEGORY -->
       <div class="allocation-row">
-
         <div class="allocation-label">
           Category
         </div>
-
         <div class="allocation-chip-scroll">
-
           <button
             v-for="c in categories"
             :key="c.id"
@@ -439,19 +442,14 @@ function closeView() {
           >
             {{ c.label }}
           </button>
-
         </div>
       </div>
-
       <!-- SUBCATEGORY -->
       <div class="allocation-row" v-if="categoryID">
-
         <div class="allocation-label">
           Sub
         </div>
-
         <div class="allocation-chip-scroll">
-
           <button
             v-for="sc in subCategories"
             :key="sc.id"
@@ -464,11 +462,8 @@ function closeView() {
           >
             {{ sc.label }}
           </button>
-
         </div>
-
       </div>
-
       <!-- 🔽 MONTANT + CALENDRIER -->
       <div class="amount-block">
         <div class="amount-row">
@@ -478,37 +473,37 @@ function closeView() {
             type="text"
             inputmode="decimal"
             class="field field-short amount-input"
-            :disabled="allocation?.state.value === 'DRAFTED'
-                      || allocation?.state.value === 'BUSY'
-                      || allocation?.state.value === 'READONLY'"
+            :disabled="isLocked"
           />
-          <label class="date-button">
-            <AppIcon name="calendar" :size="32" />
-            <input ref="dateInput"
-              type="date"
-              v-model="allocationDate"
-              class="date-input-overlay"
-              :disabled="allocation?.state.value === 'DRAFTED'
-                        || allocation?.state.value === 'BUSY'
-                        || allocation?.state.value === 'READONLY'"
-             aria-label="Set allocation date"
-            />
-          </label>
 
+          <!-- 📅 bouton -->
+          <button
+            class="date-icon-btn"
+            @click="showAllocationDate = !showAllocationDate"
+            :disabled="isLocked"
+          >
+            <AppIcon name="calendar" :size="32" />
+          </button>
+
+          <!-- 📅 chip INLINE -->
+          <transition name="fade-slide">
+            <DateChip
+              v-if="showAllocationDate"
+              v-model="allocationDate"
+              class="inline-date-chip"
+            />
+          </transition>
         </div>
       </div> 
 
       <div class="allocation-row">
-
         <div class="allocation-label">
           Tag
         </div>
-
         <div
           class="tag-scroll"
           :class="{ disabled: !categoryID || !subCategoryID }"
         >
-
           <button
             v-for="t in tags"
             :key="t.id"
@@ -522,11 +517,8 @@ function closeView() {
           >
             {{ t.tagName }}
           </button>
-
         </div>
-
       </div>
-
       <!-- commentaire + add -->
       <div class="comment-row">
         <input v-model="comment"
@@ -660,68 +652,75 @@ function closeView() {
    Record summary
 ========================= */
 .allocation-record {
-  background: var(--primary-soft);
+  background: var(--surface-2); /* FIX dark mode */
   padding: 14px;
   margin-bottom: 16px;
   border-radius: 10px;
+  border: 1px solid var(--border);
 }
+
 .record-main {
   margin-bottom: 12px;
 }
+
 .record-party {
   font-size: 1.1rem;
   font-weight: 600;
 }
+
 .record-meta {
   font-size: 0.85rem;
-  opacity: 0.7;
+  color: var(--text-soft);
 }
 
 /* =========================
-   Amount boxes (Total / Remaining)
+   Amount boxes
 ========================= */
 .record-amounts {
   display: flex;
   justify-content: space-between;
   gap: 24px;
 }
+
 .amount-box {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+
 .amount-label {
   font-size: 0.85rem;
-  opacity: 0.7;
+  color: var(--text-soft);
 }
+
 .amount-value {
   font-size: 1.2rem;
   font-weight: 600;
 }
+
 .amount-with-currency {
   display: flex;
   align-items: baseline;
   gap: 10px;
 }
+
 .currency-amount {
   font-size: 1.1rem;
   font-weight: 600;
-  opacity: 0.9;
   color: var(--primary);
   white-space: nowrap;
 }
-.amount-box.total {
-  color: var(--text);
-}
+
 .amount-box.remaining.unbalanced {
   color: var(--negative);
 }
+
 .amount-box.remaining.balanced {
   color: var(--positive);
 }
 
 /* =========================================================
-   2. Allocation form - global
+   Allocation form
 ========================================================= */
 .allocation-form {
   display: flex;
@@ -729,27 +728,33 @@ function closeView() {
   gap: 0.75rem;
   align-items: flex-start;
 
-  /* variables locales */
   --short-w: 200px;
   --long-w: 450px;
-  --icon-gap: 0.6rem; /* espace montant ↔ calendrier */
 }
+
 .field {
   box-sizing: border-box;
   font-size: 0.9rem;
 }
+
 :deep(.field-short) {
   width: var(--short-w) !important;
   max-width: var(--short-w) !important;
 }
+
 :deep(.field-long) {
   width: var(--long-w) !important;
   max-width: var(--long-w) !important;
 }
+
 .amount-input {
   text-align: right;
+  color: var(--text);
 }
 
+/* =========================
+   Rows
+========================= */
 .allocation-row {
   display: flex;
   align-items: center;
@@ -760,27 +765,19 @@ function closeView() {
   width: 60px;
   font-size: 0.85rem;
   font-weight: 600;
-  opacity: 0.8;
+  color: var(--text-soft);
 }
 
 /* =========================================================
-   Cat & sub cat chips
+   Chips
 ========================================================= */
 .allocation-chip-scroll {
-
   display: flex;
   gap: 8px;
-
   overflow-x: auto;
-  overflow-y: hidden;
-
-  -webkit-overflow-scrolling: touch;
-
   scrollbar-width: none;
-
   position: relative;
   max-width: 420px;
-
 }
 
 .allocation-chip-scroll::-webkit-scrollbar {
@@ -791,20 +788,20 @@ function closeView() {
   flex: 0 0 auto;
   padding: 8px 10px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid var(--chip-border);
+  background: var(--chip-bg);
   color: var(--text);
   font-size: var(--font-size-xs);
   font-weight: 600;
-  opacity: 0.7;
   cursor: pointer;
   white-space: nowrap;
+  opacity: 0.7;
 }
 
 .allocation-chip.active {
   opacity: 1;
-  background: var(--primary-soft);
-  border-color: var(--primary);
+  background: var(--chip-active-bg);
+  border-color: var(--chip-active-border);
 }
 
 .allocation-chip-scroll::after {
@@ -815,32 +812,17 @@ function closeView() {
   width: 40px;
   height: 100%;
   pointer-events: none;
-  background: linear-gradient(
-    to right,
-    transparent,
-    var(--bg)
-  );
-}
-
-
-.chip.active {
-  background: var(--primary);
-  color: var(--primary);
-  border-color: var(--primary);
-
+  background: linear-gradient(to right, transparent, var(--bg));
 }
 
 /* =========================================================
-   Allocation Tags
+   Tags
 ========================================================= */
-
 .tag-scroll {
   display: flex;
   gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding-bottom: 4px;
-  /* limite la largeur visible */
   max-width: 320px;
 }
 
@@ -849,22 +831,20 @@ function closeView() {
 }
 
 .tag-chip {
-  flex: 0 0 auto;          /* largeur automatique */
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text) ;
+  flex: 0 0 auto;
   border-radius: 999px;
-  padding: 6px 14px;       /* un peu plus large */
+  padding: 6px 14px;
   font-size: 0.7rem;
-  font-weight: 500;
   cursor: pointer;
-  white-space: nowrap;     /* empêche le wrap */
-  text-align: center;
+  white-space: nowrap;
+
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  color: var(--text);
 }
 
 .tag-chip.active {
-  background: var(--primary);
-  color: white;
+  background: var(--primary-soft);
   border-color: var(--primary);
 }
 
@@ -874,92 +854,6 @@ function closeView() {
 }
 
 /* =========================================================
-   Allocation date — bouton + popover (à droite)
-========================================================= */
-.amount-block {
-  display: inline-block;
-}
-.amount-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem; /* espace montant ↔ bouton */
-}
-
-.date-anchor {
-  position: relative; /* 🔑 référence pour le popover */
-  display: inline-flex;
-  align-items: center;
-}
-/*.icon-button {
-  appearance: none;
-  -webkit-appearance: none;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  line-height: 0;
-  opacity: 0.7;
-}*/
-.icon-button:hover {
-  opacity: 1;
-}
-.icon-button.active {
-  opacity: 1;
-  color: var(--primary);
-}
-
-.date-button {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  opacity: 0.7;
-}
-
-.date-button:hover {
-  opacity: 1;
-}
-
-.date-input-overlay {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.date-popover {
-  position: absolute;
-  top: 50%;
-  left: calc(100% + 10px); /* petit espace à droite du bouton */
-  transform: translateY(-50%);
-
-  padding: 10px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-  z-index: 50;
-  white-space: nowrap; /* évite que ça passe à la ligne */
-}
-.date-input {
-  border: none;
-  background: transparent;
-  font-family: inherit;
-  font-size: 0.9rem;
-  outline: none;
-}
-/* input date invisible mais actif */
-/*
-.hidden-date-input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-  width: 0;
-  height: 0;
-}*/
-
-/* =========================================================
    Comment row
 ========================================================= */
 .comment-row {
@@ -967,256 +861,133 @@ function closeView() {
   align-items: center;
   gap: 1rem;
 }
+
 .comment-row button {
-  appearance: none;
-  -webkit-appearance: none;
   background: none;
   border: none;
-  box-shadow: none;
-  outline: none;
 }
+
 .comment-row .field-long {
   flex: 1;
 }
 
 /* =========================================================
-   3. Allocations list
+   Allocation list
 ========================================================= */
 .allocation-list table {
   width: 100%;
   border-collapse: collapse;
 }
+
 .allocation-list td {
   padding: 6px 4px;
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
-  vertical-align: middle;
 }
-.allocation-list td:first-child {
-  opacity: 0.85;
-}
-.allocation-list button {
-  background: none;
-  border: none;
-  color: var(--negative);
-  font-size: 1rem;
-  cursor: pointer;
-}
+
 .allocation-list td.right {
   text-align: right;
 }
 
-/* =========================================================
-   4. Footer actions
-========================================================= */
-/*.allocation-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
+.allocation-list button {
+  background: none;
+  border: none;
+  color: var(--negative);
 }
 
-.footer-total {
-  text-align: right;
-  font-size: 0.85rem;
-  opacity: 0.75;
+/* hover FIX */
+.allocation-row:hover {
+  background: var(--surface-3);
 }
-*/
+
+/* =========================================================
+   Text hierarchy
+========================================================= */
+.alloc-comment {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.alloc-category {
+  font-size: 0.75rem;
+  color: var(--text-soft);
+}
+
+.alloc-amount {
+  font-weight: 500;
+}
+/* ligne montant + icône */
+.amount-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* bouton calendrier */
+.date-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 36px;
+  height: 36px;
+
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.date-icon-btn:hover {
+  background: var(--primary-soft);
+}
+
+/* chip inline */
+.inline-date-chip {
+  margin-left: 4px;
+}
+
+/* ligne du DateChip */
+.date-row {
+  margin-top: 6px;
+}
+
+/* =========================================================
+   Footer
+========================================================= */
 .footer-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
-  flex-wrap: wrap;
-}
-.footer-actions button {
-  font-weight: 600;
-}
-
-/* action secondaire */
-.footer-actions .secondary {
-  background: var(--bg);
-  color: var(--text);
-}
-button.saved {
-  background: var(--primary-soft);
-  color: var(--positive);
-}
-
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 /* =========================================================
-   Allocation list – readability (2.2)
-========================================================= */
-.allocation-row {
-  transition: background 0.15s ease;
-}
-
-.allocation-row:hover {
-  background: var(--primary-soft);
-}
-
-.allocation-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-/* Catégorie / sous-catégorie = info principale */
-.allocation-category {
-  font-weight: 600;
-  font-size: 0.8rem;
-}
-
-/* Commentaire = secondaire */
-.allocation-comment {
-  font-size: 0.95rem;
-  opacity: 0.7;
-}
-
-/* Montant */
-.allocation-amount {
-  font-weight: 600;
-  white-space: nowrap;
-}
-/* =========================================================
-   Allocation list — text hierarchy
-========================================================= */
-.alloc-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-/* commentaire = élément principal */
-.alloc-comment {
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-/* catégorie / sous-catégorie = secondaire */
-.alloc-category {
-  font-size: 0.75rem;
-  opacity: 0.7;
-  white-space: nowrap;
-}
-
-/* montant bien aligné */
-.alloc-amount {
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-/* bouton delete discret mais clair */
-.alloc-action button {
-  background: none;
-  border: none;
-  color: var(--negative);
-  font-size: 1rem;
-  cursor: pointer;
-}
-
-/* Suppression rassurante */
-.allocation-action .remove {
-  background: none;
-  border: none;
-  color: var(--negative);
-  opacity: 0.5;
-  font-size: 1rem;
-  cursor: pointer;
-}
-
-.allocation-action .remove:hover {
-  opacity: 1;
-}
-
-.allocation-separator {
-  height: 1px;
-  background: var(--border);
-  margin: 0.75rem 0;
-}
-
-/* =========================================================
-   Allocation list — comment + date badge (iOS-like)
-========================================================= */
-
-.alloc-topline {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0; /* pour ellipsis */
-}
-
-.alloc-comment {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 0.95rem;
-  font-weight: 500;
-
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.alloc-date-badge {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-
-  padding: 2px 8px;
-  border-radius: 999px;
-
-  border: 1px solid var(--border);
-  background: var(--primary-soft);
-  color: var(--primary);
-
-  font-size: 0.75rem;
-  font-weight: 800;
-  opacity: 1;
-  white-space: nowrap;
-}
-
-/* =========================================================
-   Busy HUD — iOS style
+   Busy HUD
 ========================================================= */
 .busy-overlay {
   position: absolute;
   inset: 0;
-  pointer-events: none;
   z-index: 999;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Le panneau flottant */
 .busy-box {
-  min-width: 160px;
-  max-width: 220px;
   padding: 14px 16px;
   border-radius: 14px;
-  background: var(--surface);
+  background: var(--surface-2);
   color: var(--text);
-  backdrop-filter: blur(6px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
   box-shadow: var(--shadow-md);
-  text-align: center;
 }
 
-/* Texte */
 .busy-text {
   font-size: 0.85rem;
-  font-weight: 500;
-  opacity: 0.85;
+  color: var(--text-soft);
 }
 
-/* Spinner iOS-like */
 .spinner {
   width: 22px;
   height: 22px;
@@ -1231,5 +1002,4 @@ button:disabled {
     transform: rotate(360deg);
   }
 }
-
 </style>

@@ -207,19 +207,21 @@ const labelTransform = computed(() => {
   width: 100%;
   height: 100%;
   display: block;
-  overflow:visible;
+  overflow: visible;
 }
 
 /* zero axis */
 .zero-line {
   stroke: var(--border);
-  stroke-width: 0.5;
+  stroke-width: 1;              /* 🔥 un peu plus visible en dark */
+  opacity: 0.6;                /* 🔥 évite trop fort en light */
 }
 
 /* label */
 .delta-label {
   position: absolute;
   top: 50%;
+  transform: translateY(-50%); /* 🔥 FIX vertical centering réel */
 
   font-family: inherit;
   font-size: var(--font-size-sm);
@@ -228,5 +230,8 @@ const labelTransform = computed(() => {
 
   white-space: nowrap;
   pointer-events: none;
+
+  /* 🔥 amélioration lisibilité sur barres */
+  text-shadow: 0 0 2px rgba(0,0,0,0.15);
 }
 </style>

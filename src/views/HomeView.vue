@@ -169,17 +169,17 @@ const appVersion = __APP_VERSION__;
   flex-direction: column;
 }
 
-/* 🔑 ALIGNEMENT CLÉ */
+/* 🔥 FIX ALIGNEMENT PLUS ROBUSTE */
 .drive-status {
   display: flex;
   align-items: center;
   gap: 8px;
 
-  /* largeur icône (64px) + espacement interne AppTitle */
-  margin-left: 80px;
-  margin-top: -2.2rem;
+  margin-left: 76px; /* 🔥 alignement sous le texte (64 + gap) */
+  margin-top: -40px;
 
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  color: var(--text-soft);
 }
 
 /* Pastille */
@@ -205,27 +205,30 @@ const appVersion = __APP_VERSION__;
 .drive-status.disconnected {
   color: var(--negative);
 }
-/* 🔧 Corrige l’alignement vertical du texte Welcome */
+
+/* 🔧 Fix alignement AppTitle */
 :deep(.app-title h1),
 :deep(.app-title h2) {
   line-height: 1.1;
-margin-top: -1.1rem;   /* remonte le texte vers l’icône */
+  margin-top: -0.6rem; /* 🔥 moins agressif */
 }
 
 /* =========================
    Theme toggle
 ========================= */
 .theme-toggle {
-  background: none;
-  color: var(--text); 
-  border: none;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid transparent;
   padding: 6px;
   border-radius: 8px;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .theme-toggle:hover {
   background: var(--primary-soft);
+  color: var(--primary);
 }
 
 /* =========================
@@ -249,6 +252,7 @@ margin-top: -1.1rem;   /* remonte le texte vers l’icône */
   border-radius: 12px;
   text-decoration: none;
   color: var(--text);
+  transition: all 0.15s ease;
 }
 
 .menu-item:hover {
@@ -256,12 +260,15 @@ margin-top: -1.1rem;   /* remonte le texte vers l’icône */
   color: var(--primary);
 }
 
+/* 🔥 FIX icône trop flashy en dark */
 .menu-item span {
   font-size: 1.5rem;
+  opacity: 0.9;
 }
 
+/* Dev mode */
 .menu-item.dev {
-  opacity: 0.85;
+  opacity: 0.6; /* 🔥 plus propre */
 }
 
 /* =========================
@@ -272,7 +279,7 @@ margin-top: -1.1rem;   /* remonte le texte vers l’icône */
   text-align: center;
 
   font-size: 0.75rem;
-  opacity: 0.45;
+  color: var(--text-muted); /* 🔥 FIX */
   letter-spacing: 0.03em;
 
   user-select: none;

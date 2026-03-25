@@ -911,8 +911,11 @@ watch(
   border-bottom: 1px solid var(--border);
   padding-bottom: 4px;
   backdrop-filter: blur(6px);
-  background: rgba(255,255,255,0.92);
-    --sticky-offset: 0px;
+
+  /* 🔥 FIX DARK MODE */
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+
+  --sticky-offset: 0px;
 }
 
 /* =========================================================
@@ -947,7 +950,7 @@ watch(
   width: 90px;
   font-size: 0.85rem;
   font-weight: 500;
-  opacity: 0.8;
+  color: var(--text-soft); /* 🔥 FIX */
 }
 
 /* =========================================================
@@ -959,18 +962,24 @@ watch(
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
-  color: var(--text);  
+  color: var(--text);
   font-size: 0.75rem;
   font-weight: 600;
   opacity: 0.7;
   cursor: pointer;
   white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.chip:hover {
+  opacity: 0.9;
 }
 
 .chip.active {
   opacity: 1;
   background: var(--primary-soft);
   border-color: var(--primary);
+  color: var(--primary); /* 🔥 FIX (sinon gris en dark) */
 }
 
 /* =========================================================
@@ -1001,6 +1010,7 @@ watch(
   opacity: 0.6;
   cursor: pointer;
   padding: 0 2px;
+  transition: opacity 0.15s;
 }
 
 .arrow-nav:hover {
@@ -1050,10 +1060,7 @@ watch(
 .archives-table-wrapper {
   height: calc(100vh - 220px);
   overflow-y: auto;
-
-  /* 👇 FIX IMPORTANT */
   padding: 0 1.5rem 1.5rem 1.5rem;
-
   scrollbar-gutter: stable;
 }
 
@@ -1073,7 +1080,6 @@ watch(
 .archive-table col.col-dta    { width: 100px; }
 .archive-table col.col-amount { width: 80px; }
 
-/* 👇 FIX PRINCIPAL */
 .archive-table thead th {
   position: sticky;
   top: var(--sticky-offset);
@@ -1081,9 +1087,10 @@ watch(
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   font-weight: 700;
-}
 
-/* cellules */
+  /* 🔥 FIX lisibilité dark */
+  background: color-mix(in srgb, var(--bg) 96%, transparent);
+}
 
 .archive-table th,
 .archive-table td {
@@ -1125,6 +1132,7 @@ watch(
 
 .clickable-row {
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .clickable-row:hover {
@@ -1145,14 +1153,24 @@ watch(
   background: transparent;
   cursor: pointer;
   font-size: 16px;
+  opacity: 0.7;
+}
+
+.classify-btn:hover {
+  opacity: 1;
 }
 
 .dta-badge {
   padding: 2px 6px;
   border-radius: 6px;
   background: var(--primary-soft);
+  color: var(--primary);
   font-size: 0.75rem;
 }
+
+/* =========================================================
+   TAGS
+========================================================= */
 
 .info2-cell {
   display: flex;
@@ -1177,24 +1195,27 @@ watch(
   width: 11px;
   height: 11px;
   border-radius: 2px;
-  border: 1px solid rgba(0,0,0,0.15);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1); /* 🔥 FIX */
   cursor: pointer;
 }
 
-/* tooltip */
+/* =========================================================
+   TOOLTIP
+========================================================= */
 
 .tag-tooltip {
   position: fixed;
   transform: translate(-50%, -100%);
   padding: 4px 8px;
   border-radius: 6px;
-  background: rgba(0,0,0,0.88);
-  color: white;
+  background: var(--surface);
+  color: var(--text); /* 🔥 FIX */
   font-size: 0.75rem;
   white-space: nowrap;
   pointer-events: none;
   z-index: 3000;
+  box-shadow: var(--shadow-sm); /* 🔥 FIX */
 }
 
 /* =========================================================

@@ -84,23 +84,34 @@ async function handleConnect() {
   color: var(--text);
 }
 
+/* Bouton principal */
 button {
   margin-top: 1rem;
   padding: 8px 16px;
   border-radius: 8px;
-  border: none;
+  border: 1px solid var(--primary);
   background: var(--primary);
   color: white;
   cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s ease;
 }
 
+/* Hover cohérent (évite effet "flash" en dark) */
+button:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+/* Disabled */
 button:disabled {
-  opacity: 0.6;
-  cursor: default;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
+/* Erreur */
 .error {
   margin-top: 0.75rem;
-  color: var(--danger);
+  color: var(--negative); /* FIX: var(--danger) n’existe pas */
+  font-size: var(--font-size-sm);
 }
 </style>

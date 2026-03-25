@@ -31,11 +31,21 @@ withDefaults(
   align-items: center;
   gap: 12px;
   margin: 16px 0;
+
+  color: var(--text); /* 🔥 FIX explicite */
 }
 
 h1 {
-  font-size: 2rem;
+  font-size: var(--font-size-xl); /* 🔥 DS au lieu de 2rem */
   margin: 0;
   line-height: 1.2;
+  font-weight: 700;
+
+  color: var(--text); /* 🔥 important en dark */
+}
+
+/* 🔥 option subtile (Apple-like) */
+.app-title span {
+  opacity: 0.8;
 }
 </style>

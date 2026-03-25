@@ -947,7 +947,10 @@ watch(
   position: sticky;
   top: 0;
   z-index: 200;
-  background: var(--bg);
+
+  /* 🔥 FIX dark mode translucide */
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+
   transform: translateZ(0);
 }
 
@@ -988,13 +991,13 @@ watch(
 }
 
 .filter-label {
-  width: 90px;              /* Align Category & Sub rows */
+  width: 90px;
   font-size: 0.85rem;
   font-weight: 500;
-  opacity: 0.8;
+  color: var(--text-soft); /* 🔥 FIX */
 }
 
-/* Primary group (Year / Scope / Nature / Off budget) */
+/* Primary group */
 .primary-group {
   display: flex;
   align-items: center;
@@ -1008,7 +1011,7 @@ watch(
 }
 
 /* =========================================================
-   3️⃣ HEADER BAND (Categories / Spent / Budget)
+   3️⃣ HEADER BAND
 ========================================================= */
 .followup-header-wrapper {
   background: var(--bg-soft);
@@ -1029,7 +1032,7 @@ watch(
 
 
 /* =========================================================
-   4️⃣ TOTAL (part of sticky stack)
+   4️⃣ TOTAL
 ========================================================= */
 .followup-total-wrapper {
   background: var(--bg);
@@ -1052,14 +1055,13 @@ watch(
   gap: 10px;
 }
 
-/* Canonical grid structure */
 .followup-grid {
   display: grid;
   grid-template-columns:
-    220px   /* label */
-    1fr     /* bar */
-    90px    /* allocated */
-    90px;   /* budget */
+    220px
+    1fr
+    90px
+    90px;
   align-items: center;
   column-gap: 16px;
 }
@@ -1097,7 +1099,7 @@ watch(
 
 
 /* =========================================================
-   6️⃣ CONTROLS (Segmented & Chips)
+   6️⃣ CONTROLS
 ========================================================= */
 
 /* Year segmented */
@@ -1121,6 +1123,7 @@ watch(
   opacity: 0.6;
   cursor: pointer;
   user-select: none;
+  transition: all 0.15s ease;
 }
 
 .year-segment.active {
@@ -1128,7 +1131,9 @@ watch(
   border: 1px solid var(--primary);
   color: var(--primary);
   opacity: 1;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+
+  /* 🔥 FIX shadow */
+  box-shadow: var(--shadow-sm);
 }
 
 
@@ -1152,6 +1157,7 @@ watch(
   opacity: 0.6;
   cursor: pointer;
   user-select: none;
+  transition: all 0.15s ease;
 }
 
 .scope-btn.active {
@@ -1159,7 +1165,9 @@ watch(
   border-color: var(--primary);
   color: var(--primary);
   opacity: 1;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+
+  /* 🔥 FIX shadow */
+  box-shadow: var(--shadow-sm);
 }
 
 .scope-btn.disabled {
@@ -1179,12 +1187,18 @@ watch(
   font-weight: 600;
   opacity: 0.7;
   cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip:hover {
+  opacity: 0.9;
 }
 
 .chip.active {
   opacity: 1;
   background: var(--primary-soft);
   border-color: var(--primary);
+  color: var(--primary); /* 🔥 FIX */
 }
 
 
@@ -1216,4 +1230,5 @@ watch(
 .allocated-neutral {
   color: var(--primary);
 }
+
 </style>

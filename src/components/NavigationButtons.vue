@@ -62,17 +62,28 @@ const showBack = level >= 2;
   border-radius: 8px;
   border: none;
   background: none;
+  color: var(--text); /* 🔥 important */
 
   cursor: pointer;
+
+  transition: all 0.15s ease; /* 🔥 UX fluide */
 }
 
-.icon-btn:disabled {
+/* hover */
+.nav-btn:hover {
+  background: var(--primary-soft); /* 🔥 FIX */
+  color: var(--primary);
+}
+
+/* active (tap iPad) */
+.nav-btn:active {
+  transform: scale(0.95);
+}
+
+/* disabled */
+.nav-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   pointer-events: none;
-}
-
-.nav-btn:hover {
-  background: #eef2ff;
 }
 </style>

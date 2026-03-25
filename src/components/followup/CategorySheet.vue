@@ -65,7 +65,10 @@ function select(id: string) {
 .sheet-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.25);
+
+  /* 🔥 FIX → utilise le token global */
+  background: var(--overlay);
+
   z-index: 1000;
 
   display: flex;
@@ -79,6 +82,9 @@ function select(id: string) {
   background: var(--surface);
   border-radius: 16px 16px 0 0;
   padding: 0.75rem 0.75rem 1rem;
+
+  /* 🔥 petit plus premium */
+  box-shadow: var(--shadow-lg);
 }
 
 /* poignée iOS */
@@ -94,6 +100,7 @@ function select(id: string) {
   text-align: center;
   font-weight: 700;
   margin-bottom: 0.75rem;
+  color: var(--text); /* 🔥 FIX */
 }
 
 .sheet-list {
@@ -106,26 +113,53 @@ function select(id: string) {
   border-radius: 10px;
   text-align: left;
   font-size: 1rem;
+
   background: var(--surface);
   color: var(--text);
-  border: none;
+
+  border: 1px solid transparent; /* 🔥 évite jump au hover */
+  cursor: pointer;
+
+  transition: all 0.15s ease;
 }
 
+/* hover desktop */
+.sheet-item:hover {
+  background: var(--surface-soft);
+}
+
+/* actif */
 .sheet-item.active {
   background: var(--primary-soft);
+  color: var(--primary);
   font-weight: 700;
+  border-color: var(--primary);
 }
 
 .sheet-item + .sheet-item {
   margin-top: 0.25rem;
 }
 
+/* bouton cancel */
 .sheet-cancel {
   margin-top: 0.75rem;
   padding: 0.75rem;
   border-radius: 12px;
+
   background: var(--surface-soft);
-  border: none;
+  color: var(--text);
+
+  border: 1px solid var(--border);
+
   font-weight: 600;
+  cursor: pointer;
+
+  transition: all 0.15s ease;
+}
+
+.sheet-cancel:hover {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary);
 }
 </style>

@@ -545,6 +545,8 @@ onMounted(async () => {
   font-style: italic;
   color: var(--text-soft);
   opacity: 0.85;
+
+  transition: background 0.15s ease; /* 🔥 smooth */
 }
 
 .month-header:hover {
@@ -580,6 +582,13 @@ onMounted(async () => {
   padding: 3px 0;
 }
 
+.row:hover {
+  background: var(--primary-soft); /* 🔥 cohérence avec autres vues */
+}
+
+/* =========================================================
+   Date
+========================================================= */
 .date {
   text-align: right;
   font-weight: 600;
@@ -590,7 +599,6 @@ onMounted(async () => {
 /* =========================================================
    Description + tag layout
 ========================================================= */
-
 .desc-block {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -599,13 +607,12 @@ onMounted(async () => {
 }
 
 .desc-text {
-  min-width: 0; /* important pour ellipsis */
+  min-width: 0;
 }
 
 /* =========================================================
    Tag chip
 ========================================================= */
-
 .tag-container {
   display: flex;
   align-items: center;
@@ -624,8 +631,9 @@ onMounted(async () => {
   color: var(--text-soft);
 }
 
+/* 🔥 FIX DARK MODE */
 .tag-chip.off {
-  background: var(--negative-soft, rgba(255,0,0,0.08));
+  background: var(--primary-soft); /* fallback cohérent */
   border-color: var(--negative);
   color: var(--negative);
 }
@@ -640,6 +648,7 @@ onMounted(async () => {
 
 .sub {
   font-size: 0.75rem;
+  color: var(--text-soft); /* 🔥 FIX cohérence */
 }
 
 .amount {
@@ -648,6 +657,7 @@ onMounted(async () => {
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
 }
+
 /* =========================================================
    Amount cell
 ========================================================= */
@@ -656,7 +666,6 @@ onMounted(async () => {
   text-align: right;
 }
 
-/* valeur principale */
 .amount-value {
   display: inline-block;
 }
@@ -664,20 +673,20 @@ onMounted(async () => {
 /* =========================================================
    Currency indicator
 ========================================================= */
-
 .ccy-dot {
   position: absolute;
-
-  right: -12px;   /* décale le point à droite du montant */
+  right: -12px;
   top: 50%;
-
   transform: translateY(-50%);
 
   width: 6px;
   height: 6px;
-
   border-radius: 50%;
+
   background: var(--primary);
+
+  /* 🔥 améliore visibilité dark */
+  box-shadow: 0 0 0 1px var(--surface);
 }
 
 /* =========================================================
@@ -688,15 +697,15 @@ onMounted(async () => {
 
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
 
   padding: 4px 8px;
 
   font-size: 0.75rem;
   font-weight: 600;
+  color: var(--text);
 
-  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-
+  box-shadow: var(--shadow-md); /* 🔥 FIX */
   pointer-events: none;
   z-index: 1000;
 }
