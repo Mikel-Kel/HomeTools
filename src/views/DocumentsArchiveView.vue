@@ -11,6 +11,7 @@ const { loadSettings } = useAppBootstrap()
 import { useAppParameters } from "@/composables/useAppParameters"
 import { loadJSONFromFolder } from "@/services/driveAdapter"
 import { useDriveJsonFile } from "@/composables/useDriveJsonFile"
+import { useDriveWatcher } from "@/composables/useDriveWatcher" 
 
 import { useParties } from "@/composables/useParties"
 import { formatDate } from "@/utils/dateFormat"
@@ -89,6 +90,8 @@ const folderLabelToSourceMap = computed(() => {
   }
   return map
 })
+
+const indexLastModified = ref<string | null>(null)
 
 /* =========================
    State
@@ -249,6 +252,88 @@ async function loadArchive() {
   }
 }
 
+async function smartReload(index: any) {
+
+  const foldersUpdated: string[] =
+    index.foldersUpdated ?? []
+
+  if (!foldersUpdated.length) {
+    console.log("📦 full reload")
+    await loadArchive()
+    return
+  }
+
+  console.log("📡 smart reload:", foldersUpdated)
+
+  let updatedItems: ArchiveItem[] = []
+
+  for (const f of foldersUpdated) {
+
+    // 🟥 TO FILE
+    if (f === "toFile") {
+
+      const toFile = await loadJSONFromFolder<any>(
+        "archive",
+        "toFile.json"
+      )
+
+      if (toFile?.items) {
+
+        const mapped = toFile.items.map((i: any) => ({
+          ...i,
+          folder: "A Classer"
+        }))
+
+        updatedItems.push(...mapped)
+      }
+    }
+
+    // 🟩 YEAR
+    else if (/^\d{4}$/.test(f)) {
+
+      const data = await loadJSONFromFolder<any>(
+        "archive",
+        `${f}.json`
+      )
+
+      if (!data?.groups) continue
+
+      for (const [groupName, group] of Object.entries(data.groups)) {
+
+        const items = (group as any).items ?? []
+
+        const mapped = items.map((i: any) => ({
+          ...i,
+          folder:
+            folderLabelToSourceMap.value.get(groupName)
+            ?? groupName
+        }))
+
+        updatedItems.push(...mapped)
+      }
+    }
+  }
+
+  // 🧹 replace uniquement les dossiers impactés
+  archive.value = [
+    ...archive.value.filter(item => {
+
+      return !foldersUpdated.some(f => {
+
+        if (f === "toFile")
+          return item.folder === "A Classer"
+
+        if (/^\d{4}$/.test(f))
+          return item.documentDate.startsWith(f)
+
+        return false
+      })
+    }),
+    ...updatedItems
+  ]
+
+  console.log("✅ smart reload done")
+}
 
 /* =========================
    Folder configuration
@@ -386,9 +471,7 @@ const payDatesInActiveQuarter = computed(() => {
 })
 
 watch(activeQuarterKey, () => {
-
   selectDefaultPayDateForQuarter()
-
 })
 
 function todayISO() {
@@ -617,6 +700,7 @@ async function saveClassification(updated: ArchiveItem) {
     )
 
     await save(event)
+    await loadArchive()
 
   } catch (e) {
 
@@ -723,6 +807,31 @@ watch(
   },
   { immediate: true }
 )
+
+useDriveWatcher({
+
+  folderId: "archive",
+  fileName: "index.json",
+
+  lastKnownModified: indexLastModified,
+
+  onChanged: async () => {
+
+    console.log("📡 index.json changed")
+
+    const index = await loadJSONFromFolder<any>(
+      "archive",
+      "index.json"
+    )
+
+    if (!index) return
+
+    // ⏳ très important (latence backend)
+    await new Promise(r => setTimeout(r, 200))
+
+    await smartReload(index)
+  }
+})
 
 onMounted(() => {
   const configs =

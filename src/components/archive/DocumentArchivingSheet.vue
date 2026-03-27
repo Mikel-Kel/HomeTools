@@ -264,30 +264,6 @@ function computeNextDTADate(): string {
   return `${yyyy}-${mm}-${dd}`
 }
 
-/*function openPicker(el: HTMLInputElement | null) {
-  if (!el) return
-
-  try {
-    if (typeof el.showPicker === "function") {
-      el.showPicker()
-    } else {
-      el.focus()
-      el.click() // 👈 bonus iOS
-    }
-  } catch {
-    el.focus()
-  }
-}
-
-function openDocDatePicker() {
-  openPicker(docDateInput.value)
-}
-
-function openDTADatePicker() {
-  openPicker(dtaDateInput.value)
-}
-*/ 
-
 /* Tags */
 function toggleTag(id: number) {
   const i = selectedTags.value.indexOf(id)
