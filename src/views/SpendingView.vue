@@ -950,6 +950,16 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
+.amount-cell.positive,
+.total.positive {
+  color: var(--positive);
+}
+
+.amount-cell.negative,
+.total.negative {
+  color: var(--negative);
+}
+
 .fx-popover {
   position: fixed;
   transform: translate(-100%, -100%);

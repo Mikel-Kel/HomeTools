@@ -13,7 +13,7 @@ import { useAmountInput } from "@/composables/useAmountInput"
 /* =========================
    Emits
 ========================= */
-const emit = defineEmits(["save","close"])
+const emit = defineEmits(["save","delete","close"])
 
 /* =========================
    Types
@@ -308,6 +308,22 @@ function onSave() {
 
   emit("close")
 }
+
+function onDelete() {
+
+  const ok = confirm(
+    "Delete this document?\nThis action cannot be undone."
+  )
+
+  if (!ok) return
+
+  emit("delete", {
+    tocid: localDoc.value.tocid
+  })
+
+  emit("close")
+}
+
 </script>
 
 <template>
@@ -444,6 +460,14 @@ function onSave() {
   <div class="actions-bar">
     <button class="btn cancel" @click="onCancel">
       Cancel
+    </button>
+
+    <!-- 🟥 DELETE -->
+    <button
+      class="btn delete"
+      @click="onDelete"
+    >
+      Delete
     </button>
 
     <button
@@ -747,5 +771,16 @@ color: var(--text);
 .btn.save:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.btn.delete {
+  background: color-mix(in srgb, var(--negative) 15%, transparent);
+  color: var(--negative);
+  border: 1px solid var(--negative);
+}
+
+.btn.delete:hover {
+  background: var(--negative);
+  color: white;
 }
 </style>

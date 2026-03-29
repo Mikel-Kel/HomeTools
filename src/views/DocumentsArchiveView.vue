@@ -709,6 +709,39 @@ async function saveClassification(updated: ArchiveItem) {
 }
 
 
+async function deleteDocument(payload: { tocid: number }) {
+
+  try {
+
+    const fileName = buildEventFileName(payload.tocid)
+
+    const event = {
+      eventType: "ARCHIVE_DELETED",
+      version: 1,
+      timestamp: new Date().toISOString(),
+
+      archiveMetadata: {
+        tocid: payload.tocid
+      }
+    }
+
+    const { save } = useDriveJsonFile(
+      "events",
+      fileName
+    )
+
+    await save(event)
+
+    // ❌ PAS de reload ici !
+    // 👉 ton watcher index.json va s'en charger
+
+  } catch (e) {
+
+    console.error("Delete failed", e)
+
+  }
+}
+
 function rowClick(e: MouseEvent, item: ArchiveItem) {
   const el = e.target as HTMLElement
   if (el.closest(".classify-btn")) return
@@ -1047,6 +1080,8 @@ onMounted(() => {
     :doc="selectedItem"
     @close="closeClassification"
     @save="saveClassification"
+    @delete="deleteDocument"
+
   />
   <div
   v-if="tooltip"
