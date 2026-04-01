@@ -90,6 +90,14 @@ const isBillsFolder = computed(() =>
   localDoc.value.folder === billsFolderSource.value
 )
 
+const isValid = computed(() => {
+  //  Bills → DTA mandatory
+  if (isBillsFolder.value && !localDoc.value.dtaDate?.trim()) {
+      return false
+  }
+  return true
+})
+
 /* ---------- Party map ---------- */
 const partyMap = computed(() => {
   const map = new Map<number, string>()
@@ -301,6 +309,8 @@ function onCancel() {
 }
 
 function onSave() {
+  if (isBillsFolder.value && !localDoc.value.dtaDate?.trim()) return
+
   emit("save", {
     ...localDoc.value,
     tagIDs: [...selectedTags.value]
@@ -403,10 +413,17 @@ function onDelete() {
   </div>
 
   <!-- Payment date -->
-  <div v-if="isBillsFolder" class="row">
-    <span class="label">Payment date</span>
-    <DateChip v-model="localDoc.dtaDate" />
-  </div>
+<!-- Payment date -->
+<div v-if="isBillsFolder" class="row">
+  <span class="label">Payment date</span>
+  <DateChip v-model="localDoc.dtaDate" />
+</div>
+<div
+  v-if="isBillsFolder && !localDoc.dtaDate"
+  class="field-error"
+>
+  Payment date is required
+</div>
 
   <!-- Description -->
   <div class="row input-row">
@@ -472,7 +489,7 @@ function onDelete() {
 
     <button
       class="btn save"
-      :disabled="!isDirty"
+      :disabled="!isDirty || !isValid"
       @click="onSave"
     >
       Save
@@ -712,6 +729,14 @@ color:var(--text)
   /* 🔥 Safari */
   -webkit-text-fill-color: var(--text);
   appearance: none;
+}
+
+.field-error {
+  margin-left: 110px;
+  margin-top: -6px;
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  color: var(--negative);
 }
 
 /* Tags */
