@@ -14,6 +14,7 @@ import { useSpending } from "@/composables/spending/useSpending";
 import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags" 
+import { useAmountInput } from "@/composables/useAmountInput"
 
 import DateChip from "@/components/DateChip.vue"
 import { formatDate } from "@/utils/dateFormat";
@@ -146,17 +147,19 @@ const amount = computed<number>({
   set: v => allocation.value && (allocation.value.amount.value = v),
 });
 
-
-const amountDisplay = computed<string>({
-  get: () => amount.value.toFixed(2),
-  set: (v) => {
-    const normalized = v.replace(",", ".");
-    const n = Number(normalized);
-    if (Number.isFinite(n)) {
-      amount.value = Number(n.toFixed(2));
+const {
+  input: amountInputStr,
+  onFocus: onAmountFocus,
+  onInput: onAmountInput,
+  onBlur: onAmountBlur
+} = useAmountInput(
+  computed({
+    get: () => amount.value,
+    set: (v) => {
+      amount.value = v ?? 0
     }
-  },
-});
+  })
+)
 
 const allocationDate = computed<string | null>({
   get: () => allocation.value?.allocationDate?.value ?? null,
@@ -469,13 +472,15 @@ function closeView() {
         <div class="amount-row">
           <input
             ref="amountInput"
-            v-model="amountDisplay"
+            :value="amountInputStr"
+            @input="onAmountInput(($event.target as HTMLInputElement).value)"
+            @focus="onAmountFocus($event)"
+            @blur="onAmountBlur"
             type="text"
             inputmode="decimal"
             class="field field-short amount-input"
             :disabled="isLocked"
           />
-
           <!-- 📅 bouton -->
           <button
             class="date-icon-btn"
@@ -702,6 +707,10 @@ function closeView() {
   display: flex;
   align-items: baseline;
   gap: 10px;
+}
+
+.amount-input {
+  font-variant-numeric: tabular-nums;
 }
 
 .currency-amount {
