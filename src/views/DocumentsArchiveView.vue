@@ -137,6 +137,7 @@ const subFolders = computed<SubFolder[]>(() => {
 const selectedSubFolder = ref<number | null>(null)
 
 const selectedDTADate = ref<string | null>(null)
+const selectedTags = ref<number[]>([])  
 
 const searchText = ref("")
 
@@ -188,8 +189,6 @@ watch(selectedFolder, val => {
   }
 })
 
-console.log("selectedFolder:", selectedFolder.value)
-console.log("subFolders:", subFolders.value)
 /* =========================
    Platform detection
 ========================= */
@@ -570,6 +569,14 @@ function selectDefaultPayDateForQuarter() {
   }
 }
 
+function toggleFilterTag(id: number) {
+  const i = selectedTags.value.indexOf(id)
+  if (i >= 0)
+    selectedTags.value.splice(i, 1)
+  else
+    selectedTags.value.push(id)
+}
+
 /* =========================
    Filtering
 ========================= */
@@ -615,6 +622,15 @@ const filteredItems = computed(() => {
           !info2.includes(t)
         )
           return false
+      }
+
+      // TAG FILTER
+      if (selectedTags.value.length) {
+        const itemTags = item.tagIDs ?? []
+        const hasMatch = selectedTags.value.some(tagId =>
+          itemTags.includes(tagId)
+        )
+        if (!hasMatch) return false
       }
 
       return true
@@ -961,7 +977,6 @@ onMounted(() => {
         </header>
 
         <div v-if="filtersOpen" class="filters-body">
-
           <!-- Folder -->
           <div class="filter-row with-label">
             <span class="filter-label">Documents</span>
@@ -986,7 +1001,6 @@ onMounted(() => {
               </button>
             </div>
           </div>
-
           <!-- Sub folders -->
           <div
             v-if="subFolders.length"
@@ -1043,8 +1057,35 @@ onMounted(() => {
 
             </div>
           </div>
+          <!-- Tags -->
+          <div
+            v-if="tagsStore.tags.value.length"
+            class="filter-row with-label"
+          >
+            <span class="filter-label">Tags</span>
+            <div class="chip-line">
+              <!-- All -->
+              <button
+                class="chip"
+                :class="{ active: selectedTags.length === 0 }"
+                @click="selectedTags = []"
+              >
+                None
+              </button>               
+              <!-- Tags -->
+              <div
+                v-for="t in tagsStore.tags.value"
+                :key="t.id"
+                class="tag-dot"
+                :class="{ active: selectedTags.includes(t.id) }"
+                :style="{ backgroundColor: t.color }"
+                @click="toggleFilterTag(t.id)"
+                @mouseenter="showTagTooltip($event, t.id)"
+                @mouseleave="hideTagTooltip"
+              ></div>
 
-
+            </div>
+          </div>
           <!-- Pay Date -->
           <div
             v-if="isPayDateVisible"
@@ -1074,7 +1115,6 @@ onMounted(() => {
               </button>
             </div>
           </div>
-
           <!-- Search -->
           <div class="filter-row with-label">
             <span class="filter-label">Search</span>
@@ -1294,6 +1334,7 @@ onMounted(() => {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 /* =========================================================
@@ -1340,6 +1381,47 @@ onMounted(() => {
 /* bouton gauche intégré */
 .scroll-btn.inside {
   margin-left: 2px;
+}
+
+/* =========================================================
+   TAG FILTERS (aligned like chips)
+========================================================= */
+
+.tag-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: all 0.15s ease;
+}
+
+.tag-dot:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.tag-dot.active {
+  opacity: 1;
+  border: 2px solid var(--primary);
+  transform: scale(1.15);
+}
+
+.tag-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: all 0.15s ease;
+
+  display: inline-flex;
+}
+
+.chip + .tag-dot {
+  margin-left: 4px;
 }
 
 /* =========================================================
