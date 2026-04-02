@@ -124,20 +124,15 @@ const selectedFolderConfig = computed(() =>
 )
 
 const subFolders = computed<SubFolder[]>(() => {
-
   const label = selectedFolderConfig.value?.label
-
   if (label === "Tourism") {
     return tourismStore.folders.value
   }
-
   if (label === "Various") {
     return variousStore.folders.value
   }
-
   return []
 })
-
 
 const selectedSubFolder = ref<number | null>(null)
 
@@ -411,6 +406,45 @@ const billsFolderSource = computed(() => {
     (archiveFoldersStore.folders.value as ArchiveFolderConfig[]) ?? []
   const bills = configs.find(f => f.label === "Bills")
   return bills?.source ?? null
+})
+
+const subFolderScrollRef = ref<HTMLElement | null>(null)
+
+const canScrollLeft = ref(false)
+const canScrollRight = ref(false)
+
+function updateScrollState() {
+  const el = subFolderScrollRef.value
+  if (!el) return
+
+  canScrollLeft.value = el.scrollLeft > 0
+  canScrollRight.value =
+    el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+}
+
+function scrollSubFolders(direction: number) {
+  const el = subFolderScrollRef.value
+  if (!el) return
+
+  const scrollAmount = el.clientWidth * 0.7
+
+  el.scrollBy({
+    left: direction * scrollAmount,
+    behavior: "smooth"
+  })
+
+  // ⏳ attendre la fin du scroll
+  setTimeout(updateScrollState, 250)
+}
+
+/* update quand données changent */
+watch(subFolders, () => {
+  setTimeout(updateScrollState, 0)
+})
+
+/* update au mount */
+onMounted(() => {
+  setTimeout(updateScrollState, 0)
 })
 
 /* =========================
@@ -932,50 +966,84 @@ onMounted(() => {
           <div class="filter-row with-label">
             <span class="filter-label">Documents</span>
 
-            <button
-              class="chip"
-              :class="{ active: selectedFolder === null }"
-              @click="selectedFolder = null"
-            >
-              All
-            </button>
+            <div class="chip-line">
+              <button
+                class="chip"
+                :class="{ active: selectedFolder === null }"
+                @click="selectedFolder = null"
+              >
+                All
+              </button>
 
-            <button
-              v-for="f in archiveFolders"
-              :key="f.source"
-              class="chip"
-              :class="{ active: selectedFolder === f.source }"
-              @click="selectedFolder = f.source"
-            >
-              {{ f.label }}
-            </button>
+              <button
+                v-for="f in archiveFolders"
+                :key="f.source"
+                class="chip"
+                :class="{ active: selectedFolder === f.source }"
+                @click="selectedFolder = f.source"
+              >
+                {{ f.label }}
+              </button>
+            </div>
           </div>
 
           <!-- Sub folders -->
           <div
             v-if="subFolders.length"
-            class="filter-row with-label"
+            class="filter-row with-label subfolder-row"
           >
             <span class="filter-label">Type</span>
 
-            <button
-              class="chip"
-              :class="{ active: selectedSubFolder === null }"
-              @click="selectedSubFolder = null"
-            >
-              All
-            </button>
+              <div class="chip-scroll-wrapper subfolder-layout">
 
-            <button
-              v-for="f in subFolders"
-              :key="f.id"
-              class="chip"
-              :class="{ active: selectedSubFolder === f.id }"
-              @click="selectedSubFolder = f.id"
-            >
-              {{ f.label }}
-            </button>
+              <!-- ✅ FIXE (ne scroll pas) -->
+              <div class="chip-fixed">
+                <button
+                  class="chip"
+                  :class="{ active: selectedSubFolder === null }"
+                  @click="selectedSubFolder = null"
+                >
+                  All
+                </button>
+
+                <button
+                  v-if="canScrollLeft"
+                  class="scroll-btn inside"
+                  @click="scrollSubFolders(-1)"
+                >
+                  ‹
+                </button>
+              </div>
+
+              <!-- ✅ SCROLLABLE UNIQUEMENT -->
+              <div
+                class="chip-scroll"
+                ref="subFolderScrollRef"
+                @scroll="updateScrollState"
+              >
+                <button
+                  v-for="f in subFolders"
+                  :key="f.id"
+                  class="chip"
+                  :class="{ active: selectedSubFolder === f.id }"
+                  @click="selectedSubFolder = f.id"
+                >
+                  {{ f.label }}
+                </button>
+              </div>
+
+              <!-- 👉 droite -->
+              <button
+                v-if="canScrollRight"
+                class="scroll-btn right"
+                @click="scrollSubFolders(1)"
+              >
+                ›
+              </button>
+
+            </div>
           </div>
+
 
           <!-- Pay Date -->
           <div
@@ -1171,16 +1239,6 @@ onMounted(() => {
    FILTERS
 ========================================================= */
 
-.filters-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-soft);
-}
-
 .filters-body {
   padding: 6px 12px 8px 12px;
   display: flex;
@@ -1188,18 +1246,18 @@ onMounted(() => {
   gap: 10px;
 }
 
+/* 🔥 STRUCTURE UNIFIÉE (Documents + Type alignés) */
 .filter-row.with-label {
-  display: flex;
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: wrap;
 }
 
 .filter-label {
-  width: 90px;
   font-size: 0.85rem;
   font-weight: 500;
-  color: var(--text-soft); /* 🔥 FIX */
+  color: var(--text-soft);
 }
 
 /* =========================================================
@@ -1228,7 +1286,60 @@ onMounted(() => {
   opacity: 1;
   background: var(--primary-soft);
   border-color: var(--primary);
-  color: var(--primary); /* 🔥 FIX (sinon gris en dark) */
+  color: var(--primary);
+}
+
+/* ligne simple (Documents) */
+.chip-line {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* =========================================================
+   SUBFOLDERS (clean + stable)
+========================================================= */
+
+.subfolder-layout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* partie fixe (All + ←) */
+.chip-fixed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* partie scrollable */
+.chip-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  min-width: 0;
+}
+
+/* bouton droite */
+.scroll-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  opacity: 0.5;
+}
+
+.scroll-btn:hover {
+  opacity: 1;
+}
+
+/* bouton gauche intégré */
+.scroll-btn.inside {
+  margin-left: 2px;
 }
 
 /* =========================================================
