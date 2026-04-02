@@ -137,6 +137,44 @@ const filteredParties = computed(() => {
     .slice(0, 15)
 })
 
+/* ---------- Tags ---------- */
+const tooltip = ref<{
+  text: string
+  x: number
+  y: number
+} | null>(null)
+
+let tooltipTimer: ReturnType<typeof setTimeout> | null = null
+
+function showTagTooltip(e: MouseEvent, tagId: number) {
+  const tag = tags.value.find(t => t.id === tagId)
+  if (!tag) return
+
+  const target = e.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+
+  tooltip.value = {
+    text: tag.tagName,
+    x: rect.left + rect.width / 2,
+    y: rect.top - 8
+  }
+
+  if (tooltipTimer) clearTimeout(tooltipTimer)
+
+  tooltipTimer = setTimeout(() => {
+    tooltip.value = null
+    tooltipTimer = null
+  }, 2000)
+}
+
+function hideTagTooltip() {
+  if (tooltipTimer) {
+    clearTimeout(tooltipTimer)
+    tooltipTimer = null
+  }
+  tooltip.value = null
+}
+
 /* =========================
    Dirty state
 ========================= */
@@ -375,126 +413,136 @@ function onDelete() {
   <!-- Relation -->
   <div class="row relation-field">
     <span class="label">Relation</span>
-    <div class="relation-select">
-      <div class="relation-input-wrapper">
-        <span class="search-icon">🔍</span>
-        <input
-          ref="relationInput"
-          v-model="relationSearch"
-          type="text"
-          placeholder="Search relation..."
-          @focus="relationOpen = true"
-          @input="relationOpen = true"
-          @blur="closeRelationDropdown"
-        />
-      </div>
-      <div
-        v-if="relationOpen"
-        class="relation-dropdown"
-      >
+      <div class="relation-select">
+        <div class="relation-input-wrapper">
+          <span class="search-icon">🔍</span>
+          <input
+            ref="relationInput"
+            v-model="relationSearch"
+            type="text"
+            placeholder="Search relation..."
+            @focus="relationOpen = true"
+            @input="relationOpen = true"
+            @blur="closeRelationDropdown"
+          />
+        </div>
         <div
-          v-for="p in filteredParties"
-          :key="p.id"
-          class="relation-item"
-          @click="selectParty(p)"
+          v-if="relationOpen"
+          class="relation-dropdown"
         >
-          {{ p.label }}
+          <div
+            v-for="p in filteredParties"
+            :key="p.id"
+            class="relation-item"
+            @click="selectParty(p)"
+          >
+            {{ p.label }}
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Document date -->
-  <div class="row">
-    <span class="label">Document date</span>
-    <DateChip v-model="localDoc.documentDate" />
-  </div>
+    <!-- Document date -->
+    <div class="row">
+      <span class="label">Document date</span>
+      <DateChip v-model="localDoc.documentDate" />
+    </div>
 
-  <!-- Payment date -->
-<!-- Payment date -->
-<div v-if="isBillsFolder" class="row">
-  <span class="label">Payment date</span>
-  <DateChip v-model="localDoc.dtaDate" />
-</div>
-<div
-  v-if="isBillsFolder && !localDoc.dtaDate"
-  class="field-error"
->
-  Payment date is required
-</div>
-
-  <!-- Description -->
-  <div class="row input-row">
-    <span class="label">Description</span>
-    <input
-      class="text-input"
-      v-model="localDoc.info1"
-    />
-  </div>
-
-  <!-- Additional info -->
-  <div class="row input-row">
-    <span class="label">Additional info</span>
-    <input
-      class="text-input"
-      v-model="localDoc.info2"
-    />
-  </div>
-
-  <!-- Reference amount -->
-  <div v-if="isBillsFolder" class="row input-row">
-    <span class="label">Amount</span>
-    <input
-      :value="amountInput"
-      @input="onAmountInput(($event.target as HTMLInputElement).value)"
-      @focus="onAmountFocus($event)"
-      @blur="onAmountBlur"
-      type="text"
-      inputmode="decimal"
-      class="amount-input"
-    />
-  </div>
-
-<!-- Tags -->
-<div class="row tags-row">
-  <span class="label">Tag(s)</span>
-
-  <div class="tags">
-    <button
-      v-for="t in tags"
-      :key="t.id"
-      :class="{ active: selectedTags.includes(t.id) }"
-      @click="toggleTag(t.id)"
+    <!-- Payment date -->
+    <div v-if="isBillsFolder" class="row">
+      <span class="label">Payment date</span>
+      <DateChip v-model="localDoc.dtaDate" />
+    </div>
+    <div
+      v-if="isBillsFolder && !localDoc.dtaDate"
+      class="field-error"
     >
-      {{ t.tagName }}
-    </button>
+      Payment date is required
+    </div>
+
+    <!-- Description -->
+    <div class="row input-row">
+      <span class="label">Description</span>
+      <input
+        class="text-input"
+        v-model="localDoc.info1"
+      />
+    </div>
+
+    <!-- Additional info -->
+    <div class="row input-row">
+      <span class="label">Additional info</span>
+      <input
+        class="text-input"
+        v-model="localDoc.info2"
+      />
+    </div>
+
+    <!-- Reference amount -->
+    <div v-if="isBillsFolder" class="row input-row">
+      <span class="label">Amount</span>
+      <input
+        :value="amountInput"
+        @input="onAmountInput(($event.target as HTMLInputElement).value)"
+        @focus="onAmountFocus($event)"
+        @blur="onAmountBlur"
+        type="text"
+        inputmode="decimal"
+        class="amount-input"
+      />
+    </div>
+
+    <!-- Tags -->
+    <div class="row tags-row">
+      <span class="label">Tag(s)</span>
+      <div class="tags">
+        <div
+          v-for="t in tags"
+          :key="t.id"
+          class="tag-dot"
+          :class="{ active: selectedTags.includes(t.id) }"
+          :style="{ backgroundColor: t.color }"
+          @click="toggleTag(t.id)"
+          @mouseenter="showTagTooltip($event, t.id)"
+          @mouseleave="hideTagTooltip"
+        ></div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions-bar">
+      <button class="btn cancel" @click="onCancel">
+        Cancel
+      </button>
+
+      <!-- 🟥 DELETE -->
+      <button
+        class="btn delete"
+        @click="onDelete"
+      >
+        Delete
+      </button>
+
+      <button
+        class="btn save"
+        :disabled="!isDirty || !isValid"
+        @click="onSave"
+      >
+        Save
+      </button>
+    </div>
+
   </div>
-</div>
-
-  <!-- Actions -->
-  <div class="actions-bar">
-    <button class="btn cancel" @click="onCancel">
-      Cancel
-    </button>
-
-    <!-- 🟥 DELETE -->
-    <button
-      class="btn delete"
-      @click="onDelete"
-    >
-      Delete
-    </button>
-
-    <button
-      class="btn save"
-      :disabled="!isDirty || !isValid"
-      @click="onSave"
-    >
-      Save
-    </button>
+  <div
+    v-if="tooltip"
+    class="tag-tooltip"
+    :style="{
+      left: tooltip.x + 'px',
+      top: tooltip.y + 'px'
+    }"
+  >
+    {{ tooltip.text }}
   </div>
-
-</div>
 </template>
 
 <style scoped>
@@ -738,11 +786,50 @@ color:var(--text)
 }
 
 /* Tags */
+/* =========================================================
+   TAGS (DOT STYLE)
+========================================================= */
+
 .tags {
-margin-top: 16px;
-display: flex;
-flex-wrap: wrap;
-gap: 8px;
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: all 0.15s ease;
+}
+
+.tag-dot:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+/* sélection */
+.tag-dot.active {
+  opacity: 1;
+  border: 2px solid var(--primary);
+}
+
+.tag-tooltip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3000;
+  box-shadow: var(--shadow-sm);
 }
 
 .tags button {
