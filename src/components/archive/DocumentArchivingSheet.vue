@@ -7,7 +7,7 @@ const { loadSettings } = useAppBootstrap()
 import { useAppParameters } from "@/composables/useAppParameters"
 import { useParties } from "@/composables/useParties"
 import DateChip from "@/components/DateChip.vue"
-import { useDocumentTags } from "@/composables/useDocumentTags"
+import { useDocumentTags } from "@/composables/archives/useDocumentTags"
 import { useAmountInput } from "@/composables/useAmountInput"
 
 /* =========================
@@ -310,12 +310,10 @@ function onCancel() {
 
 function onSave() {
   if (isBillsFolder.value && !localDoc.value.dtaDate?.trim()) return
-
   emit("save", {
     ...localDoc.value,
     tagIDs: [...selectedTags.value]
   })
-
   emit("close")
 }
 

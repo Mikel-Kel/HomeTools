@@ -8,19 +8,22 @@ import { useRouter } from "vue-router"
 import { useAppBootstrap } from "@/composables/useAppBootstrap"
 const { loadSettings } = useAppBootstrap()
 
-import { useAppParameters } from "@/composables/useAppParameters"
 import { loadJSONFromFolder } from "@/services/driveAdapter"
 import { useDriveJsonFile } from "@/composables/useDriveJsonFile"
 import { useDriveWatcher } from "@/composables/useDriveWatcher" 
 
 import { useParties } from "@/composables/useParties"
+import { useArchiveFolders } from "@/composables/archives/useArchiveFolders"
+import { useTourismFolders } from "@/composables/archives/useTourismFolders"
+import { useVariousFolders } from "@/composables/archives/useVariousFolders"
+
 import { formatDate } from "@/utils/dateFormat"
 import { formatAmount } from "@/utils/amountFormat"
 
 import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vue"
 
-import { useDocumentTags } from "@/composables/useDocumentTags"
-import type { DocumentTag } from "@/composables/useDocumentTags"
+import { useDocumentTags } from "@/composables/archives/useDocumentTags"
+import type { DocumentTag } from "@/composables/archives/useDocumentTags"
 
 const tagsStore = useDocumentTags()
 
@@ -79,15 +82,14 @@ interface FolderView {
 ========================= */
 const router = useRouter()
 const { driveStatus } = useDrive()
-const { appParameters } = useAppParameters()
 
 const folderLabelToSourceMap = computed(() => {
   const map = new Map<string, string>()
-  const configs =
-    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
-  for (const f of configs) {
+
+  for (const f of archiveFoldersStore.folders.value) {
     map.set(f.label, f.source)
   }
+
   return map
 })
 
@@ -101,10 +103,44 @@ const error = ref<string | null>(null)
 
 const archive = ref<ArchiveItem[]>([])
 const partiesStore = useParties()
+const archiveFoldersStore = useArchiveFolders()
+const tourismStore = useTourismFolders()
+const variousStore = useVariousFolders()
 
 const filtersOpen = ref(true)
 
 const selectedFolder = ref<string | null>(null)
+
+type SubFolder = {
+  id: number
+  label: string
+  seqNb?: number
+}
+
+const selectedFolderConfig = computed(() =>
+  archiveFoldersStore.folders.value.find(
+    f => f.source === selectedFolder.value
+  )
+)
+
+const subFolders = computed<SubFolder[]>(() => {
+
+  const label = selectedFolderConfig.value?.label
+
+  if (label === "Tourism") {
+    return tourismStore.folders.value
+  }
+
+  if (label === "Various") {
+    return variousStore.folders.value
+  }
+
+  return []
+})
+
+
+const selectedSubFolder = ref<number | null>(null)
+
 const selectedDTADate = ref<string | null>(null)
 
 const searchText = ref("")
@@ -148,20 +184,17 @@ watch(driveStatus, status => {
    Folder watcher
 ========================= */
 watch(selectedFolder, val => {
-
+  selectedSubFolder.value = null  // 👈 AJOUT
   if (val === billsFolderSource.value) {
-
     selectedQuarterOffset.value = 0
     selectDefaultPayDateForQuarter()
-
   } else {
-
-    // 🔥 IMPORTANT : reset
     selectedDTADate.value = null
-
   }
 })
 
+console.log("selectedFolder:", selectedFolder.value)
+console.log("subFolders:", subFolders.value)
 /* =========================
    Platform detection
 ========================= */
@@ -340,23 +373,20 @@ async function smartReload(index: any) {
 ========================= */
 const folderConfigMap = computed(() => {
   const map = new Map<string, { label: string; order: number }>()
-  const configs =
-    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
-  for (const f of configs) {
+
+  for (const f of archiveFoldersStore.folders.value) {
     map.set(f.source, {
       label: f.label,
       order: f.order
     })
   }
+
   return map
 })
 
 const archiveFolders = computed<FolderView[]>(() => {
 
   const unique = [...new Set(archive.value.map(i => i.folder))]
-
-  const configs =
-    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
 
   return unique
     .map((f): FolderView => {
@@ -378,7 +408,7 @@ const archiveFolders = computed<FolderView[]>(() => {
 
 const billsFolderSource = computed(() => {
   const configs =
-    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
+    (archiveFoldersStore.folders.value as ArchiveFolderConfig[]) ?? []
   const bills = configs.find(f => f.label === "Bills")
   return bills?.source ?? null
 })
@@ -520,6 +550,12 @@ const filteredItems = computed(() => {
         item.folder !== selectedFolder.value
       )
         return false
+
+      if (selectedSubFolder.value) {
+        if (item.partyID !== selectedSubFolder.value) {
+          return false
+        }
+      }
 
       if (
         isPayDateVisible.value &&
@@ -831,44 +867,33 @@ const headerCountLabel = computed(() => {
 watch(
   driveStatus,
   async (status) => {
-
     if (status !== "CONNECTED") return
-
     await loadSettings()
     await loadArchive()
-
   },
   { immediate: true }
 )
 
 useDriveWatcher({
-
   folderId: "archive",
   fileName: "index.json",
-
   lastKnownModified: indexLastModified,
-
   onChanged: async () => {
-
     console.log("📡 index.json changed")
-
     const index = await loadJSONFromFolder<any>(
       "archive",
       "index.json"
     )
-
     if (!index) return
-
     // ⏳ très important (latence backend)
     await new Promise(r => setTimeout(r, 200))
-
     await smartReload(index)
   }
 })
 
 onMounted(() => {
   const configs =
-    (appParameters.value?.archiveFolders as ArchiveFolderConfig[]) ?? []
+    (archiveFoldersStore.folders.value as ArchiveFolderConfig[]) ?? []
 
   if (configs.length) {
     const sorted = [...configs].sort((a, b) => a.order - b.order)
@@ -921,6 +946,32 @@ onMounted(() => {
               class="chip"
               :class="{ active: selectedFolder === f.source }"
               @click="selectedFolder = f.source"
+            >
+              {{ f.label }}
+            </button>
+          </div>
+
+          <!-- Sub folders -->
+          <div
+            v-if="subFolders.length"
+            class="filter-row with-label"
+          >
+            <span class="filter-label">Type</span>
+
+            <button
+              class="chip"
+              :class="{ active: selectedSubFolder === null }"
+              @click="selectedSubFolder = null"
+            >
+              All
+            </button>
+
+            <button
+              v-for="f in subFolders"
+              :key="f.id"
+              class="chip"
+              :class="{ active: selectedSubFolder === f.id }"
+              @click="selectedSubFolder = f.id"
             >
               {{ f.label }}
             </button>

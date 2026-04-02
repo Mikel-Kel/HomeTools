@@ -1,6 +1,5 @@
 import { ref } from "vue"
 import { loadJSONFromFolder } from "@/services/driveAdapter"
-import { useDrive } from "@/composables/useDrive"
 
 /* =========================
    Types

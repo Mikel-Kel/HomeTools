@@ -2,7 +2,10 @@ import { useAppParameters } from "@/composables/useAppParameters"
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags"
 import { useBanks } from "@/composables/useBanks"
 import { useCategories } from "@/composables/useCategories"
-import { useDocumentTags } from "@/composables/useDocumentTags"
+import { useDocumentTags } from "@/composables/archives/useDocumentTags"
+import { useArchiveFolders } from "@/composables/archives/useArchiveFolders"
+import { useTourismFolders } from "@/composables/archives/useTourismFolders"
+import { useVariousFolders } from "@/composables/archives/useVariousFolders"
 /*import { useFXRates } from "@/composables/useFXRates"*/
 import { useParties } from "@/composables/useParties"
 
@@ -16,6 +19,9 @@ export function useAppBootstrap() {
   const banksStore = useBanks()
   const categoriesStore = useCategories()
   const documentTagsStore = useDocumentTags()
+  const archiveFoldersStore = useArchiveFolders()
+  const tourismFoldersStore = useTourismFolders()
+  const variousFoldersStore = useVariousFolders()
 /*  const fxRatesStore = useFXRates()*/
   const partiesStore = useParties()
 
@@ -33,7 +39,10 @@ export function useAppBootstrap() {
         categoriesStore.load(),
         documentTagsStore.load(),
 /*        fxRatesStore.load(),*/
-        partiesStore.load()
+        partiesStore.load(),
+        archiveFoldersStore.load(),
+        tourismFoldersStore.load(),
+        variousFoldersStore.load()
       ])
       loaded = true
     } catch (e) {
