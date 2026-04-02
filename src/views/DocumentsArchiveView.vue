@@ -580,6 +580,22 @@ function toggleFilterTag(id: number) {
 /* =========================
    Filtering
 ========================= */
+function resetFilters() {
+
+  selectedFolder.value = defaultFolder.value
+  selectedSubFolder.value = null
+  selectedDTADate.value = null
+  selectedTags.value = []
+  searchText.value = ""
+  selectedQuarterOffset.value = 0
+}
+
+const defaultFolder = computed(() => {
+  const configs =
+    (archiveFoldersStore.folders.value as ArchiveFolderConfig[]) ?? []
+  const sorted = [...configs].sort((a, b) => a.order - b.order)
+  return sorted[0]?.source ?? null
+})
 
 const filteredItems = computed(() => {
 
@@ -942,13 +958,14 @@ useDriveWatcher({
 })
 
 onMounted(() => {
-  const configs =
+  selectedFolder.value = defaultFolder.value
+/*  const configs =
     (archiveFoldersStore.folders.value as ArchiveFolderConfig[]) ?? []
 
   if (configs.length) {
     const sorted = [...configs].sort((a, b) => a.order - b.order)
     selectedFolder.value = sorted[0].source
-  }
+  }*/
 })
 </script>
 
@@ -958,13 +975,10 @@ onMounted(() => {
   ========================= -->
   <div class="sticky-stack">
     <PageHeader title="Documents archives" icon="bookshelf" />
-
     <div v-if="driveStatus !== 'CONNECTED'" class="archives-view muted">
       Drive session not available.
     </div>
-
     <div v-else>  
-
       <section class="filters">
         <header
           class="filters-header clickable"
@@ -973,9 +987,17 @@ onMounted(() => {
           <span class="arrow">
             {{ filtersOpen ? "▼" : "►" }}
           </span>
-          <span class="filters-title">Filters</span>
-        </header>
 
+          <span class="filters-title">Filters</span>
+
+          <button
+            v-if="filtersOpen"
+            class="reset-button"
+            @click.stop="resetFilters"
+          >
+            Reset
+          </button>
+        </header>
         <div v-if="filtersOpen" class="filters-body">
           <!-- Folder -->
           <div class="filter-row with-label">
@@ -1124,7 +1146,6 @@ onMounted(() => {
               placeholder="Search info..."
             />
           </div>
-
         </div>
       </section>
 
@@ -1273,6 +1294,40 @@ onMounted(() => {
   background: color-mix(in srgb, var(--bg) 92%, transparent);
 
   --sticky-offset: 0px;
+}
+/* =========================================================
+   FILTER HEADER (avec reset)
+========================================================= */
+.filters-header {
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filters-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+/* Reset button (identique Spending) */
+.reset-button {
+  padding: 2px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reset-button:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 /* =========================================================
