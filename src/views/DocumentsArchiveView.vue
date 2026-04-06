@@ -16,6 +16,7 @@ import { useParties } from "@/composables/useParties"
 import { useArchiveFolders } from "@/composables/archives/useArchiveFolders"
 import { useTourismFolders } from "@/composables/archives/useTourismFolders"
 import { useVariousFolders } from "@/composables/archives/useVariousFolders"
+import ChipSelector from "@/components/ChipSelector.vue"
 
 import { formatDate } from "@/utils/dateFormat"
 import { formatAmount } from "@/utils/amountFormat"
@@ -407,44 +408,19 @@ const billsFolderSource = computed(() => {
   return bills?.source ?? null
 })
 
-const subFolderScrollRef = ref<HTMLElement | null>(null)
+const folderItems = computed(() =>
+  archiveFolders.value.map(f => ({
+    id: f.source,
+    label: f.label
+  }))
+)
 
-const canScrollLeft = ref(false)
-const canScrollRight = ref(false)
-
-function updateScrollState() {
-  const el = subFolderScrollRef.value
-  if (!el) return
-
-  canScrollLeft.value = el.scrollLeft > 0
-  canScrollRight.value =
-    el.scrollLeft + el.clientWidth < el.scrollWidth - 1
-}
-
-function scrollSubFolders(direction: number) {
-  const el = subFolderScrollRef.value
-  if (!el) return
-
-  const scrollAmount = el.clientWidth * 0.7
-
-  el.scrollBy({
-    left: direction * scrollAmount,
-    behavior: "smooth"
-  })
-
-  // ⏳ attendre la fin du scroll
-  setTimeout(updateScrollState, 250)
-}
-
-/* update quand données changent */
-watch(subFolders, () => {
-  setTimeout(updateScrollState, 0)
-})
-
-/* update au mount */
-onMounted(() => {
-  setTimeout(updateScrollState, 0)
-})
+const subFolderItems = computed(() =>
+  subFolders.value.map(f => ({
+    id: f.id,
+    label: f.label
+  }))
+)
 
 /* =========================
    Quarter logic
@@ -1000,85 +976,22 @@ onMounted(() => {
         </header>
         <div v-if="filtersOpen" class="filters-body">
           <!-- Folder -->
-          <div class="filter-row with-label">
-            <span class="filter-label">Documents</span>
-
-            <div class="chip-line">
-              <button
-                class="chip"
-                :class="{ active: selectedFolder === null }"
-                @click="selectedFolder = null"
-              >
-                All
-              </button>
-
-              <button
-                v-for="f in archiveFolders"
-                :key="f.source"
-                class="chip"
-                :class="{ active: selectedFolder === f.source }"
-                @click="selectedFolder = f.source"
-              >
-                {{ f.label }}
-              </button>
-            </div>
-          </div>
+          <ChipSelector
+            label="Documents"
+            :items="folderItems"
+            v-model="selectedFolder"
+            :showAll="true"
+            :alignWithContent="true"
+          /> 
           <!-- Sub folders -->
-          <div
-            v-if="subFolders.length"
-            class="filter-row with-label subfolder-row"
-          >
-            <span class="filter-label">Type</span>
-
-              <div class="chip-scroll-wrapper subfolder-layout">
-
-              <!-- ✅ FIXE (ne scroll pas) -->
-              <div class="chip-fixed">
-                <button
-                  class="chip"
-                  :class="{ active: selectedSubFolder === null }"
-                  @click="selectedSubFolder = null"
-                >
-                  All
-                </button>
-
-                <button
-                  v-if="canScrollLeft"
-                  class="scroll-btn inside"
-                  @click="scrollSubFolders(-1)"
-                >
-                  ‹
-                </button>
-              </div>
-
-              <!-- ✅ SCROLLABLE UNIQUEMENT -->
-              <div
-                class="chip-scroll"
-                ref="subFolderScrollRef"
-                @scroll="updateScrollState"
-              >
-                <button
-                  v-for="f in subFolders"
-                  :key="f.id"
-                  class="chip"
-                  :class="{ active: selectedSubFolder === f.id }"
-                  @click="selectedSubFolder = f.id"
-                >
-                  {{ f.label }}
-                </button>
-              </div>
-
-              <!-- 👉 droite -->
-              <button
-                v-if="canScrollRight"
-                class="scroll-btn right"
-                @click="scrollSubFolders(1)"
-              >
-                ›
-              </button>
-
-            </div>
-          </div>
+          <ChipSelector
+            v-if="subFolderItems.length"
+            label="Type"
+            :items="subFolderItems"
+            v-model="selectedSubFolder"
+            :showAll="true"
+            :alignWithContent="true"
+          /> 
           <!-- Tags -->
           <div
             v-if="tagsStore.tags.value.length"
@@ -1109,32 +1022,27 @@ onMounted(() => {
             </div>
           </div>
           <!-- Pay Date -->
-          <div
-            v-if="isPayDateVisible"
-            class="filter-row paydate-row"
-          >
-            <span class="filter-label">
-              Pay date
-            </span>
-
-            <div class="quarter-capsule">
-              <span class="arrow-nav" @click="selectedQuarterOffset--">‹</span>
-              <span class="quarter-title">
-                {{ activeQuarterKey }}
-              </span>
-              <span class="arrow-nav" @click="selectedQuarterOffset++">›</span>
-            </div>
-
-            <div class="chip-scroll">
-              <button
-                v-for="d in payDatesInActiveQuarter"
-                :key="d"
-                class="chip"
-                :class="{ active: selectedDTADate === d }"
-                @click="selectedDTADate = d"
-              >
-                {{ formatDate(d,"text") }}
-              </button>
+          <div v-if="isPayDateVisible" class="filter-row paydate-row">
+            <span class="filter-label">Pay date</span>
+            <div class="paydate-content">
+              <div class="quarter-capsule">
+                <span class="arrow-nav" @click="selectedQuarterOffset--">‹</span>
+                <span class="quarter-title">
+                  {{ activeQuarterKey }}
+                </span>
+                <span class="arrow-nav" @click="selectedQuarterOffset++">›</span>
+              </div>
+              <div class="chip-scroll">
+                <button
+                  v-for="d in payDatesInActiveQuarter"
+                  :key="d"
+                  class="chip"
+                  :class="{ active: selectedDTADate === d }"
+                  @click="selectedDTADate = d"
+                >
+                  {{ formatDate(d,"text") }}
+                </button>
+              </div>
             </div>
           </div>
           <!-- Search -->
@@ -1393,55 +1301,8 @@ onMounted(() => {
 }
 
 /* =========================================================
-   SUBFOLDERS (clean + stable)
-========================================================= */
-
-.subfolder-layout {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-/* partie fixe (All + ←) */
-.chip-fixed {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* partie scrollable */
-.chip-scroll {
-  display: flex;
-  gap: 6px;
-  overflow-x: hidden;
-  scroll-behavior: smooth;
-  min-width: 0;
-}
-
-/* bouton droite */
-.scroll-btn {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 18px;
-  opacity: 0.5;
-}
-
-.scroll-btn:hover {
-  opacity: 1;
-}
-
-/* bouton gauche intégré */
-.scroll-btn.inside {
-  margin-left: 2px;
-}
-
-/* =========================================================
    TAG FILTERS (aligned like chips)
 ========================================================= */
-
 .tag-dot {
   width: 16px;
   height: 16px;
@@ -1482,12 +1343,19 @@ onMounted(() => {
 /* =========================================================
    PAY DATE
 ========================================================= */
-
 .paydate-row {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.paydate-content {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: nowrap;
+  min-width: 0;
+  width: 100%;
 }
 
 .quarter-capsule {
@@ -1501,6 +1369,7 @@ onMounted(() => {
   color: var(--primary);
   font-size: var(--font-size-xs);
   font-weight: 600;
+  flex: 0 0 auto;
 }
 
 .arrow-nav {
@@ -1518,7 +1387,8 @@ onMounted(() => {
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  flex: 1;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 /* =========================================================
