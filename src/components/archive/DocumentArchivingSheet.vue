@@ -7,6 +7,9 @@ import { useAppParameters } from "@/composables/useAppParameters"
 
 import { useParties } from "@/composables/useParties"
 import ChipSelector from "@/components/ChipSelector.vue"
+import { useTourismFolders } from "@/composables/archives/useTourismFolders"
+import { useVariousFolders } from "@/composables/archives/useVariousFolders"
+
 import DateChip from "@/components/DateChip.vue"
 import { useDocumentTags } from "@/composables/archives/useDocumentTags"
 import { useAmountInput } from "@/composables/useAmountInput"
@@ -50,6 +53,8 @@ const props = defineProps<{
 ========================= */
 const { appParameters } = useAppParameters()
 const partiesStore = useParties()
+const tourismStore = useTourismFolders()
+const variousStore = useVariousFolders()
 const tagsStore = useDocumentTags()
 
 /* =========================
@@ -82,6 +87,25 @@ const folderItems = computed(() =>
 const parties = computed(() =>
   partiesStore.parties.value
 )
+
+const relationItems = computed(() => {
+
+  if (selectedFolderLabel.value === "Tourism") {
+    return tourismStore.folders.value.map(f => ({
+      id: f.id,
+      label: f.label
+    }))
+  }
+
+  if (selectedFolderLabel.value === "Various") {
+    return variousStore.folders.value.map(f => ({
+      id: f.id,
+      label: f.label
+    }))
+  }
+
+  return []
+})
 
 const tags = computed(() =>
   tagsStore.tags.value
@@ -237,18 +261,14 @@ watch(
 watch(
   () => localDoc.value.folder,
   (folder) => {
-
+    localDoc.value.partyID = 0
     if (folder === billsFolderSource.value) {
-
       if (!localDoc.value.dtaDate) {
         localDoc.value.dtaDate = computeNextDTADate()
       }
-
     } else {
-
       localDoc.value.dtaDate = null
       localDoc.value.refAmount = 0
-
     }
   },
   { immediate: true }
@@ -414,40 +434,45 @@ function onDelete() {
   </div>
   <!-- Relation -->
   <div class="row relation-field">
-    <span class="label">Relation</span>
-
     <!-- MODE SPECIAL -->
-    <div v-if="isSpecialRelationMode" class="relation-placeholder">
-      work in progress
+    <div v-if="isSpecialRelationMode" class="relation-chips">
+      <ChipSelector
+        label="Sub-folder"
+        :items="relationItems"
+        v-model="localDoc.partyID"
+        :showAll="false"
+        :alignWithContent="true"
+      />
     </div>
-
     <!-- MODE NORMAL -->
-    <div v-else class="relation-select">
-      <div class="relation-input-wrapper">
-        <span class="search-icon">🔍</span>
-        <input
-          ref="relationInput"
-          v-model="relationSearch"
-          type="text"
-          placeholder="Search relation..."
-          @focus="relationOpen = true"
-          @input="relationOpen = true"
-          @blur="closeRelationDropdown"
-        />
-      </div>
-
-      <div v-if="relationOpen" class="relation-dropdown">
-        <div
-          v-for="p in filteredParties"
-          :key="p.id"
-          class="relation-item"
-          @click="selectParty(p)"
-        >
-          {{ p.label }}
+    <div v-else class="relation-input-row">
+      <span class="label">Relation</span>
+      <div class="relation-select">
+        <div class="relation-input-wrapper">
+          <span class="search-icon">🔍</span>
+          <input
+            ref="relationInput"
+            v-model="relationSearch"
+            type="text"
+            placeholder="Search relation..."
+            @focus="relationOpen = true"
+            @input="relationOpen = true"
+            @blur="closeRelationDropdown"
+          />
+        </div>
+        <div v-if="relationOpen" class="relation-dropdown">
+          <div
+            v-for="p in filteredParties"
+            :key="p.id"
+            class="relation-item"
+            @click="selectParty(p)"
+          >
+            {{ p.label }}
+          </div>
         </div>
       </div>
-    </div>
-  </div>
+    </div>  
+  </div> 
   <!-- Document date -->
   <div class="row">
     <span class="label">Document date</span>
@@ -639,37 +664,36 @@ font-size: 0.9rem;
 color: var(--text-soft);
 }
 
-/* Folder chips */
-
 /* Relation */
-.relation-field {
+.relation-input-row {
+  display: flex;
   align-items: center;
+  gap: 12px;
+  margin-bottom: 0px;
 }
 
 .relation-select {
   position: relative;
   flex: 1;
-  min-width: 0;      /* IMPORTANT */
+  min-width: 0;
 }
 
 .relation-input-wrapper {
   position: relative;
   width: 100%;
-  min-width: 0;      /* IMPORTANT */
 }
 
 .relation-input-wrapper input {
   width: 100%;
-  min-width: 0;
-  padding: 6px 8px 6px 28px;
   box-sizing: border-box;
+
+  padding: 6px 8px 6px 28px;
 
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
 
-  /* 🔥 CRITIQUE Safari */
   -webkit-text-fill-color: var(--text);
   appearance: none;
 }
@@ -683,7 +707,7 @@ color: var(--text-soft);
   opacity: 0.6;
 }
 
-/* dropdown */
+/* Dropdown */
 .relation-dropdown {
   position: absolute;
   top: 100%;
@@ -691,7 +715,6 @@ color: var(--text-soft);
   right: 0;
 
   background: var(--surface-soft);
-  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
 
@@ -709,7 +732,6 @@ color: var(--text-soft);
 
 .relation-item:hover {
   background: var(--primary-soft);
-  color: var(--text);
 }
 
 /* Dates */
