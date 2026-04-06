@@ -3,9 +3,10 @@ import { ref, computed, onMounted, watch } from "vue"
 
 import { useAppBootstrap } from "@/composables/useAppBootstrap"
 const { loadSettings } = useAppBootstrap()
-
 import { useAppParameters } from "@/composables/useAppParameters"
+
 import { useParties } from "@/composables/useParties"
+import ChipSelector from "@/components/ChipSelector.vue"
 import DateChip from "@/components/DateChip.vue"
 import { useDocumentTags } from "@/composables/archives/useDocumentTags"
 import { useAmountInput } from "@/composables/useAmountInput"
@@ -71,6 +72,13 @@ const folders = computed(() =>
   appParameters.value?.archiveFolders ?? []
 )
 
+const folderItems = computed(() =>
+  folders.value.map(f => ({
+    id: f.source,
+    label: f.label
+  }))
+)
+
 const parties = computed(() =>
   partiesStore.parties.value
 )
@@ -127,6 +135,16 @@ const {
 )
 
 /* ---------- Relation filtering ---------- */
+const selectedFolderLabel = computed(() => {
+  const found = folders.value.find(f => f.source === localDoc.value.folder)
+  return found?.label ?? null
+})
+
+const isSpecialRelationMode = computed(() =>
+  selectedFolderLabel.value === "Tourism" ||
+  selectedFolderLabel.value === "Various"
+)
+
 const filteredParties = computed(() => {
   const q = relationSearch.value.trim().toLowerCase()
 
@@ -223,26 +241,17 @@ watch(
     if (folder === billsFolderSource.value) {
 
       if (!localDoc.value.dtaDate) {
-
-        const dta = computeNextDTADate()
-
-        localDoc.value = {
-          ...localDoc.value,
-          dtaDate: dta
-        }
+        localDoc.value.dtaDate = computeNextDTADate()
       }
 
     } else {
 
-      localDoc.value = {
-        ...localDoc.value,
-        dtaDate: null,
-        refAmount: 0
-      }
+      localDoc.value.dtaDate = null
+      localDoc.value.refAmount = 0
 
     }
   },
-  { immediate: true } // 👈 ⭐ LA CLÉ
+  { immediate: true }
 )
 
 /* =========================
@@ -375,7 +384,7 @@ function onDelete() {
 <template>
 <div class="overlay" @click="emit('close')"></div>
 <div class="sheet">
-
+  <!-- Header -->
   <header class="sheet-header">
     <div class="sheet-title-block">
       <span class="sheet-icon">📂</span>
@@ -393,145 +402,136 @@ function onDelete() {
       ✕
     </button>
   </header>
-
   <!-- Folder -->
   <div class="row folder-row">
-    <span class="label">Folder</span>
-    <div class="folder-chips">
-    <button
-      v-for="f in folders"
-      :key="f.id"
-      class="chip"
-      :class="{ active: localDoc.folder === f.source }"
-      @click="localDoc.folder = f.source"
-      >
-      {{ f.label }}
-      </button>
-    </div>
+    <ChipSelector
+      label="Folder"
+      :items="folderItems"
+      v-model="localDoc.folder"
+      :showAll="false"
+      :alignWithContent="true"
+    />
   </div>
-
   <!-- Relation -->
   <div class="row relation-field">
     <span class="label">Relation</span>
-      <div class="relation-select">
-        <div class="relation-input-wrapper">
-          <span class="search-icon">🔍</span>
-          <input
-            ref="relationInput"
-            v-model="relationSearch"
-            type="text"
-            placeholder="Search relation..."
-            @focus="relationOpen = true"
-            @input="relationOpen = true"
-            @blur="closeRelationDropdown"
-          />
-        </div>
+
+    <!-- MODE SPECIAL -->
+    <div v-if="isSpecialRelationMode" class="relation-placeholder">
+      work in progress
+    </div>
+
+    <!-- MODE NORMAL -->
+    <div v-else class="relation-select">
+      <div class="relation-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input
+          ref="relationInput"
+          v-model="relationSearch"
+          type="text"
+          placeholder="Search relation..."
+          @focus="relationOpen = true"
+          @input="relationOpen = true"
+          @blur="closeRelationDropdown"
+        />
+      </div>
+
+      <div v-if="relationOpen" class="relation-dropdown">
         <div
-          v-if="relationOpen"
-          class="relation-dropdown"
+          v-for="p in filteredParties"
+          :key="p.id"
+          class="relation-item"
+          @click="selectParty(p)"
         >
-          <div
-            v-for="p in filteredParties"
-            :key="p.id"
-            class="relation-item"
-            @click="selectParty(p)"
-          >
-            {{ p.label }}
-          </div>
+          {{ p.label }}
         </div>
       </div>
     </div>
-
-    <!-- Document date -->
-    <div class="row">
-      <span class="label">Document date</span>
-      <DateChip v-model="localDoc.documentDate" />
+  </div>
+  <!-- Document date -->
+  <div class="row">
+    <span class="label">Document date</span>
+    <DateChip v-model="localDoc.documentDate" />
+  </div>
+  <!-- Payment date -->
+  <div v-if="isBillsFolder" class="row">
+    <span class="label">Payment date</span>
+    <DateChip v-model="localDoc.dtaDate" />
+  </div>
+  <div
+    v-if="isBillsFolder && !localDoc.dtaDate"
+    class="field-error"
+  >
+    Payment date is required
+  </div>
+  <!-- Description -->
+  <div class="row input-row">
+    <span class="label">Description</span>
+    <input
+      class="text-input"
+      v-model="localDoc.info1"
+    />
+  </div>
+  <!-- Additional info -->
+  <div class="row input-row">
+    <span class="label">Additional info</span>
+    <input
+      class="text-input"
+      v-model="localDoc.info2"
+    />
+  </div>
+  <!-- Reference amount -->
+  <div v-if="isBillsFolder" class="row input-row">
+    <span class="label">Amount</span>
+    <input
+      :value="amountInput"
+      @input="onAmountInput(($event.target as HTMLInputElement).value)"
+      @focus="onAmountFocus($event)"
+      @blur="onAmountBlur"
+      type="text"
+      inputmode="decimal"
+      class="amount-input"
+    />
+  </div>
+  <!-- Tags -->
+  <div class="row tags-row">
+    <span class="label">Tag(s)</span>
+    <div class="tags">
+      <div
+        v-for="t in tags"
+        :key="t.id"
+        class="tag-dot"
+        :class="{ active: selectedTags.includes(t.id) }"
+        :style="{ backgroundColor: t.color }"
+        @click="toggleTag(t.id)"
+        @mouseenter="showTagTooltip($event, t.id)"
+        @mouseleave="hideTagTooltip"
+      ></div>
     </div>
+  </div>
+  <!-- Actions -->
+  <div class="actions-bar">
+    <button class="btn cancel" @click="onCancel">
+      Cancel
+    </button>
 
-    <!-- Payment date -->
-    <div v-if="isBillsFolder" class="row">
-      <span class="label">Payment date</span>
-      <DateChip v-model="localDoc.dtaDate" />
-    </div>
-    <div
-      v-if="isBillsFolder && !localDoc.dtaDate"
-      class="field-error"
+    <!-- 🟥 DELETE -->
+    <button
+      class="btn delete"
+      @click="onDelete"
     >
-      Payment date is required
-    </div>
+      Delete
+    </button>
 
-    <!-- Description -->
-    <div class="row input-row">
-      <span class="label">Description</span>
-      <input
-        class="text-input"
-        v-model="localDoc.info1"
-      />
-    </div>
-
-    <!-- Additional info -->
-    <div class="row input-row">
-      <span class="label">Additional info</span>
-      <input
-        class="text-input"
-        v-model="localDoc.info2"
-      />
-    </div>
-
-    <!-- Reference amount -->
-    <div v-if="isBillsFolder" class="row input-row">
-      <span class="label">Amount</span>
-      <input
-        :value="amountInput"
-        @input="onAmountInput(($event.target as HTMLInputElement).value)"
-        @focus="onAmountFocus($event)"
-        @blur="onAmountBlur"
-        type="text"
-        inputmode="decimal"
-        class="amount-input"
-      />
-    </div>
-
-    <!-- Tags -->
-    <div class="row tags-row">
-      <span class="label">Tag(s)</span>
-      <div class="tags">
-        <div
-          v-for="t in tags"
-          :key="t.id"
-          class="tag-dot"
-          :class="{ active: selectedTags.includes(t.id) }"
-          :style="{ backgroundColor: t.color }"
-          @click="toggleTag(t.id)"
-          @mouseenter="showTagTooltip($event, t.id)"
-          @mouseleave="hideTagTooltip"
-        ></div>
-      </div>
-    </div>
-
-    <!-- Actions -->
-    <div class="actions-bar">
-      <button class="btn cancel" @click="onCancel">
-        Cancel
-      </button>
-
-      <!-- 🟥 DELETE -->
-      <button
-        class="btn delete"
-        @click="onDelete"
-      >
-        Delete
-      </button>
-
-      <button
-        class="btn save"
-        :disabled="!isDirty || !isValid"
-        @click="onSave"
-      >
-        Save
-      </button>
-    </div>
-
+    <button
+      class="btn save"
+      :disabled="!isDirty || !isValid"
+      @click="onSave"
+    >
+      Save
+    </button>
+  </div>
+  <!-- Tooltips -->
   </div>
   <div
     v-if="tooltip"
@@ -542,7 +542,7 @@ function onDelete() {
     }"
   >
     {{ tooltip.text }}
-  </div>
+</div>
 </template>
 
 <style scoped>
@@ -640,31 +640,6 @@ color: var(--text-soft);
 }
 
 /* Folder chips */
-.folder-chips {
-display: flex;
-flex-wrap: wrap;
-gap: 6px;
-}
-
-.chip {
-padding: 6px 10px;
-border-radius: 999px;
-border: 1px solid var(--border);
-background: var(--surface-soft);
-color:var(--text);
-font-size: 0.75rem;
-font-weight: 600;
-opacity: 0.7;
-cursor: pointer;
-white-space: nowrap;
-}
-
-.chip.active {
-opacity: 1;
-background: var(--primary-soft);
-color:var(--primary);
-border-color: var(--primary);
-}
 
 /* Relation */
 .relation-field {
