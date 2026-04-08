@@ -66,9 +66,36 @@ const selectedTags = ref<number[]>([...(props.doc.tagIDs ?? [])])
 const relationSearch = ref("")
 const relationOpen = ref(false)
 
-/*const docDateInput = ref<HTMLInputElement | null>(null)
-const dtaDateInput = ref<HTMLInputElement | null>(null)
-*/
+const relationState = ref<{
+  normal: number | null
+  tourism: number | null
+  various: number | null
+}>({
+  normal: props.doc.partyID ?? null,
+  tourism: null,
+  various: null
+})
+
+const activeRelation = computed<number | null>({
+  get() {
+    if (selectedFolderLabel.value === "Tourism") {
+      return relationState.value.tourism
+    }
+    if (selectedFolderLabel.value === "Various") {
+      return relationState.value.various
+    }
+    return relationState.value.normal
+  },
+  set(v) {
+    if (selectedFolderLabel.value === "Tourism") {
+      relationState.value.tourism = v
+    } else if (selectedFolderLabel.value === "Various") {
+      relationState.value.various = v
+    } else {
+      relationState.value.normal = v
+    }
+  }
+})
 
 /* =========================
    Computed
@@ -106,6 +133,12 @@ const relationItems = computed(() => {
 
   return []
 })
+
+function selectParty(p: any) {
+  activeRelation.value = p.id
+  relationSearch.value = p.label
+  relationOpen.value = false
+}
 
 const tags = computed(() =>
   tagsStore.tags.value
@@ -249,9 +282,8 @@ watch(
 watch(
   parties,
   () => {
-    const p = parties.value.find(
-      x => x.id === localDoc.value.partyID
-    )
+    if (!activeRelation.value) return
+    const p = parties.value.find(x => x.id === activeRelation.value)
     if (p) relationSearch.value = p.label
   },
   { immediate: true }
@@ -261,7 +293,6 @@ watch(
 watch(
   () => localDoc.value.folder,
   (folder) => {
-    localDoc.value.partyID = 0
     if (folder === billsFolderSource.value) {
       if (!localDoc.value.dtaDate) {
         localDoc.value.dtaDate = computeNextDTADate()
@@ -348,13 +379,6 @@ function toggleTag(id: number) {
     selectedTags.value.push(id)
 }
 
-/* Relation */
-function selectParty(p: any) {
-  localDoc.value.partyID = p.id
-  relationSearch.value = p.label
-  relationOpen.value = false
-}
-
 function closeRelationDropdown() {
   setTimeout(() => {
     relationOpen.value = false
@@ -376,26 +400,28 @@ function onCancel() {
 }
 
 function onSave() {
+  const partyID = activeRelation.value
+  if (!partyID) {
+    alert("Please select a relation")
+    return
+  }
   if (isBillsFolder.value && !localDoc.value.dtaDate?.trim()) return
   emit("save", {
     ...localDoc.value,
+    partyID, // ✅ injecté ici seulement
     tagIDs: [...selectedTags.value]
   })
   emit("close")
 }
 
 function onDelete() {
-
   const ok = confirm(
     "Delete this document?\nThis action cannot be undone."
   )
-
   if (!ok) return
-
   emit("delete", {
     tocid: localDoc.value.tocid
   })
-
   emit("close")
 }
 
@@ -411,7 +437,7 @@ function onDelete() {
       <div class="sheet-title-texts">
         <h2>Document classification</h2>
         <div class="sheet-subtitle">
-          {{(getPartyLabel(localDoc.partyID)) + " - " + (localDoc.info1 || "New classification") +
+          {{(getPartyLabel(activeRelation ?? 0)) + " - " + (localDoc.info1 || "New classification") +
             (localDoc.info2 ? " " + localDoc.info2 : "")
           }}
         </div>
@@ -437,9 +463,10 @@ function onDelete() {
     <!-- MODE SPECIAL -->
     <div v-if="isSpecialRelationMode" class="relation-chips">
       <ChipSelector
+        :key="selectedFolderLabel ?? 'normal'"
         label="Sub-folder"
         :items="relationItems"
-        v-model="localDoc.partyID"
+        v-model="activeRelation"
         :showAll="false"
         :alignWithContent="true"
       />
@@ -550,7 +577,7 @@ function onDelete() {
 
     <button
       class="btn save"
-      :disabled="!isDirty || !isValid"
+      :disabled="!isDirty || !isValid || !activeRelation"
       @click="onSave"
     >
       Save
