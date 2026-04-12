@@ -45,6 +45,7 @@ interface ArchiveItem {
   refAmount: number
   googleFileId: string
   tagIDs?:number[]
+  sourceBucket?:string
 }
 
 interface ArchiveFile {
@@ -223,49 +224,73 @@ function openDocument(item: ArchiveItem) {
 async function loadArchive() {
 
   if (driveStatus.value !== "CONNECTED") return
+
   loading.value = true
   error.value = null
+
   try {
-    // 1️⃣ index
+
     const index = await loadJSONFromFolder<any>(
       "archive",
       "index.json"
     )
-    if (!index) throw new Error("Index not loaded")
+
+    if (!index) {
+      throw new Error("Index not loaded")
+    }
+
     const years: number[] = index.years ?? []
+
     let allItems: ArchiveItem[] = []
-    // 2️⃣ toFile (A Classer)
+
+    // =========================
+    // TO FILE
+    // =========================
     const toFile = await loadJSONFromFolder<any>(
       "archive",
       "toFile.json"
     )
+
     if (toFile?.items) {
       const mapped = toFile.items.map((i: any) => ({
         ...i,
-        folder: "A Classer"
+        folder: "A Classer",
+        sourceBucket: "toFile"
       }))
+
       allItems.push(...mapped)
     }
-    // 3️⃣ yearly files
+
+    // =========================
+    // YEAR FILES
+    // =========================
     for (const year of years) {
+
       const data = await loadJSONFromFolder<any>(
         "archive",
         `${year}.json`
       )
+
       if (!data?.groups) continue
+
       for (const [groupName, group] of Object.entries(data.groups)) {
+
         const items = (group as any).items ?? []
+
         const mapped = items.map((i: any) => ({
           ...i,
           folder:
             folderLabelToSourceMap.value.get(groupName)
-            ?? groupName // fallback sécurité
-        }))    
+            ?? groupName,
+          sourceBucket: String(year)
+        }))
+
         allItems.push(...mapped)
       }
     }
 
     archive.value = allItems
+
     if (selectedFolder.value === billsFolderSource.value) {
       selectDefaultPayDateForQuarter()
     }
@@ -297,7 +322,9 @@ async function smartReload(index: any) {
 
   for (const f of foldersUpdated) {
 
-    // 🟥 TO FILE
+    // =========================
+    // TO FILE
+    // =========================
     if (f === "toFile") {
 
       const toFile = await loadJSONFromFolder<any>(
@@ -309,14 +336,17 @@ async function smartReload(index: any) {
 
         const mapped = toFile.items.map((i: any) => ({
           ...i,
-          folder: "A Classer"
+          folder: "A Classer",
+          sourceBucket: "toFile"
         }))
 
         updatedItems.push(...mapped)
       }
     }
 
-    // 🟩 YEAR
+    // =========================
+    // YEAR FILE
+    // =========================
     else if (/^\d{4}$/.test(f)) {
 
       const data = await loadJSONFromFolder<any>(
@@ -334,7 +364,8 @@ async function smartReload(index: any) {
           ...i,
           folder:
             folderLabelToSourceMap.value.get(groupName)
-            ?? groupName
+            ?? groupName,
+          sourceBucket: f
         }))
 
         updatedItems.push(...mapped)
@@ -342,21 +373,13 @@ async function smartReload(index: any) {
     }
   }
 
-  // 🧹 replace uniquement les dossiers impactés
+  // =========================
+  // Replace buckets cleanly
+  // =========================
   archive.value = [
-    ...archive.value.filter(item => {
-
-      return !foldersUpdated.some(f => {
-
-        if (f === "toFile")
-          return item.folder === "A Classer"
-
-        if (/^\d{4}$/.test(f))
-          return item.documentDate.startsWith(f)
-
-        return false
-      })
-    }),
+    ...archive.value.filter(
+      item => !foldersUpdated.includes(item.sourceBucket ?? "")
+    ),
     ...updatedItems
   ]
 
