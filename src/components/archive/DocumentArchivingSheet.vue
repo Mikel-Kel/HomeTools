@@ -155,13 +155,24 @@ const isBillsFolder = computed(() =>
   localDoc.value.folder === billsFolderSource.value
 )
 
-const isValid = computed(() => {
-  //  Bills → DTA mandatory
-  if (isBillsFolder.value && !localDoc.value.dtaDate?.trim()) {
-      return false
-  }
-  return true
+const isDTAValid = computed(() => {
+  if (!isBillsFolder.value) return true
+  return !!localDoc.value.dtaDate?.trim()
 })
+
+const isDocumentDateValid = computed(() => {
+  if (!localDoc.value.documentDate) return true
+  const docDate = new Date(localDoc.value.documentDate)
+  const maxFuture = new Date()
+  maxFuture.setFullYear(maxFuture.getFullYear() + 1)
+  maxFuture.setHours(23, 59, 59, 999)
+  return docDate <= maxFuture
+})
+
+const isValid = computed(() =>
+  isDTAValid.value &&
+  isDocumentDateValid.value
+)
 
 /* ---------- Party map ---------- */
 const partyMap = computed(() => {
@@ -267,13 +278,29 @@ const isDirty = computed(() => {
 /* =========================
    Watchers
 ========================= */
-
 /* Props → local sync */
 watch(
   () => props.doc,
   (d) => {
     localDoc.value = { ...d }
     selectedTags.value = [...(d.tagIDs ?? [])]
+
+    relationState.value = {
+      normal: d.partyID ?? null,
+      tourism: null,
+      various: null
+    }
+
+    const folderLabel =
+      folders.value.find(f => f.source === d.folder)?.label ?? null
+
+    if (folderLabel === "Tourism") {
+      relationState.value.tourism = d.partyID ?? null
+    } else if (folderLabel === "Various") {
+      relationState.value.various = d.partyID ?? null
+    } else {
+      relationState.value.normal = d.partyID ?? null
+    }
   },
   { immediate: true }
 )
@@ -505,13 +532,19 @@ function onDelete() {
     <span class="label">Document date</span>
     <DateChip v-model="localDoc.documentDate" />
   </div>
+  <div
+    v-if="!isDocumentDateValid"
+    class="field-error"
+  >
+    Document date cannot be more than 1 year in the future
+  </div>
   <!-- Payment date -->
   <div v-if="isBillsFolder" class="row">
     <span class="label">Payment date</span>
     <DateChip v-model="localDoc.dtaDate" />
   </div>
   <div
-    v-if="isBillsFolder && !localDoc.dtaDate"
+    v-if="!isDTAValid"
     class="field-error"
   >
     Payment date is required

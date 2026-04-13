@@ -1092,14 +1092,15 @@ onMounted(() => {
 
         <div class="archive-separator"></div>
       </div>
-
     </div>
-
     <!-- =========================
         SCROLLABLE TABLE AREA
     ========================= -->
     <div class="archives-table-wrapper">
-      <table v-if="!loading && !error" class="archive-table">
+      <table
+        v-if="!loading && !error && filteredItems.length"
+        class="archive-table"
+      >
         <colgroup>
           <col class="col-action" style="width: 35px"/>
           <col class="col-date" style="width: 110px"/>
@@ -1109,7 +1110,6 @@ onMounted(() => {
           <col v-if="isBillsSelected" class="col-dta" style="width: 125px"/>
           <col v-if="isBillsSelected" class="col-amount" />
         </colgroup>
-
         <thead>
           <tr>
             <th class="col-action"></th>
@@ -1121,7 +1121,6 @@ onMounted(() => {
             <th v-if="isBillsSelected" class="col-amount">Amount</th>
           </tr>
         </thead>
-
         <tbody>
           <tr
             v-for="item in filteredItems"
@@ -1175,16 +1174,20 @@ onMounted(() => {
           </tr>
         </tbody>
       </table>
-
+      <div
+        v-else-if="filteredItems.length === 0"
+        class="empty-state"
+      >
+        Check filters
+      </div>
       <div v-if="loading" class="archives-view muted">
         Loading…
       </div>
-
       <div v-else-if="error" class="archives-view error">
         {{ error }}
       </div>
-
     </div>
+    
   </div>
   <ArchiveDocumentSheet
     v-if="selectedItem"
@@ -1192,7 +1195,6 @@ onMounted(() => {
     @close="closeClassification"
     @save="saveClassification"
     @delete="deleteDocument"
-
   />
   <div
   v-if="tooltip"
@@ -1284,6 +1286,15 @@ onMounted(() => {
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--text-soft);
+}
+
+.empty-state {
+  padding: 1rem 1rem;
+  text-align: center;
+  font-size: 1.05rem;
+  color: var(--positive);
+  opacity: 1;
+  font-style: italic;
 }
 
 /* =========================================================
