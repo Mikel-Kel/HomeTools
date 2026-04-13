@@ -5,6 +5,7 @@ import { useAppBootstrap } from "@/composables/useAppBootstrap"
 const { loadSettings } = useAppBootstrap()
 
 import { loadJSONFromFolder } from "@/services/driveAdapter";
+import { useDriveJsonFile } from "@/composables/useDriveJsonFile"
 import { formatDate } from "@/utils/dateFormat";
 
 import { useCategories } from "@/composables/useCategories";
@@ -16,7 +17,7 @@ import { useParties } from "@/composables/useParties"
 ========================================================= */
 
 interface FollowUpDetailItem {
-  fitid: string;
+  allocationId: string;
   categoryId: number;
   subCategoryId: number;
   allocationDate: string; // YYYY-MM-DD
@@ -27,6 +28,7 @@ interface FollowUpDetailItem {
   bankDescription: string;
   partyId: number | null;
   tagId: number | null;
+  pendingReallocation?: boolean;
 }
 
 interface FollowUpDetailsFile {
@@ -94,14 +96,50 @@ function toggleRowAction(fitid: string) {
 /* ========
    HANDLER
 =========== */
-function requestReallocation(item: FollowUpDetailItem) {
+
+function buildEventFileName(fitid: string): string {
+  const now = new Date()
+
+  const YYYY = now.getFullYear()
+  const MM = String(now.getMonth() + 1).padStart(2, "0")
+  const DD = String(now.getDate()).padStart(2, "0")
+  const HH = String(now.getHours()).padStart(2, "0")
+  const mm = String(now.getMinutes()).padStart(2, "0")
+  const ss = String(now.getSeconds()).padStart(2, "0")
+  const shortFitid = fitid.slice(0, 12)
+
+  return `REA_${YYYY}${MM}${DD}${HH}${mm}${ss}_${shortFitid}.json`
+}
+
+async function requestReallocation(item: FollowUpDetailItem) {
+  if (item.pendingReallocation) return
   const ok = confirm(
     "Request allocation change for this transaction?\n" +
     "(back to Spending Drafts)"
   )
   if (!ok) return
-  console.log("TODO emit ALLOCATION_REOPEN_REQUESTED", item.fitid)
-  activeRowFitid.value = null
+  try {
+    const event = {
+      eventType: "REALLOCATION_REQUEST",
+      version: 1,
+      timestamp: new Date().toISOString(),
+      allocationMetadata: {
+        allocationId: item.allocationId
+      }
+    }
+    const fileName =
+      buildEventFileName(item.allocationId)
+    const { save } =
+      useDriveJsonFile("events", fileName)
+    await save(event)
+    item.pendingReallocation = true
+    activeRowFitid.value = null
+  } catch (e) {
+    console.error(
+      "Failed to request reallocation",
+      e
+    )
+  }
 }
 
 /* ========
@@ -417,12 +455,14 @@ onMounted(async () => {
 <section v-if="props.subCategoryId !== null" class="details">
   <div v-if="loading" class="muted">Loading…</div>
   <div v-else-if="error" class="error">{{ error }}</div>
+
   <div v-else>
     <div
       v-for="group in monthlyGroups"
       :key="group.key"
       class="month-block"
     >
+
       <!-- Month header -->
       <div
         class="grid month-header"
@@ -432,13 +472,16 @@ onMounted(async () => {
           <span>{{ openMonths.has(group.key) ? "▼" : "►" }}</span>
           {{ group.label }}
         </div>
+
         <div></div>
+
         <div
           class="col-spent amount"
           :class="monthStatusClass(group.key, group.total)"
         >
           {{ fmt(group.total) }}
         </div>
+
         <div class="col-budget amount">
           <span v-if="props.monthlyBudgetMap?.[group.key] != null">
             {{ fmtInt(props.monthlyBudgetMap[group.key]) }}
@@ -446,19 +489,31 @@ onMounted(async () => {
           <span v-else>—</span>
         </div>
       </div>
+
       <!-- Month rows -->
       <div v-if="openMonths.has(group.key)">
         <div
           v-for="(it, idx) in group.items"
-          :key="idx"
+          :key="it.allocationId"
           class="grid row"
-          :class="{ active: activeRowFitid === it.fitid }"
-          @click="toggleRowAction(it.fitid)"
+          :class="{
+            active: activeRowFitid === it.allocationId,
+            pending: it.pendingReallocation
+          }"
+          @click="!it.pendingReallocation && toggleRowAction(it.allocationId)"
         >
+
           <div class="col-label date-cell">
+            <span
+              v-if="it.pendingReallocation"
+              class="pending-inline"
+            >
+              Pending 
+            </span>
             <button
+              v-else
               class="reallocate-btn"
-              :class="{ visible: activeRowFitid === it.fitid }"
+              :class="{ visible: activeRowFitid === it.allocationId }"
               @click.stop="requestReallocation(it)"
               title="Request allocation change"
             >
@@ -468,11 +523,14 @@ onMounted(async () => {
               {{ formatDate(it.allocationDate,"text") }}
             </span>
           </div>
+
           <div class="desc-block">
+
             <div class="desc-text">
               <div class="desc">
                 {{ it.description || "—" }}
               </div>
+
               <div class="sub muted">
                 {{ partyLabel(it.partyId) }}
                 <span v-if="it.bankDescription">
@@ -480,10 +538,9 @@ onMounted(async () => {
                 </span>
               </div>
             </div>
-            <div
-              v-if="it.tagId !== null"
-              class="tag-container"
-            >
+
+            <div class="tag-container">
+
               <span
                 v-if="it.tagId !== null"
                 class="tag-chip"
@@ -491,30 +548,38 @@ onMounted(async () => {
               >
                 {{ tagLabel(it.tagId) }}
               </span>
+
             </div>
-          </div>  
+
+          </div>
+
           <div
             class="col-spent amount amount-cell"
             @mouseenter="showFxPopover($event, it)"
             @mouseleave="closeFxPopover"
-            @click="showFxPopover($event, it)"
+            @click.stop="showFxPopover($event, it)"
           >
             <span class="amount-value">
               {{ fmt(it.amount) }}
             </span>
+
             <span
               v-if="isForeign(it)"
               class="ccy-dot"
             ></span>
           </div>
+
           <div></div>
+
         </div>
       </div>
     </div>
+
     <div v-if="!filteredItems.length" class="muted empty">
       No allocations for this selection
     </div>
   </div>
+
   <div
     v-if="fxPopover"
     class="fx-popover"
@@ -525,6 +590,7 @@ onMounted(async () => {
   >
     {{ fmtForeign(fxPopover.item) }}
   </div>
+
 </section>
 </template>
 
@@ -600,6 +666,19 @@ onMounted(async () => {
   background: var(--primary-soft);
 }
 
+.row.pending {
+  opacity: 0.45;
+}
+.pending-inline {
+  font-size: 0.85rem;
+  font-style: italic;
+  font-weight: 600;
+  color: var(--negative);
+  white-space: nowrap;
+  min-width: 48px;
+  text-align: right;
+}
+
 /* Hover visuel desktop */
 .row:hover {
   background: var(--primary-soft);
@@ -638,22 +717,29 @@ onMounted(async () => {
   transform: scale(1);
 }
 
+.row.pending:hover .reallocate-btn {
+  opacity: 0;
+  pointer-events: none;
+}
 
 /* =========================================================
    Date
 ========================================================= */
 .date-cell {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  justify-self: end;
+  width: max-content;
 }
 
 .date {
-  text-align: right;
   font-weight: 600;
   font-size: 0.8rem;
   color: var(--text-soft);
+  white-space: nowrap;
 }
+
 
 /* =========================================================
    Description + tag layout
@@ -675,6 +761,7 @@ onMounted(async () => {
 .tag-container {
   display: flex;
   align-items: center;
+  gap: 6px;
 }
 
 .tag-chip {
