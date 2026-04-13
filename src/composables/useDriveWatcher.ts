@@ -1,35 +1,44 @@
 import { onMounted, onBeforeUnmount, ref } from "vue";
 
-import { getFileModifiedTime } from "@/services/driveAdapter";
+import {
+  getFileModifiedTime,
+  listFiles,
+} from "@/services/driveAdapter";
 
 interface DriveWatcherOptions {
-
   folderId: string;
-  fileName: string;
-
-  lastKnownModified: { value: string | null };
-
+  fileName?: string;
+  lastKnownState?: { value: string | null };
   onChanged: () => Promise<void> | void;
-
   intervalMs?: number;
 }
 
 export function useDriveWatcher({
-
   folderId,
   fileName,
-
-  lastKnownModified,
+  lastKnownState,
   onChanged,
-
   intervalMs = 5_000,
-
 }: DriveWatcherOptions) {
 
   const timer = ref<number | null>(null);
 
   const paused = ref(false);
   const running = ref(false);
+
+  async function resolveRemoteState(): Promise<string | null> {
+
+    if (fileName) {
+      return await getFileModifiedTime(folderId, fileName);
+    }
+
+    const files = await listFiles(folderId);
+
+    return files
+      .map(f => `${f.name}:${f.modifiedTime ?? ""}`)
+      .sort()
+      .join("|");
+  }
 
   async function check() {
 
@@ -39,23 +48,19 @@ export function useDriveWatcher({
 
     try {
 
-      const remote =
-        await getFileModifiedTime(
-          folderId,
-          fileName
-        );
+      const remote = await resolveRemoteState();
 
-      if (!remote) return;
+      if (remote == null) return;
 
-      const local =
-        lastKnownModified.value;
+      const local = lastKnownState?.value ?? null;
 
-      if (!local || remote > local) {
+      if (remote !== local) {
 
-        lastKnownModified.value = remote;
+        if (lastKnownState) {
+          lastKnownState.value = remote;
+        }
 
         await onChanged();
-
       }
 
     } catch (err: any) {
@@ -64,9 +69,7 @@ export function useDriveWatcher({
         err?.message === "DRIVE_UNAUTHORIZED" ||
         err?.message === "DRIVE_UNAVAILABLE"
       ) {
-
         return;
-
       }
 
       console.warn("DriveWatcher error", err);
@@ -76,13 +79,10 @@ export function useDriveWatcher({
       running.value = false;
 
     }
-
   }
 
   function onVisibilityChange() {
-
     paused.value = document.hidden;
-
   }
 
   onMounted(() => {
@@ -101,8 +101,9 @@ export function useDriveWatcher({
 
   onBeforeUnmount(() => {
 
-    if (timer.value)
+    if (timer.value) {
       clearInterval(timer.value);
+    }
 
     document.removeEventListener(
       "visibilitychange",
@@ -112,13 +113,8 @@ export function useDriveWatcher({
   });
 
   return {
-
     pause: () => (paused.value = true),
-
     resume: () => (paused.value = false),
-
     forceCheck: check,
-
   };
-
 }

@@ -34,6 +34,8 @@ const router = useRouter();
 const statusFilter = ref<Set<AllocationStatus>>(new Set());
 
 const spending = useSpending();
+const draftsState = ref<string | null>(null);
+const releasedState = ref<string | null>(null);
 
 /* =========================
    Drive watcher
@@ -41,8 +43,20 @@ const spending = useSpending();
 useDriveWatcher({
   folderId: "spending",
   fileName: "spending.json",
-  lastKnownModified: spending.spendingLastModified,
+  lastKnownState: spending.spendingLastModified,
   onChanged: loadFromDrive,
+});
+
+useDriveWatcher({
+  folderId: "allocations/drafts",
+  lastKnownState: draftsState,
+  onChanged: loadAllocationStatusFromDrive,
+});
+
+useDriveWatcher({
+  folderId: "allocations/released",
+  lastKnownState: releasedState,
+  onChanged: loadAllocationStatusFromDrive,
 });
 
 watch(driveStatus, (s) => {
@@ -237,16 +251,11 @@ const canReleaseAll = computed(
 
 async function releaseAllDrafts() {
   if (!canReleaseAll.value) return;
-
   const ok = confirm(
     `Release ${draftCount.value} draft(s)?\nThis action cannot be undone.`
   );
   if (!ok) return;
-
   await releaseDraftsBatch(draftRecords.value);
-
-  // 🔁 refresh spending (statuts + données)
-  await loadFromDrive();
 }
 
 /* =========================

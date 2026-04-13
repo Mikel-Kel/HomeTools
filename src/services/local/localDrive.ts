@@ -1,4 +1,6 @@
 import { getLocalDirectory } from "@/services/local/localDirectory";
+import type { DriveItem } from "@/services/google/googleDrive";
+
 
 /* =========================================================
    Resolve folder path (supports nested paths)
@@ -88,19 +90,35 @@ export async function deleteLocalFile(
 /* =========================================================
    List files
 ========================================================= */
-export async function listLocalFilesInFolder(folder: string) {
+export async function listLocalFilesInFolder(
+  folderPath: string
+): Promise<DriveItem[]> {
+
   const root = getLocalDirectory();
+
   if (!root) {
     throw new Error("LOCAL_DIRECTORY_NOT_SELECTED");
   }
-  const dir = await resolveDirectory(root, folder);
-  const files: { name: string }[] = [];
-  // TypeScript typings incomplete → cast
-  for await (const handle of (dir as any).values()) {
-    if (handle.kind === "file") {
-      files.push({ name: handle.name });
-    }
-  }
+
+  const dir =
+    await resolveDirectory(root, folderPath);
+
+  const files: DriveItem[] = [];
+
+  for await (const [name, handle] of dir.entries()) {
+
+    if (handle.kind !== "file") continue;
+
+    const file = await handle.getFile();
+
+    files.push({
+      id: name,
+      name,
+      mimeType: file.type || "application/octet-stream",
+      modifiedTime: new Date(file.lastModified).toISOString()
+    });
+   }
+
   return files;
 }
 

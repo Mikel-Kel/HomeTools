@@ -6,6 +6,7 @@ const { loadSettings } = useAppBootstrap()
 
 import { loadJSONFromFolder } from "@/services/driveAdapter";
 import { useDriveJsonFile } from "@/composables/useDriveJsonFile"
+import { useDriveWatcher } from "@/composables/useDriveWatcher"
 import { formatDate } from "@/utils/dateFormat";
 
 import { useCategories } from "@/composables/useCategories";
@@ -28,7 +29,6 @@ interface FollowUpDetailItem {
   bankDescription: string;
   partyId: number | null;
   tagId: number | null;
-  pendingReallocation?: boolean;
 }
 
 interface FollowUpDetailsFile {
@@ -63,13 +63,15 @@ const props = defineProps<{
    STATE
 ========================================================= */
 
-const categoriesStore = useCategories();
+const activeRowFitid = ref<string | null>(null)
+const raw = ref<FollowUpDetailsFile | null>(null);
+const pendingReallocationIds =
+  ref<Set<string>>(new Set());
+
+    const categoriesStore = useCategories();
 const tagsStore = useAllocationTags()
 const partiesStore = useParties()
-
-const activeRowFitid = ref<string | null>(null)
-
-const raw = ref<FollowUpDetailsFile | null>(null);
+const detailsRemoteState = ref<string | null>(null)
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -83,6 +85,7 @@ const fxPopover = ref<{
   y: number;
 } | null>(null);
 
+  
 let fxTimer: number | null = null;
 
 function toggleRowAction(fitid: string) {
@@ -112,12 +115,14 @@ function buildEventFileName(fitid: string): string {
 }
 
 async function requestReallocation(item: FollowUpDetailItem) {
-  if (item.pendingReallocation) return
+  if (pendingReallocationIds.value.has(item.allocationId)) return
+
   const ok = confirm(
     "Request allocation change for this transaction?\n" +
     "(back to Spending Drafts)"
   )
   if (!ok) return
+
   try {
     const event = {
       eventType: "REALLOCATION_REQUEST",
@@ -127,13 +132,17 @@ async function requestReallocation(item: FollowUpDetailItem) {
         allocationId: item.allocationId
       }
     }
+
     const fileName =
       buildEventFileName(item.allocationId)
     const { save } =
       useDriveJsonFile("events", fileName)
-    await save(event)
-    item.pendingReallocation = true
+    
+      await save(event)
+    
+      pendingReallocationIds.value.add(item.allocationId)
     activeRowFitid.value = null
+
   } catch (e) {
     console.error(
       "Failed to request reallocation",
@@ -147,19 +156,17 @@ async function requestReallocation(item: FollowUpDetailItem) {
 =========== */
 
 async function loadDetails() {
-
   if (props.subCategoryId === null) {
     raw.value = null;
     return;
   }
+
   loading.value = true;
   error.value = null;
 
   try {
-    const folderId =
-      "allocations/budget";
-    const filename =
-      `FollowUpDetails-${props.year}.json`;
+    const folderId = "allocations/budget";
+    const filename = `FollowUpDetails-${props.year}.json`;
     const data =
       await loadJSONFromFolder<FollowUpDetailsFile>(
         folderId,
@@ -168,7 +175,9 @@ async function loadDetails() {
     if (!data) {
       throw new Error(`${filename} not found`);
     }
+
     raw.value = data;
+
   }
 
   catch (e: any) {
@@ -184,14 +193,35 @@ async function loadDetails() {
 }
 
 watch(
-  () => [
-    props.year,
-    props.categoryIds,
-    props.subCategoryId
-  ],
-  loadDetails,
+  () => props.year,
+  async () => {
+    activeRowFitid.value = null
+    pendingReallocationIds.value.clear()
+    detailsRemoteState.value = null
+    await loadDetails()
+  },
   { immediate: true }
-);
+)
+
+watch(
+  () => props.subCategoryId,
+  async (v) => {
+    activeRowFitid.value = null
+    if (v !== null && raw.value === null) {
+      await loadDetails()
+    }
+  }
+)
+
+useDriveWatcher({
+  folderId: "allocations/budget",
+  fileName: `FollowUpDetails-${props.year}.json`,
+  lastKnownState: detailsRemoteState,
+  onChanged: async () => {
+    await loadDetails()
+    activeRowFitid.value = null
+  },
+})
 
 /* =========================================================
    HELPERS
@@ -494,18 +524,18 @@ onMounted(async () => {
       <div v-if="openMonths.has(group.key)">
         <div
           v-for="(it, idx) in group.items"
-          :key="it.allocationId"
+          :key="`${it.allocationId}-${idx}`"
           class="grid row"
           :class="{
             active: activeRowFitid === it.allocationId,
-            pending: it.pendingReallocation
+            pending: pendingReallocationIds.has(it.allocationId)
           }"
-          @click="!it.pendingReallocation && toggleRowAction(it.allocationId)"
-        >
+            @click="!pendingReallocationIds.has(it.allocationId) && toggleRowAction(it.allocationId)"
+          >
 
           <div class="col-label date-cell">
             <span
-              v-if="it.pendingReallocation"
+              v-if="pendingReallocationIds.has(it.allocationId)"
               class="pending-inline"
             >
               Pending 
