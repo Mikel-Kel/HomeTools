@@ -7,7 +7,7 @@ import { useDrive } from "@/composables/useDrive";
 
 import {
   selectSnapshotFolder,
-  readSnapshotJSON
+  readSnapshotJSONFromHandle
 } from "@/services/iCloud/iCloudSnapshot";
 
 /* =========================
@@ -58,11 +58,16 @@ TEST iCloud
 ======================*/
 async function testSnapshotRead() {
   try {
+    const handle = await selectSnapshotFolder();
 
-    await selectSnapshotFolder();
+    if (!handle) {
+      alert("No folder selected");
+      return;
+    }
 
     const data =
-      await readSnapshotJSON<any>(
+      await readSnapshotJSONFromHandle(
+        handle,
         "Test/spending.json"
       );
 
@@ -75,13 +80,10 @@ async function testSnapshotRead() {
     );
 
   } catch (err) {
-
     console.error(err);
-
     alert("Snapshot read failed");
   }
 }
-
 </script>
 
 <template>

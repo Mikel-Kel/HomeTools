@@ -1,11 +1,12 @@
 import * as idbKeyval from "idb-keyval";
+
 const SNAPSHOT_DB_KEY = "icloudSnapshotFolderHandle";
 
 /* =========================================================
    Types
 ========================================================= */
-type SnapshotFileHandle = FileSystemFileHandle;
-type SnapshotDirHandle = FileSystemDirectoryHandle;
+export type SnapshotDirHandle =
+  FileSystemDirectoryHandle;
 
 /* =========================================================
    Folder persistence
@@ -38,9 +39,7 @@ export async function clearSnapshotFolder():
 ========================================================= */
 export async function selectSnapshotFolder():
   Promise<SnapshotDirHandle | null> {
-
   try {
-
     const handle =
       await window.showDirectoryPicker({
         mode: "read"
@@ -56,7 +55,7 @@ export async function selectSnapshotFolder():
 }
 
 /* =========================================================
-   Read JSON file
+   Read JSON from persisted handle
 ========================================================= */
 export async function readSnapshotJSON<T>(
   relativePath: string
@@ -66,17 +65,26 @@ export async function readSnapshotJSON<T>(
 
   if (!root) return null;
 
+  return await readSnapshotJSONFromHandle<T>(
+    root,
+    relativePath
+  );
+}
+
+/* =========================================================
+   Read JSON from provided handle
+========================================================= */
+export async function readSnapshotJSONFromHandle<T>(
+  root: SnapshotDirHandle,
+  relativePath: string
+): Promise<T | null> {
+
   const parts =
     relativePath.split("/");
 
-console.log("ROOT:", root.name);
-console.log("RELATIVE PATH:", relativePath);
-console.log("PARTS:", parts);
-
-  let dir: SnapshotDirHandle = root;
+  let dir = root;
 
   for (let i = 0; i < parts.length - 1; i++) {
-console.log("Entering dir:", parts[i]);
     dir =
       await dir.getDirectoryHandle(parts[i]);
   }
