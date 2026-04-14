@@ -6,9 +6,8 @@ import PageHeader from "@/components/PageHeader.vue";
 import { useDrive } from "@/composables/useDrive";
 
 import {
-  selectSnapshotFolder,
-  readSnapshotJSONFromHandle
-} from "@/services/iCloud/iCloudSnapshot";
+  readPublishedJSON
+} from "@/services/publishedData/publishedData";
 
 /* =========================
    Router
@@ -56,32 +55,30 @@ async function handleConnect() {
 /*====================
 TEST iCloud
 ======================*/
-async function testSnapshotRead() {
+async function testPublishedData() {
   try {
-    const handle = await selectSnapshotFolder();
-
-    if (!handle) {
-      alert("No folder selected");
-      return;
-    }
 
     const data =
-      await readSnapshotJSONFromHandle(
-        handle,
-        "Test/spending.json"
+      await readPublishedJSON<any>(
+        "spending/spending.json"
       );
 
-    console.log("Snapshot OK:", data);
+    console.log(
+      "Published Data:",
+      data
+    );
 
     alert(
       data
-        ? "Snapshot loaded successfully"
-        : "Snapshot file not found"
+        ? "Published data loaded successfully"
+        : "Published data not found"
     );
 
   } catch (err) {
+
     console.error(err);
-    alert("Snapshot read failed");
+
+    alert("Published data read failed");
   }
 }
 </script>
@@ -113,7 +110,7 @@ async function testSnapshotRead() {
 
   </div>
 
-  <button @click="testSnapshotRead">
+  <button @click="testPublishedData">
     Test iCloud Snapshot
   </button>
 
