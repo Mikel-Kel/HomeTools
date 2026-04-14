@@ -1,18 +1,15 @@
-/* OUT
 import * as idbKeyval from "idb-keyval";
 const SNAPSHOT_DB_KEY = "icloudSnapshotFolderHandle";
 
 /* =========================================================
    Types
 ========================================================= */
-/* OUT
 type SnapshotFileHandle = FileSystemFileHandle;
 type SnapshotDirHandle = FileSystemDirectoryHandle;
 
 /* =========================================================
    Folder persistence
 ========================================================= */
-/* OUT
 export async function saveSnapshotFolder(
   handle: SnapshotDirHandle
 ): Promise<void> {
@@ -39,7 +36,6 @@ export async function clearSnapshotFolder():
 /* =========================================================
    Folder picker
 ========================================================= */
-/* OUT
 export async function selectSnapshotFolder():
   Promise<SnapshotDirHandle | null> {
 
@@ -62,7 +58,6 @@ export async function selectSnapshotFolder():
 /* =========================================================
    Read JSON file
 ========================================================= */
-/* OUT
 export async function readSnapshotJSON<T>(
   relativePath: string
 ): Promise<T | null> {
@@ -94,4 +89,3 @@ export async function readSnapshotJSON<T>(
     await file.text()
   );
 }
-*/  
