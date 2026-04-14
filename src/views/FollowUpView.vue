@@ -121,7 +121,7 @@ watch(driveStatus, (status) => {
 useDriveWatcher({
   folderId: "allocations/budget",
   fileName: "FollowUp.json",
-  lastKnownModified: followUpLastModified,
+  lastKnownState: followUpLastModified,
   onChanged: loadFollowUp,
 });
 
