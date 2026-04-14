@@ -942,7 +942,7 @@ watch(
 useDriveWatcher({
   folderId: "archive",
   fileName: "index.json",
-  lastKnownModified: indexLastModified,
+  lastKnownState: indexLastModified,
   onChanged: async () => {
     console.log("📡 index.json changed")
     const index = await loadJSONFromFolder<any>(
