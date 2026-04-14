@@ -104,12 +104,13 @@ export async function listLocalFilesInFolder(
     await resolveDirectory(root, folderPath);
 
   const files: DriveItem[] = [];
-
   for await (const [name, handle] of dir.entries()) {
 
     if (handle.kind !== "file") continue;
 
-    const file = await handle.getFile();
+    const file =
+      await (handle as FileSystemFileHandle)
+        .getFile();
 
     files.push({
       id: name,
@@ -117,7 +118,7 @@ export async function listLocalFilesInFolder(
       mimeType: file.type || "application/octet-stream",
       modifiedTime: new Date(file.lastModified).toISOString()
     });
-   }
+  }
 
   return files;
 }
