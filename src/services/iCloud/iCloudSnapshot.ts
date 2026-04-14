@@ -61,7 +61,6 @@ export async function selectSnapshotFolder():
 export async function readSnapshotJSON<T>(
   relativePath: string
 ): Promise<T | null> {
-
   const root =
     await getSnapshotFolder();
 
@@ -70,9 +69,14 @@ export async function readSnapshotJSON<T>(
   const parts =
     relativePath.split("/");
 
+console.log("ROOT:", root.name);
+console.log("RELATIVE PATH:", relativePath);
+console.log("PARTS:", parts);
+
   let dir: SnapshotDirHandle = root;
 
   for (let i = 0; i < parts.length - 1; i++) {
+console.log("Entering dir:", parts[i]);
     dir =
       await dir.getDirectoryHandle(parts[i]);
   }
