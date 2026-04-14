@@ -5,6 +5,11 @@ import { useRouter } from "vue-router";
 import PageHeader from "@/components/PageHeader.vue";
 import { useDrive } from "@/composables/useDrive";
 
+import {
+  selectSnapshotFolder,
+  readSnapshotJSON
+} from "@/services/iCloud/iCloudSnapshot";
+
 /* =========================
    Router
 ========================= */
@@ -47,6 +52,37 @@ async function handleConnect() {
     console.error(err);
   }
 }
+
+
+/*====================
+TEST iCloud
+======================*/
+async function testSnapshotRead() {
+  try {
+
+    await selectSnapshotFolder();
+
+    const data =
+      await readSnapshotJSON<any>(
+        "Test/spending.json"
+      );
+
+    console.log("Snapshot OK:", data);
+
+    alert(
+      data
+        ? "Snapshot loaded successfully"
+        : "Snapshot file not found"
+    );
+
+  } catch (err) {
+
+    console.error(err);
+
+    alert("Snapshot read failed");
+  }
+}
+
 </script>
 
 <template>
@@ -75,6 +111,11 @@ async function handleConnect() {
     </p>
 
   </div>
+
+  <button @click="testSnapshotRead">
+    Test iCloud Snapshot
+  </button>
+
 </template>
 
 <style scoped>
