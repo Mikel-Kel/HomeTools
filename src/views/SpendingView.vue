@@ -39,6 +39,8 @@ const spending = useSpending();
 const draftsState = ref<string | null>(null);
 const releasedState = ref<string | null>(null);
 
+const SPENDING_FILTERS_KEY = "spendingFilters"
+
 /* =========================
    Drive watcher
 ========================= */
@@ -206,6 +208,7 @@ function resetFilters() {
   dateTo.value = "";
   minAmount.value = null;
   maxAmount.value = null;
+  sessionStorage.removeItem(SPENDING_FILTERS_KEY)
 }
 
 function applyFilters(records: SpendingWithStatus[]) {
@@ -238,6 +241,48 @@ function applyFilters(records: SpendingWithStatus[]) {
 
     return true;
   });
+}
+
+function saveFiltersToSession() {
+  sessionStorage.setItem(
+    SPENDING_FILTERS_KEY,
+    JSON.stringify({
+      owner: Array.from(ownerFilter.value),
+      status: Array.from(statusFilter.value),
+      currency: Array.from(currencyFilter.value),
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+      minAmount: minAmount.value,
+      maxAmount: maxAmount.value,
+      filtersOpen: filtersOpen.value
+    })
+  )
+}
+
+function restoreFiltersFromSession() {
+  const raw =
+    sessionStorage.getItem(SPENDING_FILTERS_KEY)
+
+  if (!raw) return
+
+  try {
+    const saved = JSON.parse(raw)
+
+    ownerFilter.value = new Set(saved.owner ?? [])
+    statusFilter.value = new Set(saved.status ?? [])
+    currencyFilter.value = new Set(saved.currency ?? [])
+
+    dateFrom.value = saved.dateFrom ?? ""
+    dateTo.value = saved.dateTo ?? ""
+
+    minAmount.value = saved.minAmount ?? null
+    maxAmount.value = saved.maxAmount ?? null
+
+    filtersOpen.value = saved.filtersOpen ?? false
+
+  } catch {
+    // ignore corrupted storage
+  }
 }
 
 function selectAllStatuses() {
@@ -399,7 +444,10 @@ async function loadAllocationStatusFromDrive() {
 /* =========================
    Lifecycle
 ========================= */
-onMounted(loadFromDrive);
+onMounted(async () => {
+  restoreFiltersFromSession()
+  await loadFromDrive()
+})
 
 /* =========================
    Sticky header sizing
@@ -429,6 +477,22 @@ onBeforeUnmount(() => {
     ro.unobserve(stickyRef.value);
   ro = null;
 });
+
+watch(
+  [
+    ownerFilter,
+    statusFilter,
+    currencyFilter,
+    dateFrom,
+    dateTo,
+    minAmount,
+    maxAmount,
+    filtersOpen
+  ],
+  saveFiltersToSession,
+  { deep: true }
+)
+
 </script>
   
 <template>
