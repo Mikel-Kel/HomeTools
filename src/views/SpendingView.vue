@@ -110,6 +110,45 @@ const ownerItems = computed(() =>
   }))
 )
 
+const availableCurrencies = computed(() => {
+  const foreignCurrencies = new Set<string>()
+
+  spending.records.value.forEach(r => {
+    if (
+      r.currency &&
+      r.currency !== "CHF" &&
+      r.foreignAmount != null
+    ) {
+      foreignCurrencies.add(r.currency)
+    }
+  })
+
+  if (foreignCurrencies.size === 0) {
+    return []
+  }
+
+  return [
+    "CHF",
+    ...Array.from(foreignCurrencies).sort()
+  ]
+})
+
+const currencyItems = computed(() =>
+  availableCurrencies.value.map(currency => ({
+    id: currency,
+    label: currency
+  }))
+)
+
+const currencyFilter = ref<Set<string>>(new Set())
+
+const currencyFilterArray = computed<string[]>({
+  get: () => Array.from(currencyFilter.value),
+  set: value => {
+    currencyFilter.value = new Set(value)
+  }
+})
+
 const statusItems = computed(() =>
   allStatuses.map(status => ({
     id: status,
@@ -162,6 +201,7 @@ const isAllStatusesActive = computed(
 function resetFilters() {
   ownerFilter.value = new Set();
   statusFilter.value = new Set();
+  currencyFilter.value = new Set()
   dateFrom.value = "";
   dateTo.value = "";
   minAmount.value = null;
@@ -178,6 +218,16 @@ function applyFilters(records: SpendingWithStatus[]) {
 
     if (ownerFilter.value.size && !ownerFilter.value.has(r.owner))
       return false;
+
+    if (currencyFilter.value.size) {
+      const recordCurrency =
+        isForeign(r)
+          ? r.currency!
+          : "CHF"
+
+      if (!currencyFilter.value.has(recordCurrency))
+        return false
+    }
 
     if (dateFrom.value && r.date < dateFrom.value) return false;
     if (dateTo.value && r.date > dateTo.value) return false;
@@ -448,6 +498,16 @@ onBeforeUnmount(() => {
             label="Status"
             :items="statusItems"
             v-model="statusFilterArray"
+            :multiple="true"
+            :showAll="true"
+            :alignWithContent="true"
+          />
+          <!-- Currency -->  
+          <ChipSelector
+            v-if="availableCurrencies.length > 0"
+            label="Currency"
+            :items="currencyItems"
+            v-model="currencyFilterArray"
             :multiple="true"
             :showAll="true"
             :alignWithContent="true"
