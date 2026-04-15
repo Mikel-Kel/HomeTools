@@ -16,6 +16,7 @@ import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags" 
 import { useAmountInput } from "@/composables/useAmountInput"
 
+import ChipSelector from "@/components/ChipSelector.vue"
 import DateChip from "@/components/DateChip.vue"
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount } from "@/utils/amountFormat"
@@ -292,6 +293,30 @@ const tags = computed(() =>
 )
 
 /* =========================
+   Chips selectors
+   ========================= */
+const categoryItems = computed(() =>
+  categories.value.map(c => ({
+    id: c.id,
+    label: c.label
+  }))
+)
+
+const subCategoryItems = computed(() =>
+  subCategories.value.map(sc => ({
+    id: sc.id,
+    label: sc.label
+  }))
+)
+
+const tagItems = computed(() =>
+  tags.value.map(t => ({
+    id: t.id,
+    label: t.tagName
+  }))
+)
+
+/* =========================
    Currency display (if present)
 ========================= */
 const currencyAmount = computed(() => {
@@ -428,45 +453,24 @@ function closeView() {
     ========================== -->
     <section class="allocation-form">
       <!-- CATEGORY -->
-      <div class="allocation-row">
-        <div class="allocation-label">
-          Category
-        </div>
-        <div class="allocation-chip-scroll">
-          <button
-            v-for="c in categories"
-            :key="c.id"
-            class="allocation-chip"
-            :class="{ active: categoryID === c.id }"
-            @click="categoryID = c.id"
-            :disabled="allocation?.state.value === 'DRAFTED'
-                      || allocation?.state.value === 'BUSY'
-                      || allocation?.state.value === 'READONLY'"
-          >
-            {{ c.label }}
-          </button>
-        </div>
-      </div>
+      <ChipSelector
+        label="Category"
+        :items="categoryItems"
+        v-model="categoryID"
+        :showAll="false"
+        :alignWithContent="true"
+        :disabled="isLocked"
+      />
       <!-- SUBCATEGORY -->
-      <div class="allocation-row" v-if="categoryID">
-        <div class="allocation-label">
-          Sub
-        </div>
-        <div class="allocation-chip-scroll">
-          <button
-            v-for="sc in subCategories"
-            :key="sc.id"
-            class="allocation-chip"
-            :class="{ active: subCategoryID === sc.id }"
-            @click="subCategoryID = sc.id"
-            :disabled="allocation?.state.value === 'DRAFTED'
-                      || allocation?.state.value === 'BUSY'
-                      || allocation?.state.value === 'READONLY'"
-          >
-            {{ sc.label }}
-          </button>
-        </div>
-      </div>
+      <ChipSelector
+        v-if="categoryID"
+        label="Sub"
+        :items="subCategoryItems"
+        v-model="subCategoryID"
+        :showAll="false"
+        :alignWithContent="true"
+        :disabled="isLocked"
+      />       
       <!-- 🔽 MONTANT + CALENDRIER -->
       <div class="amount-block">
         <div class="amount-row">
@@ -500,30 +504,15 @@ function closeView() {
           </transition>
         </div>
       </div> 
-
-      <div class="allocation-row">
-        <div class="allocation-label">
-          Tag
-        </div>
-        <div
-          class="tag-scroll"
-          :class="{ disabled: !categoryID || !subCategoryID }"
-        >
-          <button
-            v-for="t in tags"
-            :key="t.id"
-            class="tag-chip"
-            :class="{
-              active: allocatedTagID === t.id,
-              disabled: !categoryID || !subCategoryID
-            }"
-            :disabled="!categoryID || !subCategoryID"
-            @click="allocatedTagID = allocatedTagID === t.id ? null : t.id"
-          >
-            {{ t.tagName }}
-          </button>
-        </div>
-      </div>
+      <!-- tags -->
+      <ChipSelector
+        label="Tag"
+        :items="tagItems"
+        v-model="allocatedTagID"
+        :showAll="true"
+        :alignWithContent="true"
+        :disabled="!canSelectTag || isLocked"
+      />
       <!-- commentaire + add -->
       <div class="comment-row">
         <input v-model="comment"
@@ -746,6 +735,12 @@ function closeView() {
   font-size: 0.9rem;
 }
 
+/* largeur homogène pour tous les ChipSelector de la form */
+:deep(.allocation-form .chip-selector) {
+  width: min(650px, 100%);
+  max-width: 100%;
+}
+
 :deep(.field-short) {
   width: var(--short-w) !important;
   max-width: var(--short-w) !important;
@@ -775,91 +770,6 @@ function closeView() {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-soft);
-}
-
-/* =========================================================
-   Chips
-========================================================= */
-.allocation-chip-scroll {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  position: relative;
-  max-width: 420px;
-}
-
-.allocation-chip-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.allocation-chip {
-  flex: 0 0 auto;
-  padding: 8px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--chip-border);
-  background: var(--chip-bg);
-  color: var(--text);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  opacity: 0.7;
-}
-
-.allocation-chip.active {
-  opacity: 1;
-  background: var(--chip-active-bg);
-  border-color: var(--chip-active-border);
-}
-
-.allocation-chip-scroll::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 40px;
-  height: 100%;
-  pointer-events: none;
-  background: linear-gradient(to right, transparent, var(--bg));
-}
-
-/* =========================================================
-   Tags
-========================================================= */
-.tag-scroll {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  max-width: 320px;
-}
-
-.tag-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.tag-chip {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 0.7rem;
-  cursor: pointer;
-  white-space: nowrap;
-
-  background: var(--chip-bg);
-  border: 1px solid var(--chip-border);
-  color: var(--text);
-}
-
-.tag-chip.active {
-  background: var(--primary-soft);
-  border-color: var(--primary);
-}
-
-.tag-chip.disabled {
-  opacity: 0.35;
-  cursor: default;
 }
 
 /* =========================================================

@@ -35,6 +35,11 @@ const props = defineProps({
   multiple: {
     type: Boolean,
     default: false
+  },
+
+  disabled: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -56,10 +61,13 @@ function isActive(id: string | number) {
 }
 
 function selectAll() {
+  if (props.disabled) return
   emit("update:modelValue", props.multiple ? [] : null)
 }
 
 function toggleItem(id: string | number) {
+  if (props.disabled) return
+
   if (!props.multiple) {
     emit("update:modelValue", id)
     return
@@ -98,6 +106,8 @@ function updateScrollState() {
 }
 
 function scroll(direction: number) {
+  if (props.disabled) return
+
   const el = scrollRef.value
   if (!el) return
 
@@ -126,7 +136,10 @@ watch(() => props.items, () => {
 <template>
   <div
     class="chip-selector"
-    :class="{ aligned: alignWithContent }"
+    :class="{
+      aligned: alignWithContent,
+      disabled: disabled
+    }"
     :style="{ marginBottom: bottomSpacing + 'px' }"
   >
     <span class="label">{{ label }}</span>
@@ -137,6 +150,7 @@ watch(() => props.items, () => {
           v-if="showAll"
           class="chip"
           :class="{ active: isAllActive }"
+          :disabled="disabled"
           @click="selectAll"
         >
           All
@@ -145,6 +159,7 @@ watch(() => props.items, () => {
         <button
           v-if="canScrollLeft"
           class="scroll-btn inside"
+          :disabled="disabled"
           @click="scroll(-1)"
         >
           ‹
@@ -161,6 +176,7 @@ watch(() => props.items, () => {
           :key="item.id"
           class="chip"
           :class="{ active: isActive(item.id) }"
+          :disabled="disabled"
           @click="toggleItem(item.id)"
         >
           {{ item.label }}
@@ -170,6 +186,7 @@ watch(() => props.items, () => {
       <button
         v-if="canScrollRight"
         class="scroll-btn right"
+        :disabled="disabled"
         @click="scroll(1)"
       >
         ›
@@ -190,10 +207,17 @@ watch(() => props.items, () => {
   align-items: center;
 }
 
-/* alignement type sheet */
 .chip-selector.aligned {
   align-items: flex-start;
 }
+
+.chip-selector.disabled {
+  opacity: 0.45;
+}
+
+/* =========================================================
+   LABEL
+========================================================= */
 
 .label {
   font-size: 0.9rem;
@@ -212,14 +236,12 @@ watch(() => props.items, () => {
   min-width: 0;
 }
 
-/* FIXED (All + left arrow) */
 .chip-fixed {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-/* SCROLL */
 .chip-scroll {
   display: flex;
   gap: 6px;
@@ -229,7 +251,7 @@ watch(() => props.items, () => {
 }
 
 /* =========================================================
-   CHIPS STYLE (UNIFIED)
+   CHIPS
 ========================================================= */
 
 .chip {
@@ -246,7 +268,7 @@ watch(() => props.items, () => {
   transition: all 0.15s ease;
 }
 
-.chip:hover {
+.chip:hover:not(:disabled) {
   opacity: 0.9;
 }
 
@@ -255,6 +277,10 @@ watch(() => props.items, () => {
   background: var(--primary-soft);
   border-color: var(--primary);
   color: var(--primary);
+}
+
+.chip:disabled {
+  cursor: default;
 }
 
 /* =========================================================
@@ -270,8 +296,12 @@ watch(() => props.items, () => {
   padding: 0 4px;
 }
 
-.scroll-btn:hover {
+.scroll-btn:hover:not(:disabled) {
   opacity: 1;
+}
+
+.scroll-btn:disabled {
+  cursor: default;
 }
 
 .scroll-btn.inside {
