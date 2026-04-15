@@ -53,7 +53,7 @@ async function handleConnect() {
 }
 
 /*====================
-TEST iCloud
+TEST publishedData
 ======================*/
 async function testPublishedData() {
   try {

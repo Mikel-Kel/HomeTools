@@ -12,6 +12,8 @@ import { useAppBootstrap } from "@/composables/useAppBootstrap"
 const { loadSettings } = useAppBootstrap()
 
 import { listFiles, loadJSONFromFolder } from "@/services/driveAdapter";
+
+import ChipSelector from "@/components/ChipSelector.vue"
 import DateChip from "@/components/DateChip.vue"
 
 import {
@@ -100,6 +102,34 @@ const availableOwners = computed(() => {
   });
   return Array.from(set).sort();
 });
+
+const ownerItems = computed(() =>
+  availableOwners.value.map(owner => ({
+    id: owner,
+    label: owner || "-"
+  }))
+)
+
+const statusItems = computed(() =>
+  allStatuses.map(status => ({
+    id: status,
+    label: status
+  }))
+)
+
+const ownerFilterArray = computed<string[]>({
+  get: () => Array.from(ownerFilter.value),
+  set: (value) => {
+    ownerFilter.value = new Set(value)
+  }
+})
+
+const statusFilterArray = computed<AllocationStatus[]>({
+  get: () => Array.from(statusFilter.value),
+  set: (value) => {
+    statusFilter.value = new Set(value)
+  }
+})
 
 const allStatuses: AllocationStatus[] = [
   "none",
@@ -403,78 +433,66 @@ onBeforeUnmount(() => {
             Reset
           </button>
         </header>
-
         <div v-if="filtersOpen" class="filters-body">
-
-          <!-- Owner -->
-          <div class="filter-row">
-            <span class="label">Owner</span>
-            <button
-              v-for="owner in availableOwners"
-              :key="owner"
-              class="chip"
-              :class="{ active: isOwnerActive(owner) }"
-              @click="toggleOwner(owner)"
-            >
-              {{ owner || "-" }}
-            </button>
-          </div>
-
-          <!-- Status -->
-          <div class="filter-row">
-            <span class="label">Status</span>
-
-            <button
-              class="chip status all"
-              :class="{ active: isAllStatusesActive }"
-              @click="selectAllStatuses"
-            >
-              All
-            </button>
-
-            <button
-              v-for="s in allStatuses"
-              :key="s"
-              class="chip status"
-              :class="[s, { active: isStatusActive(s) }]"
-              @click="toggleStatus(s)"
-            >
-              {{ s }}
-            </button>
-          </div>
-
+          <!-- Owner -->  
+          <ChipSelector
+            label="Owner"
+            :items="ownerItems"
+            v-model="ownerFilterArray"
+            :multiple="true"
+            :showAll="true"
+            :alignWithContent="true"
+          />
+          <!-- Status -->  
+          <ChipSelector
+            label="Status"
+            :items="statusItems"
+            v-model="statusFilterArray"
+            :multiple="true"
+            :showAll="true"
+            :alignWithContent="true"
+          />
           <!-- Period -->
-           <div class="filter-row">
+          <div class="filter-row with-label">
             <span class="label">Period</span>
-
-            <div class="dates-row">
-              <DateChip v-model="dateFrom" placeholder="From" />
-              <DateChip v-model="dateTo" placeholder="To" />
+            <div class="filter-content">
+              <div class="dates-row">
+                <DateChip
+                  v-model="dateFrom"
+                  placeholder="From"
+                />
+                <DateChip
+                  v-model="dateTo"
+                  placeholder="To"
+                />
+              </div>
             </div>
           </div>
-
           <!-- Amount -->
-          <div class="filter-row">
+          <div class="filter-row with-label">
             <span class="label">Amount</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Min"
-              v-model.number="minAmount"
-            />
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Max"
-              v-model.number="maxAmount"
-            />
+            <div class="filter-content">
+              <div class="amount-inputs">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Min"
+                  v-model.number="minAmount"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Max"
+                  v-model.number="maxAmount"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </section>
     </div>
-
     <!-- Accounts -->
     <div class="spending-view">
       <section v-for="account in accounts" :key="account.id" class="account">
@@ -502,15 +520,16 @@ onBeforeUnmount(() => {
             <col class="col-party">
             <col class="col-owner">
             <col class="col-status">
+            <col class="col-currency">
             <col class="col-amount">
           </colgroup>
-
           <thead>
             <tr>
               <th>Date</th>
               <th>Party</th>
               <th>Owner</th>
               <th>Status</th>
+              <th class="currency-col"></th>
               <th class="right">Amount</th>
             </tr>
           </thead>
@@ -532,6 +551,14 @@ onBeforeUnmount(() => {
                   {{ record.allocationStatus }}
                 </span>
               </td>
+              <td class="currency-cell">
+                <span
+                  v-if="isForeign(record)"
+                  class="fx-code"
+                >
+                  {{ record.currency }}
+                </span>
+              </td>
               <td
                 class="right amount-cell"
                 :class="[
@@ -540,21 +567,15 @@ onBeforeUnmount(() => {
                 ]"
                 @click.stop="showFxPopover($event, record)"
               >
-                <span v-if="isForeign(record)" class="fx-code">
-                  {{ record.currency }}
-                </span>
-
-                <span>
-                  {{
-                    isForeign(record)
-                      ? record.foreignAmount?.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
-                        })
-                      : formatAmount(record.amount, { showPlus: true })
-                  }}
-                </span>
-              </td>  
+                {{
+                  isForeign(record)
+                    ? record.foreignAmount?.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })
+                    : formatAmount(record.amount, { showPlus: true })
+                }}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -687,11 +708,25 @@ onBeforeUnmount(() => {
   gap: 0.6rem;
 }
 
-.filter-row {
-  display: flex;
+.filter-row.with-label {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: wrap;
+}
+
+.filter-content {
+  min-width: 0;
+}
+
+.amount-inputs {
+  display: flex;
+  gap: 10px;
+}
+
+.label {
+  font-size: 0.9rem;
+  color: var(--text-soft);
 }
 
 /* =========================================================
@@ -712,6 +747,10 @@ onBeforeUnmount(() => {
   font-weight: 600;
   font-family: inherit;
 }
+.filter-row.with-label .filter-content {
+  min-width: 0;
+  margin-left: -14px;
+}
 
 .filter-row input[type="date"] {
   width: 120px;
@@ -728,76 +767,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 2px var(--primary-soft);
 }
 
-.label {
-  width: 70px;
-  color: var(--text-soft); /* 🔥 FIX */
-  flex: 0 0 auto;
-}
-
-/* =========================================================
-   5️⃣ CHIPS
-========================================================= */
-.chip {
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-soft); /* 🔥 FIX typo */
-  color: var(--text-soft);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  height: 30px;
-  user-select: none;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  opacity: 0.7;
-  transition: all 0.15s ease;
-}
-
-.chip:hover {
-  opacity: 0.9;
-}
-
-.chip.active {
-  opacity: 1;
-  background: var(--primary-soft);
-  color: var(--primary);
-  border-color: var(--primary);
-}
-
-/* =========================================================
-   6️⃣ STATUS
-========================================================= */
-.status.none {
-  background: var(--bg-soft);
-  color: var(--text-soft);
-  border-color: var(--border);
-}
-
-.status.draft {
-  background: var(--primary-soft);
-  color: var(--primary);
-  border-color: var(--primary);
-}
-
-.status.released {
-  background: color-mix(in srgb, var(--positive) 15%, transparent); /* 🔥 FIX */
-  color: var(--positive);
-  border-color: var(--positive);
-}
-
-.chip.status.all {
-  background: var(--surface-soft);
-  color: var(--text-soft);
-  border-color: var(--border);
-}
-
-.chip.status.all.active {
-  background: var(--primary-soft);
-  color: var(--primary);
-  border-color: var(--primary);
-}
 
 /* =========================================================
    7️⃣ ACCOUNT HEADER
@@ -828,7 +797,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--border);
 
   display: grid;
-  grid-template-columns: 110px auto 110px 100px 120px;
+  grid-template-columns: 110px minmax(0, 1fr) 110px 100px 50px 120px;
   column-gap: 0.5rem;
 
   padding: 0.25rem 0;
@@ -836,7 +805,7 @@ onBeforeUnmount(() => {
 }
 
 .account-title {
-  grid-column: 1 / 5;
+  grid-column: 1 / 6;
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
@@ -858,7 +827,7 @@ onBeforeUnmount(() => {
 }
 
 .total {
-  grid-column: 5 / 6;
+  grid-column: 6 / 7;
   font-weight: 600;
   text-align: right;
   padding-right: 0.5rem;
@@ -878,7 +847,8 @@ onBeforeUnmount(() => {
 .spending-table col.col-party  { width: auto; }
 .spending-table col.col-owner  { width: 110px; }
 .spending-table col.col-status { width: 100px; }
-.spending-table col.col-amount { width: 120px; }
+.spending-table col.col-currency { width: 50px; }
+.spending-table col.col-amount { width: 100px; }
 
 .spending-table th,
 .spending-table td {
@@ -896,17 +866,16 @@ onBeforeUnmount(() => {
 /* alignements */
 .spending-table th:nth-child(1),
 .spending-table td:nth-child(1) { text-align: center; }
-
 .spending-table th:nth-child(2),
 .spending-table td:nth-child(2) { text-align: left; }
-
 .spending-table th:nth-child(3),
 .spending-table td:nth-child(3),
 .spending-table th:nth-child(4),
 .spending-table td:nth-child(4) { text-align: center; }
-
 .spending-table th:nth-child(5),
-.spending-table td:nth-child(5) { text-align: right; }
+.spending-table td:nth-child(5) { text-align: left; }
+.spending-table th:nth-child(6),
+.spending-table td:nth-child(6) { text-align: right; }
 
 /* =========================================================
    STATUS PILL
@@ -945,14 +914,22 @@ onBeforeUnmount(() => {
 /* =========================================================
    FX
 ========================================================= */
+.currency-cell {
+  text-align: left;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.amount-cell {
+  text-align: right;
+  padding-left: 0;
+  padding-right: 8px;
+}
 
 .fx-code {
-  display: inline-block;
-  min-width: 34px;
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--primary);
-  margin-right: 6px;
 }
 
 .amount-cell.foreign {

@@ -12,7 +12,10 @@ const props = defineProps({
     default: () => []
   },
 
-  modelValue: [String, Number, null],
+  modelValue: {
+    type: [String, Number, Array, null],
+    default: null
+  },
 
   showAll: {
     type: Boolean,
@@ -27,10 +30,55 @@ const props = defineProps({
   bottomSpacing: {
     type: Number,
     default: 0
+  },
+
+  multiple: {
+    type: Boolean,
+    default: false
   }
 })
 
 const emit = defineEmits(["update:modelValue"])
+
+/* =========================
+   Selection helpers
+========================= */
+const selectedSet = computed(() => {
+  if (!props.multiple) return new Set()
+  return new Set((props.modelValue as (string | number)[] | null) ?? [])
+})
+
+function isActive(id: string | number) {
+  if (props.multiple) {
+    return selectedSet.value.has(id)
+  }
+  return props.modelValue === id
+}
+
+function selectAll() {
+  emit("update:modelValue", props.multiple ? [] : null)
+}
+
+function toggleItem(id: string | number) {
+  if (!props.multiple) {
+    emit("update:modelValue", id)
+    return
+  }
+
+  const next = new Set(selectedSet.value)
+
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+
+  emit("update:modelValue", Array.from(next))
+}
+
+const isAllActive = computed(() => {
+  if (props.multiple) {
+    return selectedSet.value.size === 0
+  }
+  return props.modelValue === null
+})
 
 /* =========================
    Scroll logic
@@ -81,19 +129,15 @@ watch(() => props.items, () => {
     :class="{ aligned: alignWithContent }"
     :style="{ marginBottom: bottomSpacing + 'px' }"
   >
-    <!-- LABEL -->
     <span class="label">{{ label }}</span>
 
-    <!-- CHIPS -->
     <div class="chip-layout">
-
-      <!-- LEFT (All + arrow) -->
       <div class="chip-fixed">
         <button
           v-if="showAll"
           class="chip"
-          :class="{ active: modelValue === null }"
-          @click="emit('update:modelValue', null)"
+          :class="{ active: isAllActive }"
+          @click="selectAll"
         >
           All
         </button>
@@ -107,7 +151,6 @@ watch(() => props.items, () => {
         </button>
       </div>
 
-      <!-- SCROLLABLE -->
       <div
         class="chip-scroll"
         ref="scrollRef"
@@ -117,14 +160,13 @@ watch(() => props.items, () => {
           v-for="item in items"
           :key="item.id"
           class="chip"
-          :class="{ active: modelValue === item.id }"
-          @click="emit('update:modelValue', item.id)"
+          :class="{ active: isActive(item.id) }"
+          @click="toggleItem(item.id)"
         >
           {{ item.label }}
         </button>
       </div>
 
-      <!-- RIGHT -->
       <button
         v-if="canScrollRight"
         class="scroll-btn right"
@@ -132,7 +174,6 @@ watch(() => props.items, () => {
       >
         ›
       </button>
-
     </div>
   </div>
 </template>
