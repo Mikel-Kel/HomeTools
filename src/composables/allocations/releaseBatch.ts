@@ -5,8 +5,6 @@ import {
   deleteFileFromFolder
 } from "@/services/driveAdapter";
 
-import { useDrive } from "@/composables/useDrive";
-
 interface DraftRecord {
   id: string;
 }
@@ -14,18 +12,12 @@ interface DraftRecord {
 export async function releaseDraftsBatch(
   drafts: DraftRecord[]
 ) {
-
-  const draftsFolder =
-    "allocations/drafts";
-
-  const releasedFolder =
-    "allocations/released";
+  const draftsFolder = "allocations/drafts";
+  const releasedFolder = "allocations/released";
 
   const draftFiles = await listFiles(draftsFolder);
-  const releasedFiles = await listFiles(releasedFolder);
 
   for (const r of drafts) {
-
     const filename = `${r.id}.json`;
 
     const draft = draftFiles.find(
@@ -41,9 +33,7 @@ export async function releaseDraftsBatch(
 
     if (!raw || !Array.isArray(raw.allocations)) continue;
 
-    const existingReleased = releasedFiles.find(
-      f => f.name === filename
-    );
+    if (raw.toProcess !== true) continue;
 
     await saveJSONToFolder(
       releasedFolder,
@@ -51,7 +41,8 @@ export async function releaseDraftsBatch(
       {
         ...raw,
         releasedAt: new Date().toISOString(),
-        processed: false,
+        processed: true,
+        toProcess: false,
       }
     );
 
@@ -59,7 +50,5 @@ export async function releaseDraftsBatch(
       draftsFolder,
       filename
     );
-
   }
-
 }

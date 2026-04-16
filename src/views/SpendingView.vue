@@ -174,6 +174,7 @@ const statusFilterArray = computed<AllocationStatus[]>({
 
 const allStatuses: AllocationStatus[] = [
   "none",
+  "partial",
   "draft",
   "released",
 ];
@@ -363,7 +364,7 @@ function closeFxPopover() {
 ========================= */
 
 const draftRecords = computed(() =>
-  spending.getDraftRecords()
+  spending.getReleaseableDraftRecords()
 );
 
 const draftCount = computed(
@@ -417,10 +418,8 @@ async function loadFromDrive() {
 }
 
 async function loadAllocationStatusFromDrive() {
-  const draftsFolder =
-    "allocations/drafts";
-  const releasedFolder =
-    "allocations/released";
+  const draftsFolder = "allocations/drafts";
+  const releasedFolder = "allocations/released";
 
   const [draftFiles, releasedFiles] =
     await Promise.all([
@@ -428,16 +427,44 @@ async function loadAllocationStatusFromDrive() {
       listFiles(releasedFolder),
     ]);
 
-  const draftIds = new Set(
-    draftFiles.map(f => f.name.replace(".json", ""))
-  );
-  const releasedIds = new Set(
-    releasedFiles.map(f => f.name.replace(".json", ""))
-  );
+  const draftIds = new Set<string>();
+  const readyDraftIds = new Set<string>();
 
+  for (const file of draftFiles) {
+    if (!file.name.endsWith(".json")) continue;
+
+    const id = file.name.replace(".json", "");
+    draftIds.add(id);
+
+    try {
+      const raw = await loadJSONFromFolder<any>(
+        draftsFolder,
+        file.name
+      );
+
+      if (raw?.toProcess === true) {
+        readyDraftIds.add(id);
+      }
+
+    } catch (err) {
+      console.warn(
+        "[AllocationStatus] Ignored invalid draft file:",
+        file.name,
+        err
+      );
+    }
+  }
+
+  const releasedIds = new Set(
+    releasedFiles
+      .filter(f => f.name.endsWith(".json"))
+      .map(f => f.name.replace(".json", ""))
+  );
+  
   spending.applyAllocationStatus(
     draftIds,
-    releasedIds
+    releasedIds,
+    readyDraftIds
   );
 }
 
@@ -1023,6 +1050,12 @@ watch(
   background: var(--bg-soft);
   color: var(--text-soft);
   border-color: var(--border);
+}
+
+.status-pill.partial {
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+  color: var(--warning);
+  border-color: var(--warning);
 }
 
 .status-pill.draft {

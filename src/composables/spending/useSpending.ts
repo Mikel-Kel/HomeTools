@@ -28,10 +28,11 @@ export interface SpendingRecord {
   tagID: number | null;
 }
 
-export type AllocationStatus = "none" | "draft" | "released";
+export type AllocationStatus = "none" | "partial" | "draft" | "released";
 
 export interface SpendingWithStatus extends SpendingRecord {
   allocationStatus: AllocationStatus;
+  draftToProcess: boolean;
 }
 
 /* =========================
@@ -53,33 +54,47 @@ export function useSpending() {
     records.value = newRecords.map(r => ({
       ...r,
       allocationStatus: "none",
+      draftToProcess: false,
     }));
   }
 
   function applyAllocationStatus(
     draftIds: Set<string>,
-    releasedIds: Set<string>
+    releasedIds: Set<string>,
+    readyDraftIds: Set<string>
   ) {
     records.value = records.value.map(r => ({
       ...r,
+
       allocationStatus: releasedIds.has(r.id)
         ? "released"
         : draftIds.has(r.id)
-        ? "draft"
+        ? readyDraftIds.has(r.id)
+          ? "draft"
+          : "partial"
         : "none",
+
+      draftToProcess: readyDraftIds.has(r.id)
     }));
   }
-
+  
   function getRecordsForAccount(accountId: string) {
     return records.value
       .filter(r => r.accountId === accountId)
       .sort((a, b) => b.date.localeCompare(a.date));
   }
 
-  // ✅ C’EST CETTE FONCTION QUI ÉTAIT ABSENTE AVANT
   function getDraftRecords() {
     return records.value.filter(
       r => r.allocationStatus === "draft"
+    );
+  }
+
+  function getReleaseableDraftRecords() {
+    return records.value.filter(
+      r =>
+        r.allocationStatus === "draft" &&
+        r.draftToProcess
     );
   }
 
@@ -101,6 +116,7 @@ return {
     applyAllocationStatus,
     getRecordsForAccount,
     getDraftRecords,
+    getReleaseableDraftRecords,
     spendingLastModified,
     setSpendingLastModified,
     clear,

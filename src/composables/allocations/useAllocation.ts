@@ -166,6 +166,7 @@ export function useAllocation(
         version: 1,
         spendingId,
         processed: false,
+        toProcess: isBalanced.value,
         partyID: partyID ?? null,
         savedAt: new Date().toISOString(),
         allocations: allocations.value
@@ -302,8 +303,6 @@ export function useAllocation(
       ) return;
 
       allocations.value.splice(index, 1);
-
-      await deleteDraftFileIfExists();
 
       presetAmount();
       recomputeLocalState();
