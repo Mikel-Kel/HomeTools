@@ -7,12 +7,6 @@ import {
   deleteFileFromFolder
 } from "@/services/driveAdapter";
 
-import { useDrive } from "@/composables/useDrive";
-
-/* =========================
-   Types
-========================= */
-
 export interface Allocation {
   id: string;
   categoryID: number | null;
@@ -27,7 +21,6 @@ type AllocationState =
   | "EMPTY"
   | "EDITING"
   | "BALANCED"
-  | "DRAFTED"
   | "READONLY"
   | "BUSY";
 
@@ -38,17 +31,8 @@ const loading = ref(true);
 ========================= */
 
 async function findFileByName(folderId: string, filename: string) {
-
   const files = await listFiles(folderId);
-
-  const found = files.find(f => f.name === filename) ?? null;
-
-  return found;
-
-}
-
-function todayISODate() {
-  return new Date().toISOString().slice(0, 10);
+  return files.find(f => f.name === filename) ?? null;
 }
 
 /* =========================
@@ -61,24 +45,17 @@ export function useAllocation(
   partyID: number | null,
   spendingDate: string
 ) {
-
-  /* =========================
-     Mutex
-  ========================= */
-
   let chain = Promise.resolve();
 
   function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
-
     const next = chain.then(fn, fn);
 
     chain = next.then(
       () => undefined,
       () => undefined
-    ) as unknown as Promise<void>;
+    ) as Promise<void>;
 
     return next;
-
   }
 
   /* =========================
@@ -98,9 +75,9 @@ export function useAllocation(
 
   const categoryID = ref<number | null>(null);
   const subCategoryID = ref<number | null>(null);
-  const comment = ref<string>("");
+  const comment = ref("");
 
-  const amount = ref<number>(Math.abs(spendingAmount));
+  const amount = ref(Math.abs(spendingAmount));
   const allocationDate = ref<string | null>(null);
   const allocatedTagID = ref<number | null>(null);
 
@@ -136,26 +113,28 @@ export function useAllocation(
   ========================= */
 
   const hasDraft = computed(() =>
-    state.value === "DRAFTED"
+    allocations.value.length > 0
   );
 
   const canSaveDraft = computed(() =>
-    state.value === "BALANCED"
+    hasDraft.value &&
+    state.value !== "READONLY" &&
+    state.value !== "BUSY"
   );
 
   const canRelease = computed(() =>
-    state.value === "DRAFTED"
+    hasDraft.value &&
+    isBalanced.value &&
+    state.value !== "READONLY" &&
+    state.value !== "BUSY"
   );
 
   /* =========================
      State recomputation
   ========================= */
 
-  function recomputeLocalState(base?: AllocationState) {
-
-    const current = base ?? state.value;
-
-    if (current === "DRAFTED") return;
+  function recomputeLocalState() {
+    if (state.value === "READONLY") return;
 
     if (allocations.value.length === 0) {
       state.value = "EMPTY";
@@ -166,37 +145,23 @@ export function useAllocation(
       isBalanced.value
         ? "BALANCED"
         : "EDITING";
-
   }
 
   /* =========================
-     Draft helpers
+     Draft persistence
   ========================= */
 
-  async function deleteDraftFileIfExists(): Promise<void> {
-
-    const folder =
-      "allocations/drafts";
-
-    const filename = `${spendingId}.json`;
-
+  async function deleteDraftFileIfExists() {
     await deleteFileFromFolder(
-      folder,
-      filename
+      "allocations/drafts",
+      `${spendingId}.json`
     );
-
   }
 
-  async function saveDraftInternal(): Promise<void> {
-
-    const draftsFolder =
-      "allocations/drafts";
-
-    const filename = `${spendingId}.json`;
-
+  async function saveDraftInternal() {
     await saveJSONToFolder(
-      draftsFolder,
-      filename,
+      "allocations/drafts",
+      `${spendingId}.json`,
       {
         version: 1,
         spendingId,
@@ -206,348 +171,161 @@ export function useAllocation(
         allocations: allocations.value
       }
     );
-
   }
 
   /* =========================
      Load
   ========================= */
 
-  async function loadDraft(): Promise<void> {
-
+  async function loadDraft() {
     loading.value = true;
 
     return runExclusive(async () => {
-
       busy.value = true;
       busyAction.value = "load";
 
       try {
-
-        const draftsFolder =
-          "allocations/drafts";
-
-        const releasedFolder =
-          "allocations/released";
-
-        const filename =
-          `${spendingId}.json`;
-
-        /* ===== DRAFT ===== */
+        const filename = `${spendingId}.json`;
 
         const draftFile =
-          await findFileByName(
-            draftsFolder,
-            filename
-          );
+          await findFileByName("allocations/drafts", filename);
 
         if (draftFile) {
-
           const raw =
             await loadJSONFromFolder<any>(
-              draftsFolder,
+              "allocations/drafts",
               filename
             );
 
-          if (!Array.isArray(raw?.allocations)) {
-
-            allocations.value = [];
-            state.value = "EMPTY";
-            recomputeLocalState();
-
-            return;
-
-          }
-
           allocations.value =
-            raw.allocations.map((a: any) => ({
+            Array.isArray(raw?.allocations)
+              ? raw.allocations.map((a: any) => ({
+                  id: crypto.randomUUID(),
+                  categoryID: a.categoryID ?? null,
+                  subCategoryID: a.subCategoryID ?? null,
+                  comment: a.comment ?? "",
+                  amount: Number(Number(a.amount).toFixed(2)),
+                  allocationDate: a.allocationDate ?? null,
+                  allocatedTagID: a.allocatedTagID ?? null
+                }))
+              : [];
 
-              id: crypto.randomUUID(),
-
-              categoryID:
-                a.categoryID ?? null,
-
-              subCategoryID:
-                a.subCategoryID ?? null,
-
-              comment:
-                a.comment ?? "",
-
-              amount:
-                Number(
-                  Number(a.amount)
-                  .toFixed(2)
-                ),
-
-              allocationDate:
-                a.allocationDate ?? null,
-
-              allocatedTagID:
-                a.allocatedTagID ?? null
-
-            }));
-
-          state.value = "DRAFTED";
-
+          recomputeLocalState();
           presetAmount();
-
           return;
-
         }
-
-        /* ===== RELEASED ===== */
 
         const releasedFile =
-          await findFileByName(
-            releasedFolder,
-            filename
-          );
+          await findFileByName("allocations/released", filename);
 
         if (releasedFile) {
-
           const raw =
             await loadJSONFromFolder<any>(
-              releasedFolder,
+              "allocations/released",
               filename
             );
 
-          if (!Array.isArray(raw?.allocations)) {
-
-            allocations.value = [];
-            state.value = "EMPTY";
-            recomputeLocalState();
-
-            return;
-
-          }
-
           allocations.value =
-            raw.allocations.map((a: any) => ({
-
-              id: crypto.randomUUID(),
-
-              categoryID:
-                a.categoryID ?? null,
-
-              subCategoryID:
-                a.subCategoryID ?? null,
-
-              comment:
-                a.comment ?? "",
-
-              amount:
-                Number(
-                  Number(a.amount)
-                  .toFixed(2)
-                ),
-
-              allocationDate:
-                a.allocationDate ?? null,
-
-              allocatedTagID:
-                a.allocatedTagID ?? null
-
-            }));
+            Array.isArray(raw?.allocations)
+              ? raw.allocations.map((a: any) => ({
+                  id: crypto.randomUUID(),
+                  categoryID: a.categoryID ?? null,
+                  subCategoryID: a.subCategoryID ?? null,
+                  comment: a.comment ?? "",
+                  amount: Number(Number(a.amount).toFixed(2)),
+                  allocationDate: a.allocationDate ?? null,
+                  allocatedTagID: a.allocatedTagID ?? null
+                }))
+              : [];
 
           state.value = "READONLY";
-
           presetAmount();
-
           return;
-
         }
 
-        /* ===== EMPTY ===== */
-
         allocations.value = [];
-        state.value = "EMPTY";
-
         recomputeLocalState();
-
       }
 
       finally {
-
         busy.value = false;
         busyAction.value = null;
         loading.value = false;
-
       }
-
     });
-
   }
 
   /* =========================
-     Add allocation
+     Mutations
   ========================= */
 
-  async function addAllocation(): Promise<void> {
-
+  async function addAllocation() {
     return runExclusive(async () => {
-
-      if (!categoryID.value ||
-          !subCategoryID.value) return;
-
-      if (!Number.isFinite(amount.value) ||
-          amount.value === 0) return;
-
-      const normalizedDate =
-        allocationDate.value &&
-        allocationDate.value.trim() !== ""
-          ? allocationDate.value
-          : spendingDate;
-
-      const typed =
-        Number(amount.value.toFixed(2));
+      if (!categoryID.value || !subCategoryID.value) return;
+      if (!Number.isFinite(amount.value) || amount.value === 0) return;
 
       allocations.value.push({
-
         id: crypto.randomUUID(),
-
-        categoryID:
-          categoryID.value,
-
-        subCategoryID:
-          subCategoryID.value,
-
-        comment:
-          comment.value.trim() ||
-          "Please comment",
-
-        amount: typed,
-
+        categoryID: categoryID.value,
+        subCategoryID: subCategoryID.value,
+        comment: comment.value.trim() || "Please comment",
+        amount: Number(amount.value.toFixed(2)),
         allocationDate:
-          normalizedDate,
-
-        allocatedTagID: 
-          allocatedTagID.value
-
+          allocationDate.value?.trim() || spendingDate,
+        allocatedTagID: allocatedTagID.value
       });
 
       resetForm();
+      recomputeLocalState();
 
-      if (state.value === "DRAFTED") {
-
-        await deleteDraftFileIfExists();
-
-        state.value = "EDITING";
-
-      }
-
-      else {
-
-        recomputeLocalState();
-
-      }
-
-      if (state.value === "BALANCED") {
-
+      if (isBalanced.value) {
         busy.value = true;
         busyAction.value = "save";
         state.value = "BUSY";
 
         try {
-
           await saveDraftInternal();
-
-          state.value = "DRAFTED";
-
-        }
-
-        finally {
-
-          busyAction.value = null;
+        } finally {
           busy.value = false;
-
+          busyAction.value = null;
+          recomputeLocalState();
         }
-
       }
-
     });
-
   }
 
-  /* =========================
-     Remove allocation
-  ========================= */
-
-  async function removeAllocation(
-    index: number
-  ): Promise<void> {
-
+  async function removeAllocation(index: number) {
     return runExclusive(async () => {
-
-      if (index < 0 ||
-          index >= allocations.value.length)
-        return;
+      if (
+        index < 0 ||
+        index >= allocations.value.length
+      ) return;
 
       allocations.value.splice(index, 1);
 
+      await deleteDraftFileIfExists();
+
       presetAmount();
-
-      const wasDrafted =
-        state.value === "DRAFTED";
-
-      if (wasDrafted) {
-
-        busy.value = true;
-
-        try {
-
-          await deleteDraftFileIfExists();
-
-        }
-
-        finally {
-
-          busy.value = false;
-
-        }
-
-      }
-
-      state.value =
-        isBalanced.value
-          ? "BALANCED"
-          : "EDITING";
-
+      recomputeLocalState();
     });
-
   }
 
-  /* =========================
-     Save draft
-  ========================= */
-
-  async function saveDraft(): Promise<void> {
-
+  async function saveDraft() {
     return runExclusive(async () => {
-
-      if (state.value !== "BALANCED")
-        return;
+      if (!canSaveDraft.value) return;
 
       busy.value = true;
       busyAction.value = "save";
       state.value = "BUSY";
 
       try {
-
         await saveDraftInternal();
-
-        state.value = "DRAFTED";
-
-      }
-
-      finally {
-
+      } finally {
         busy.value = false;
         busyAction.value = null;
-
+        recomputeLocalState();
       }
-
     });
-
   }
 
   /* =========================
@@ -555,18 +333,13 @@ export function useAllocation(
   ========================= */
 
   function presetAmount() {
-
     amount.value =
       Number(
-        Math.abs(
-          remainingAmount.value
-        ).toFixed(2)
+        Math.abs(remainingAmount.value).toFixed(2)
       );
-
   }
 
   function resetForm() {
-
     categoryID.value = null;
     subCategoryID.value = null;
     comment.value = "";
@@ -574,7 +347,6 @@ export function useAllocation(
     allocatedTagID.value = null;
 
     presetAmount();
-
   }
 
   /* =========================
@@ -582,7 +354,6 @@ export function useAllocation(
   ========================= */
 
   return {
-
     state,
 
     allocations,
@@ -594,14 +365,13 @@ export function useAllocation(
     allocationDate,
     allocatedTagID,
 
-
     totalAllocated,
     remainingAmount,
     isBalanced,
 
+    hasDraft,
     canSaveDraft,
     canRelease,
-    hasDraft,
 
     loading,
     busy,
@@ -611,7 +381,5 @@ export function useAllocation(
     addAllocation,
     removeAllocation,
     saveDraft
-
   };
-
 }

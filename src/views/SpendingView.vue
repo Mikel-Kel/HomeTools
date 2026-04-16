@@ -693,10 +693,12 @@ watch(
               >
                 {{
                   isForeign(record)
-                    ? record.foreignAmount?.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })
+                    ? formatAmount(
+                        record.amount >= 0
+                          ? Math.abs(record.foreignAmount ?? 0)
+                          : -Math.abs(record.foreignAmount ?? 0),
+                        { showPlus: true }
+                      )
                     : formatAmount(record.amount, { showPlus: true })
                 }}
               </td>

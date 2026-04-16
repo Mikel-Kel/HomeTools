@@ -53,12 +53,6 @@ const categoriesStore = useCategories();
 const tagsStore = useAllocationTags()
 
 /* =========================
-   Auto-close arming
-========================= */
-const autoCloseArmed = ref<boolean>(false);
-const hasAutoClosed = ref<boolean>(false);
-
-/* =========================
    Record (nullable)
 ========================= */
 const record = computed<SpendingRecord | null>(() =>
@@ -178,7 +172,6 @@ const isBalanced = computed(
 );
 
 const isLocked = computed(() =>
-  allocation?.value?.state.value === "DRAFTED" ||
   allocation?.value?.state.value === "BUSY" ||
   allocation?.value?.state.value === "READONLY"
 )
@@ -197,24 +190,6 @@ const busyMessage = computed(() => {
       return "";
   }
 });
-
-/* =========================
-   Auto-close when balanced
-========================= */
-watch(
-  [isBalanced, busy],
-  ([balanced, isBusy]) => {
-    if (
-      autoCloseArmed.value &&
-      balanced &&
-      !isBusy &&
-      !hasAutoClosed.value
-    ) {
-      hasAutoClosed.value = true;
-      router.push({ name: "spending" });
-    }
-  }
-);
 
 /* =========================
    Focus
@@ -365,20 +340,22 @@ function tagLabel(id: number | null) {
 ========================= */
 async function onAddAllocation() {
   if (!allocation.value) return;
-
-  autoCloseArmed.value = true;
   await allocation.value.addAllocation();
   showAllocationDate.value = false;
+  if (allocation.value.isBalanced.value) {
+    router.push({ name: "spending" });
+    return;
+  }
   await resetAmountToRemaining();
 }
 
 async function onSaveDraft() {
   if (!allocation.value) return;
   await allocation.value.saveDraft();
+  router.push({ name: "spending" });
 }
 
 async function onRemoveAllocation(index: number) {
-  autoCloseArmed.value = true;
   await allocation.value?.removeAllocation(index);
 }
 
@@ -518,8 +495,7 @@ function closeView() {
         <input v-model="comment"
           class="field field-long"
           placeholder="(optional comment)"
-          :disabled="allocation?.state.value === 'DRAFTED'
-                    || allocation?.state.value === 'BUSY'
+          :disabled="allocation?.state.value === 'BUSY'
                     || allocation?.state.value === 'READONLY'
                     || !categoryID
                     || !subCategoryID
@@ -528,8 +504,7 @@ function closeView() {
         <button
           class="theme-toggle"
           @click="onAddAllocation"
-          :disabled="allocation?.state.value === 'DRAFTED'
-                    || allocation?.state.value === 'BUSY'
+          :disabled="allocation?.state.value === 'BUSY'
                     || allocation?.state.value === 'READONLY'
                     || !categoryID
                     || !subCategoryID
@@ -552,27 +527,24 @@ function closeView() {
           <tr v-for="a in allocations" :key="a.id">
 
             <td class="alloc-text">
-              <div class="alloc-comment-row">
-                <span class="alloc-comment">
-                  {{ a.comment || "(no comment)" }}
-                </span>
-
-                <!-- 🗓 BADGE DATE (affiché seulement si ≠ date du spending) -->
-                <span
-                  v-if="a.allocationDate && a.allocationDate !== recordSafe.date"
-                  class="alloc-date-badge"
-                  :title="a.allocationDate"
-                >
-                  {{ formatDate(a.allocationDate, "short") }}
-                </span>
-                <!-- 🏷 TAG -->
-                <span
-                  v-if="a.allocatedTagID"
-                  class="alloc-tag"
-                >
-                  {{ tagLabel(a.allocatedTagID) }}
-                </span>
-              </div>
+            <div class="alloc-comment-row">
+              <span class="alloc-comment">
+                {{ a.comment || "(no comment)" }}
+              </span>
+              <span
+                v-if="a.allocationDate && a.allocationDate !== recordSafe.date"
+                class="alloc-date-badge"
+                :title="a.allocationDate"
+              >
+                {{ formatDate(a.allocationDate, "short") }}
+              </span>
+              <span
+                v-if="a.allocatedTagID"
+                class="alloc-tag-chip"
+              >
+                {{ tagLabel(a.allocatedTagID) }}
+              </span>
+            </div>
               <div class="alloc-category">
                 {{ categoryLabel(a.categoryID) }}
                 <span v-if="a.subCategoryID">
@@ -822,9 +794,42 @@ function closeView() {
 /* =========================================================
    Text hierarchy
 ========================================================= */
+.alloc-comment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .alloc-comment {
   font-size: 0.95rem;
   font-weight: 500;
+}
+
+.alloc-date-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.alloc-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .alloc-category {
