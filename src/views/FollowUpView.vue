@@ -17,11 +17,11 @@ import { loadJSONFromFolder } from "@/services/driveAdapter";
 import { useCategories } from "@/composables/useCategories";
 import type { CategoryNature } from "@/composables/useCategories";
 
+import ChipSelector from "@/components/ChipSelector.vue";
+
 import FollowUpDetails from "@/components/followup/FollowUpDetails.vue";
 
 import { useAppParameters } from "@/composables/useAppParameters";
-
-const { appParameters, load } = useAppParameters();
 
 import { formatDate } from "@/utils/dateFormat";
 
@@ -173,44 +173,58 @@ function fmt(n: number): string {
 /* =========================
    CATEGORY CHIPS
 ========================= */
+function isCategoryVisible(meta: any): boolean {
+  if (!meta) return false;
+  if (meta.displayScope === "X") return false;
+  if (
+    natureFilter.value !== "ALL" &&
+    meta.nature !== natureFilter.value
+  ) {
+    return false;
+  }
+  if (
+    meta.displayScope === "S" &&
+    !showSecondaryCategories.value
+  ) {
+    return false;
+  }
+  return true;
+}
 
 const categoryChips = computed(() => {
   if (!followUpRaw.value) return [];
 
   return followUpRaw.value.categories
-    .map(c => {
-      const meta = categoriesStore.getCategory(c.categoryId);
-      if (!meta) return null;
-
-      if (
-        natureFilter.value !== "ALL" &&
-        meta.nature !== natureFilter.value
-      ) {
-        return null;
-      }
-
-      if (meta.displayScope === "S" && !showSecondaryCategories.value)
-        return null;
-
-      if (meta.displayScope === "X") return null;
-
-      return meta;
-    })
-    .filter((c): c is NonNullable<typeof c> => c !== null)
+    .map((c: any) =>
+      categoriesStore.getCategory(c.categoryId)
+    )
+    .filter((meta): meta is NonNullable<typeof meta> => !!meta)
+    .filter(isCategoryVisible)
     .sort((a, b) => a.seq - b.seq);
+});
+
+const categoryChipItems = computed(() => {
+  const base = categoryChips.value.map(cat => ({
+    id: String(cat.id),
+    label: cat.label
+  }));
+  return [
+    { id: "*", label: "All" },
+    ...base,
+    {
+      id: "__TOGGLE__",
+      label: showSecondaryCategories.value ? "←" : "→"
+    }
+  ];
 });
 
 /* =========================
    Derived state
 ========================= */
-
-const followUpSpreadLimit = computed(() => {
-  return appParameters.value?.followUpSpreadLimit ?? 10;
-});
+let followUpSpreadLimit = ref(10)
 
 const availableYears = computed(() => {
   if (!followUpRaw.value) return [];
-
   return followUpRaw.value.categories
     .flatMap(c => c.years.map(y => y.year))
     .filter((v, i, a) => a.indexOf(v) === i)
@@ -219,16 +233,25 @@ const availableYears = computed(() => {
 
 const activeCategory = computed(() => {
   if (selectedCategory.value === "*") return null;
-
   return categoriesStore.getCategory(Number(selectedCategory.value));
 });
 
 const subCategoryChips = computed(() => {
   if (!activeCategory.value) return [];
-
   return categoriesStore
     .getSubcategories(activeCategory.value.id)
     .sort((a, b) => a.seq - b.seq);
+});
+
+const subCategoryChipItems = computed(() => {
+  if (!activeCategory.value) return [];
+  return [
+    { id: "*", label: "All" },
+    ...subCategoryChips.value.map(sub => ({
+      id: String(sub.id),
+      label: sub.label
+    }))
+  ];
 });
 
 function selectAllCategories() {
@@ -241,8 +264,28 @@ function selectCategory(id: number) {
   selectedSubCategory.value = null;
 }
 
+function onCategorySelect(id: string) {
+  if (id === "__TOGGLE__") {
+    showSecondaryCategories.value = !showSecondaryCategories.value;
+    return;
+  }
+  if (id === "*") {
+    selectAllCategories();
+    return;
+  }
+  selectCategory(Number(id));
+}
+
 function selectSubCategory(id: number) {
   selectedSubCategory.value = String(id);
+}
+
+function onSubCategorySelect(id: string) {
+  if (id === "*") {
+    selectedSubCategory.value = null;
+    return;
+  }
+  selectSubCategory(Number(id));
 }
 
 function analysedValue(
@@ -256,75 +299,51 @@ function analysedValue(
 /* =========================
    Follow-up computation
 ========================= */
-const items = computed<FollowUpItem[]>(() => {
 
+function computeCategoryItems(): FollowUpItem[] {
   if (!followUpRaw.value) return [];
 
   const out: FollowUpItem[] = [];
 
-  /* =========================================================
-     MODE 1 — aucune catégorie sélectionnée
-     → liste des catégories
-  ========================================================= */
+  for (const c of followUpRaw.value.categories) {
 
-  if (selectedCategory.value === "*") {
+    const meta = categoriesStore.getCategory(c.categoryId);
+    if (!meta) continue;
 
-    for (const c of followUpRaw.value.categories) {
+    if (!isCategoryVisible(meta)) continue;
 
-      const meta = categoriesStore.getCategory(c.categoryId);
-      if (!meta) continue;
-      if (meta.displayScope === "X") continue;
+    const yearData = c.years.find(y => y.year === year.value);
+    if (!yearData) continue;
 
-      /* 🔹 filtres cohérents avec les chips */
+    const amount = yearData.items.reduce((sum, i) => {
 
-      if (
-        natureFilter.value !== "ALL" &&
-        meta.nature !== natureFilter.value
-      ) continue;
+      const base =
+        analysisScope.value === "MTD"
+          ? i.monthToDate
+          : i.amount;
 
-      if (
-        meta.displayScope === "S" &&
-        !showSecondaryCategories.value
-      ) continue;
+      const off =
+        analysisScope.value === "MTD"
+          ? i.monthToDateOffBudget
+          : i.amountOffBudget;
 
-      /* ---------------------------------- */
+      return sum + analysedValue(base, off);
 
-      const yearData = c.years.find(y => y.year === year.value);
-      if (!yearData) continue;
+    }, 0);
 
-        const amount = yearData.items.reduce((sum, i) => {
-
-          const base =
-            analysisScope.value === "MTD"
-              ? i.monthToDate
-              : i.amount;
-
-          const off =
-            analysisScope.value === "MTD"
-              ? i.monthToDateOffBudget
-              : i.amountOffBudget;
-
-          return sum + analysedValue(base, off);
-
-        }, 0);
-
-      out.push({
-        id: String(c.categoryId),
-        label: meta.label,
-        amount
-      });
-
-    }
-
-    return out.sort((a, b) => a.label.localeCompare(b.label));
-
+    out.push({
+      id: String(c.categoryId),
+      label: meta.label,
+      amount
+    });
   }
 
-  /* =========================================================
-     MODE 2 / 3 — catégorie sélectionnée
-     → liste des sous-catégories
-     → ou une seule sous-catégorie si sélectionnée
-  ========================================================= */
+  return out.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function computeSubCategoryItems(): FollowUpItem[] {
+
+  if (!followUpRaw.value) return [];
 
   const catId = Number(selectedCategory.value);
 
@@ -342,8 +361,7 @@ const items = computed<FollowUpItem[]>(() => {
 
   if (!yearData) return [];
 
-  const subTotals =
-    new Map<number, number>();
+  const subTotals = new Map<number, number>();
 
   for (const i of yearData.items) {
 
@@ -363,8 +381,9 @@ const items = computed<FollowUpItem[]>(() => {
       i.subCategoryId,
       (subTotals.get(i.subCategoryId) ?? 0) + value
     );
-
   }
+
+  const out: FollowUpItem[] = [];
 
   const officialSubs =
     meta.subcategories
@@ -372,26 +391,31 @@ const items = computed<FollowUpItem[]>(() => {
       .sort((a, b) => a.seq - b.seq);
 
   for (const sub of officialSubs) {
-  
+
     if (!subTotals.has(sub.id)) continue;
 
     if (
       selectedSubCategory.value !== null &&
       Number(selectedSubCategory.value) !== sub.id
-    ) {
-      continue;
-    }
+    ) continue;
 
     out.push({
       id: String(sub.id),
       label: sub.label,
       amount: subTotals.get(sub.id) ?? 0
     });
-
   }
 
   return out;
+}
 
+const items = computed<FollowUpItem[]>(() => {
+
+  if (selectedCategory.value === "*") {
+    return computeCategoryItems();
+  }
+
+  return computeSubCategoryItems();
 });
 
 function displayedBudget(item: FollowUpItem) {
@@ -664,6 +688,10 @@ watch(
     await loadFollowUp();
     await loadBudget();
 /*    await FollowUpDetails();*/
+    const { appParameters } = useAppParameters()
+
+    followUpSpreadLimit.value =
+      appParameters.value?.followUpSpreadLimit ?? 10
   },
   { immediate: true }
 );
@@ -764,60 +792,25 @@ watch(
 
           </div>
 
-          <!-- Categories -->
-          <div class="filter-row with-label">
-            <span class="filter-label">Category</span>
+          <div class="category-block">
+            <!-- Categories -->
+            <ChipSelector
+              label="Category"
+              :items="categoryChipItems"
+              :model-value="selectedCategory"
+              @update:modelValue="onCategorySelect"
+              :align-with-content="false"
+            />
 
-            <button
-              class="chip"
-              :class="{ active: selectedCategory === '*' }"
-              @click="selectAllCategories"
-            >
-              All
-            </button>
-
-            <button
-              v-for="cat in categoryChips"
-              :key="cat.id"
-              class="chip"
-              :class="{ active: selectedCategory === String(cat.id) }"
-              @click="selectCategory(cat.id)"
-            >
-              {{ cat.label }}
-            </button>
-
-            <button
-              class="chip more-toggle"
-              :class="{ active: showSecondaryCategories }"
-              @click="showSecondaryCategories = !showSecondaryCategories"
-              :title="showSecondaryCategories
-                ? 'Hide secondary categories'
-                : 'Show secondary categories'"
-            >
-              {{ showSecondaryCategories ? '←' : '→' }}
-            </button>
-          </div>
-
-          <!-- Subcategories -->
-          <div v-if="activeCategory" class="filter-row with-label">
-            <span class="filter-label"></span>
-            <button
-              class="chip"
-              :class="{ active: selectedSubCategory === null }"
-              @click="selectedSubCategory = null"
-            >
-              All
-            </button>
-
-            <button
-              v-for="sub in subCategoryChips"
-              :key="sub.id"
-              class="chip"
-              :class="{ active: selectedSubCategory === String(sub.id) }"
-              @click="selectSubCategory(sub.id)"
-            >
-              {{ sub.label }}
-            </button>
+            <!-- Subcategories -->
+            <ChipSelector
+              v-if="activeCategory"
+              label=""
+              :items="subCategoryChipItems"
+              :model-value="selectedSubCategory ?? '*'"
+              @update:modelValue="onSubCategorySelect"
+              :align-with-content="false"
+            />
           </div>
         </div>
       </section>
@@ -995,6 +988,18 @@ watch(
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--text-soft); /* 🔥 FIX */
+}
+
+.category-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* espace léger global */
+}
+
+/* vraie séparation visuelle */
+.subcategory-row {
+  margin-top: 6px;
+  padding-left: 110px; /* 🔥 aligne avec les chips (important) */
 }
 
 /* Primary group */

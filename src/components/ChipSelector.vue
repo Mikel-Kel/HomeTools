@@ -147,7 +147,7 @@ watch(() => props.items, () => {
     <div class="chip-layout">
       <div class="chip-fixed">
         <button
-          v-if="showAll"
+          v-if="showAll && !items.some(i => i.id === '*')"  
           class="chip"
           :class="{ active: isAllActive }"
           :disabled="disabled"
