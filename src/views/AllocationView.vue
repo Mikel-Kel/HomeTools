@@ -361,6 +361,15 @@ async function onRemoveAllocation(index: number) {
 
 function closeView() {
   if (busy.value) return;
+
+  if (allocation.value?.hasUnsavedChanges.value) {
+    const ok = confirm(
+      "Discard unsaved allocation changes?"
+    );
+
+    if (!ok) return;
+  }
+
   router.push({ name: "spending" });
 }
 </script>

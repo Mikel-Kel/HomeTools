@@ -81,6 +81,8 @@ export function useAllocation(
   const allocationDate = ref<string | null>(null);
   const allocatedTagID = ref<number | null>(null);
 
+  const lastSavedSnapshot = ref<string>("[]");
+
   /* =========================
      Computed
   ========================= */
@@ -147,6 +149,10 @@ export function useAllocation(
         : "EDITING";
   }
 
+  const hasUnsavedChanges = computed(() =>
+    buildSnapshot() !== lastSavedSnapshot.value
+  );
+
   /* =========================
      Draft persistence
   ========================= */
@@ -172,6 +178,7 @@ export function useAllocation(
         allocations: allocations.value
       }
     );
+    lastSavedSnapshot.value = buildSnapshot();
   }
 
   /* =========================
@@ -213,6 +220,7 @@ export function useAllocation(
 
           recomputeLocalState();
           presetAmount();
+          lastSavedSnapshot.value = buildSnapshot();
           return;
         }
 
@@ -328,7 +336,7 @@ export function useAllocation(
   }
 
   /* =========================
-     Form helpers
+     Helpers
   ========================= */
 
   function presetAmount() {
@@ -336,6 +344,19 @@ export function useAllocation(
       Number(
         Math.abs(remainingAmount.value).toFixed(2)
       );
+  }
+
+  function buildSnapshot() {
+    return JSON.stringify(
+      allocations.value.map(a => ({
+        categoryID: a.categoryID,
+        subCategoryID: a.subCategoryID,
+        comment: a.comment,
+        amount: a.amount,
+        allocationDate: a.allocationDate,
+        allocatedTagID: a.allocatedTagID
+      }))
+    );
   }
 
   function resetForm() {
@@ -371,6 +392,7 @@ export function useAllocation(
     hasDraft,
     canSaveDraft,
     canRelease,
+    hasUnsavedChanges,
 
     loading,
     busy,
