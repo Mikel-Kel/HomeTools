@@ -65,10 +65,11 @@ const props = defineProps<{
 
 const activeRowFitid = ref<string | null>(null)
 const raw = ref<FollowUpDetailsFile | null>(null);
-const pendingReallocationIds =
-  ref<Set<string>>(new Set());
 
-    const categoriesStore = useCategories();
+const pendingReallocationIds =
+  ref<Set<string>>(loadPending());
+
+const categoriesStore = useCategories();
 const tagsStore = useAllocationTags()
 const partiesStore = useParties()
 const detailsRemoteState = ref<string | null>(null)
@@ -94,6 +95,20 @@ function toggleRowAction(fitid: string) {
     activeRowFitid.value === fitid
       ? null
       : fitid
+}
+
+const PENDING_KEY = "pendingReallocations"
+
+function loadPending(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(PENDING_KEY) || "[]"))
+  } catch {
+    return new Set()
+  }
+}
+
+function savePending(set: Set<string>) {
+  localStorage.setItem(PENDING_KEY, JSON.stringify([...set]))
 }
 
 /* ========
@@ -141,7 +156,9 @@ async function requestReallocation(item: FollowUpDetailItem) {
       await save(event)
     
       pendingReallocationIds.value.add(item.allocationId)
-    activeRowFitid.value = null
+      savePending(pendingReallocationIds.value)
+
+      activeRowFitid.value = null
 
   } catch (e) {
     console.error(
@@ -177,7 +194,7 @@ async function loadDetails() {
     }
 
     raw.value = data;
-
+    reconcilePending()
   }
 
   catch (e: any) {
@@ -196,7 +213,6 @@ watch(
   () => props.year,
   async () => {
     activeRowFitid.value = null
-    pendingReallocationIds.value.clear()
     detailsRemoteState.value = null
     await loadDetails()
   },
@@ -323,6 +339,28 @@ function showFxPopover(event: MouseEvent, item: FollowUpDetailItem) {
 function closeFxPopover() {
   fxPopover.value = null;
   if (fxTimer) clearTimeout(fxTimer);
+}
+
+function reconcilePending() {
+  if (!raw.value) return
+
+  const currentIds = new Set(
+    raw.value.items.map(i => i.allocationId)
+  )
+
+  let changed = false
+
+  for (const id of pendingReallocationIds.value) {
+    // si l'allocation n'existe plus → backend a traité
+    if (!currentIds.has(id)) {
+      pendingReallocationIds.value.delete(id)
+      changed = true
+    }
+  }
+
+  if (changed) {
+    savePending(pendingReallocationIds.value)
+  }
 }
 
 /* =========================================================
