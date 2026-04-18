@@ -83,6 +83,8 @@ export function useAllocation(
 
   const lastSavedSnapshot = ref<string>("[]");
 
+  const draftMode = ref<"INSERT" | "UPDATE">("INSERT");
+
   /* =========================
      Computed
   ========================= */
@@ -173,6 +175,7 @@ export function useAllocation(
         spendingId,
         processed: false,
         toProcess: isBalanced.value,
+        mode:draftMode.value,
         partyID: partyID ?? null,
         savedAt: new Date().toISOString(),
         allocations: allocations.value
@@ -205,6 +208,8 @@ export function useAllocation(
               filename
             );
 
+          draftMode.value = raw?.mode; // 🔥 ICI
+
           allocations.value =
             Array.isArray(raw?.allocations)
               ? raw.allocations.map((a: any) => ({
@@ -221,34 +226,6 @@ export function useAllocation(
           recomputeLocalState();
           presetAmount();
           lastSavedSnapshot.value = buildSnapshot();
-          return;
-        }
-
-        const releasedFile =
-          await findFileByName("allocations/released", filename);
-
-        if (releasedFile) {
-          const raw =
-            await loadJSONFromFolder<any>(
-              "allocations/released",
-              filename
-            );
-
-          allocations.value =
-            Array.isArray(raw?.allocations)
-              ? raw.allocations.map((a: any) => ({
-                  id: crypto.randomUUID(),
-                  categoryID: a.categoryID ?? null,
-                  subCategoryID: a.subCategoryID ?? null,
-                  comment: a.comment ?? "",
-                  amount: Number(Number(a.amount).toFixed(2)),
-                  allocationDate: a.allocationDate ?? null,
-                  allocatedTagID: a.allocatedTagID ?? null
-                }))
-              : [];
-
-          state.value = "READONLY";
-          presetAmount();
           return;
         }
 
@@ -347,8 +324,9 @@ export function useAllocation(
   }
 
   function buildSnapshot() {
-    return JSON.stringify(
-      allocations.value.map(a => ({
+    return JSON.stringify({
+      mode: draftMode.value,
+      allocations: allocations.value.map(a => ({
         categoryID: a.categoryID,
         subCategoryID: a.subCategoryID,
         comment: a.comment,
@@ -356,7 +334,7 @@ export function useAllocation(
         allocationDate: a.allocationDate,
         allocatedTagID: a.allocatedTagID
       }))
-    );
+    });
   }
 
   function resetForm() {

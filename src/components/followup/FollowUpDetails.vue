@@ -67,7 +67,7 @@ const activeRowFitid = ref<string | null>(null)
 const raw = ref<FollowUpDetailsFile | null>(null);
 
 const pendingReallocationIds =
-  ref<Set<string>>(loadPending());
+  ref<Map<string, number>>(loadPending());
 
 const categoriesStore = useCategories();
 const tagsStore = useAllocationTags()
@@ -99,16 +99,21 @@ function toggleRowAction(fitid: string) {
 
 const PENDING_KEY = "pendingReallocations"
 
-function loadPending(): Set<string> {
+function loadPending(): Map<string, number> {
   try {
-    return new Set(JSON.parse(localStorage.getItem(PENDING_KEY) || "[]"))
+    return new Map(
+      JSON.parse(localStorage.getItem(PENDING_KEY) || "[]")
+    );
   } catch {
-    return new Set()
+    return new Map();
   }
 }
 
-function savePending(set: Set<string>) {
-  localStorage.setItem(PENDING_KEY, JSON.stringify([...set]))
+function savePending(map: Map<string, number>) {
+  localStorage.setItem(
+    PENDING_KEY,
+    JSON.stringify([...map.entries()])
+  );
 }
 
 /* ========
@@ -155,7 +160,9 @@ async function requestReallocation(item: FollowUpDetailItem) {
     
       await save(event)
     
-      pendingReallocationIds.value.add(item.allocationId)
+      pendingReallocationIds.value.set(
+        item.allocationId,
+        Date.now());
       savePending(pendingReallocationIds.value)
 
       activeRowFitid.value = null
@@ -194,7 +201,9 @@ async function loadDetails() {
     }
 
     raw.value = data;
-    reconcilePending()
+    if (pendingReallocationIds.value.size) {
+      reconcilePending();
+    }
   }
 
   catch (e: any) {
@@ -342,24 +351,23 @@ function closeFxPopover() {
 }
 
 function reconcilePending() {
-  if (!raw.value) return
+  if (!raw.value) return;
+  if (pendingReallocationIds.value.size === 0) return;
 
-  const currentIds = new Set(
-    raw.value.items.map(i => i.allocationId)
-  )
+  const fileTime = new Date(raw.value.updatedAt ?? 0).getTime();
 
-  let changed = false
+  let changed = false;
 
-  for (const id of pendingReallocationIds.value) {
-    // si l'allocation n'existe plus → backend a traité
-    if (!currentIds.has(id)) {
-      pendingReallocationIds.value.delete(id)
-      changed = true
+  for (const [id, ts] of [...pendingReallocationIds.value]) {
+    // 🔥 uniquement si le fichier est plus récent que la demande
+    if (fileTime > ts) {
+      pendingReallocationIds.value.delete(id);
+      changed = true;
     }
   }
 
   if (changed) {
-    savePending(pendingReallocationIds.value)
+    savePending(pendingReallocationIds.value);
   }
 }
 
