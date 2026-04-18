@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch,onMounted } from "vue";
+import { computed, watch, ref, onMounted } from "vue";
 
 /* =========================
    Device detection
@@ -58,20 +58,51 @@ import AppIcon from "@/components/AppIcon.vue";
    Version app (injectée par Vite)
 ========================= */
 const appVersion = __APP_VERSION__;
+
+
+/* =========================
+   Markets (TEMP MOCK)
+========================= */
+interface MarketIndex {
+  code: string
+  value: number
+  change: number
+}
+
+const markets = ref([
+  {
+    code: "SMI",
+    value: 13426.72,
+    change: 0.45,
+    ytd: 6.2,
+    y1: 11.8
+  },
+  {
+    code: "SP500",
+    value: 5123.45,
+    change: -0.12,
+    ytd: 4.1,
+    y1: 9.5
+  },
+  {
+    code: "NASDAQ",
+    value: 16234.11,
+    change: 0.78,
+    ytd: 8.9,
+    y1: 15.2
+  }
+])
+
 </script>
 
 <template>
   <div class="homepage">
+    
     <!-- Header -->
     <div class="home-header">
       <div class="title-block">
-        <AppTitle
-          text="Welcome"
-          icon="home"
-          :iconSize="64"
-        />
+        <AppTitle text="Welcome" icon="home" :iconSize="64" />
 
-        <!-- Drive status (aligné sous le TEXTE, pas l’icône) -->
         <div class="drive-status" :class="uiDriveStatus">
           <span class="dot"></span>
           <span class="status-text">
@@ -79,6 +110,7 @@ const appVersion = __APP_VERSION__;
             <template v-if="backend === 'LOCAL_DRIVE' && !getLocalDirectory()">
               Select HomeTools folder (Mac)
             </template>
+
             <template v-else-if="uiDriveStatus === 'connected'">
               <template v-if="backend === 'LOCAL_DRIVE'">
                 App ready (local)
@@ -96,64 +128,128 @@ const appVersion = __APP_VERSION__;
         </div>
       </div>
 
-      <!-- Theme toggle -->
-      <button class="theme-toggle" @click="toggle" title="Toggle theme">
-        <AppIcon
-          :name="theme === 'dark' ? 'sun' : 'moon'"
-          :size="24"
-        />
+      <button class="theme-toggle" @click="toggle">
+        <AppIcon :name="theme === 'dark' ? 'sun' : 'moon'" :size="24" />
       </button>
     </div>
 
-    <!-- Menu -->
-    <ul class="menu">
-      <li>
-        <router-link to="/authentication" class="menu-item">
-          <AppIcon name="locker" :size="32" />
-          <span>Authentication</span>
-        </router-link>
-      </li>
+    <!-- =========================
+         CONTENT 2 COLONNES
+    ========================= -->
+    <div class="home-content">
 
-      <li>
-        <router-link to="/spending" class="menu-item">
-          <AppIcon name="spending" :size="32" />
-          <span>Spending</span>
-        </router-link>
-      </li>
+      <!-- LEFT -->
+      <div class="home-left">
+        <ul class="menu">
+          <li>
+            <router-link to="/authentication" class="menu-item">
+              <AppIcon name="locker" :size="32" />
+              <span>Authentication</span>
+            </router-link>
+          </li>
 
-      <li>
-        <router-link to="/follow-up" class="menu-item">
-          <AppIcon name="followup" :size="32" />
-          <span>Follow-up</span>
-        </router-link>
-      </li>
-      <li>
-        <router-link to="/documentsArchive" class="menu-item">
-          <AppIcon name="bookshelf" :size="32" />
-          <span>Archives</span>
-        </router-link>
-      </li>
+          <li>
+            <router-link to="/spending" class="menu-item">
+              <AppIcon name="spending" :size="32" />
+              <span>Spending</span>
+            </router-link>
+          </li>
 
-      <li>
-        <router-link to="/events" class="menu-item dev">
-          <AppIcon name="pages_warning" :size="32" />
-          <span>Activity logs</span>
-        </router-link>
-      </li>
-    </ul>
-    <!-- Version app -->
+          <li>
+            <router-link to="/follow-up" class="menu-item">
+              <AppIcon name="followup" :size="32" />
+              <span>Follow-up</span>
+            </router-link>
+          </li>
+
+          <li>
+            <router-link to="/documentsArchive" class="menu-item">
+              <AppIcon name="bookshelf" :size="32" />
+              <span>Archives</span>
+            </router-link>
+          </li>
+
+          <li>
+            <router-link to="/events" class="menu-item dev">
+              <AppIcon name="pages_warning" :size="32" />
+              <span>Activity logs</span>
+            </router-link>
+          </li>
+        </ul>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="home-right">
+        <div class="markets">
+
+          <div class="markets-header-grid">
+            <span class="col-title-left">Markets</span>
+            <span>Closing</span>
+            <span>Δ D</span>
+            <span>YTD</span>
+            <span>1 Y</span>
+          </div>
+
+          <div class="markets-list">
+            <div v-for="m in markets" :key="m.code" class="market-item">
+
+              <span class="market-code">{{ m.code }}</span>
+
+              <span class="market-value">
+                {{ m.value.toLocaleString() }}
+              </span>
+
+              <span
+                class="market-change"
+                :class="{ positive: m.change >= 0, negative: m.change < 0 }"
+              >
+                {{ m.change >= 0 ? "+" : "" }}{{ m.change }}%
+              </span>
+
+              <span
+                class="market-ytd"
+                :class="{ positive: m.ytd >= 0, negative: m.ytd < 0 }"
+              >
+                {{ m.ytd >= 0 ? "+" : "" }}{{ m.ytd }}%
+              </span>
+
+              <span
+                class="market-y1"
+                :class="{ positive: m.y1 >= 0, negative: m.y1 < 0 }"
+              >
+                {{ m.y1 >= 0 ? "+" : "" }}{{ m.y1 }}%
+              </span>
+
+            </div>
+            
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Version -->
     <div class="app-version">
       Version {{ appVersion }}
     </div>
+
   </div>
 </template>
 
 <style scoped>
+
+/* =========================
+   BASE
+========================= */
+
 .homepage {
   padding: 1rem;
   background: var(--bg);
   color: var(--text);
 }
+
+/* =========================
+   HEADER
+========================= */
 
 .home-header {
   display: flex;
@@ -161,35 +257,29 @@ const appVersion = __APP_VERSION__;
   justify-content: space-between;
 }
 
-/* =========================
-   Title + status
-========================= */
 .title-block {
   display: flex;
   flex-direction: column;
 }
 
-/* 🔥 FIX ALIGNEMENT PLUS ROBUSTE */
 .drive-status {
   display: flex;
   align-items: center;
   gap: 8px;
 
-  margin-left: 76px; /* 🔥 alignement sous le texte (64 + gap) */
+  margin-left: 76px;
   margin-top: -40px;
 
   font-size: 0.85rem;
   color: var(--text-soft);
 }
 
-/* Pastille */
 .drive-status .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
 }
 
-/* Couleurs */
 .drive-status.connected .dot {
   background: var(--positive);
 }
@@ -206,34 +296,51 @@ const appVersion = __APP_VERSION__;
   color: var(--negative);
 }
 
-/* 🔧 Fix alignement AppTitle */
 :deep(.app-title h1),
 :deep(.app-title h2) {
   line-height: 1.1;
-  margin-top: -0.6rem; /* 🔥 moins agressif */
+  margin-top: -0.6rem;
 }
 
 /* =========================
-   Theme toggle
+   THEME BUTTON
 ========================= */
+
 .theme-toggle {
   background: transparent;
-  color: var(--text);
   border: 1px solid transparent;
   padding: 6px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
 }
 
 .theme-toggle:hover {
   background: var(--primary-soft);
-  color: var(--primary);
 }
 
 /* =========================
-   Menu
+   LAYOUT 2 COLONNES
 ========================= */
+
+.home-content {
+  display: grid;
+  grid-template-columns: 1fr 520px;
+  gap: 16px;
+  margin-top: 1rem;
+  align-items: start;
+}
+
+.home-right {
+  position: sticky;
+  top: 1rem;
+  margin-right: 60px; /* 🔥 espace à droite */
+}
+
+
+/* =========================
+   MENU
+========================= */
+
 .menu {
   list-style: none;
   padding: 0;
@@ -260,29 +367,118 @@ const appVersion = __APP_VERSION__;
   color: var(--primary);
 }
 
-/* 🔥 FIX icône trop flashy en dark */
 .menu-item span {
   font-size: 1.5rem;
   opacity: 0.9;
 }
 
-/* Dev mode */
 .menu-item.dev {
-  opacity: 0.6; /* 🔥 plus propre */
+  opacity: 0.6;
 }
 
 /* =========================
-   App version (footer)
+   MARKETS
 ========================= */
+
+/* GRID COMMUNE */
+/* GRID STRICT */
+.markets-header-grid,
+.market-item {
+  display: grid;
+  grid-template-columns: 70px 90px 70px 70px 70px; /* 🔥 fixe */
+  align-items: center;
+  gap: 12px;
+}
+
+/* =========================
+   HEADER
+========================= */
+
+.markets-header-grid {
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+  color: var(--text-soft);
+}
+
+/* Markets (colonne 1) */
+.col-title-left {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+/* 👉 Titres centrés sauf Markets */
+.markets-header-grid span:not(:first-child) {
+  text-align: right;
+  padding-right: 10px;
+}
+
+/* =========================
+   LIGNES
+========================= */
+
+.market-item {
+  padding: 5px 0;              /* 🔥 plus compact */
+  font-size: 0.85rem;          /* 🔥 plus petit */
+  border-bottom: 1px solid var(--border);
+}
+
+.market-item:last-child {
+  border-bottom: none;
+}
+
+/* =========================
+   ALIGNEMENTS
+========================= */
+
+/* 👉 toutes les valeurs à droite */
+.market-item span:not(:first-child) {
+  text-align: right;
+}
+
+/* chiffres alignés proprement */
+.market-value,
+.market-change,
+.market-ytd,
+.market-y1 {
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================
+   COULEURS
+========================= */
+
+.market-change.positive,
+.market-ytd.positive,
+.market-y1.positive {
+  color: var(--positive);
+}
+
+.market-change.negative,
+.market-ytd.negative,
+.market-y1.negative {
+  color: var(--negative);
+}
+
+/* =========================
+   FOOTER
+========================= */
+
 .app-version {
   margin-top: 2rem;
   text-align: center;
-
   font-size: 0.75rem;
-  color: var(--text-muted); /* 🔥 FIX */
-  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
 
-  user-select: none;
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 900px) {
+  .home-content {
+    grid-template-columns: 1fr;
+  }
 }
 
 </style>
