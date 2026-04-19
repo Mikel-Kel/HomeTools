@@ -31,8 +31,11 @@ const uiDriveStatus = computed(() => {
 
 })
 
+import { loadJSONFromFolder } from "@/services/driveAdapter"
+
 onMounted(async () => {
   await loadSettings();
+  await loadMarkets();
 });
 
 /* =========================
@@ -60,38 +63,44 @@ import AppIcon from "@/components/AppIcon.vue";
 const appVersion = __APP_VERSION__;
 
 
-/* =========================
-   Markets (TEMP MOCK)
-========================= */
+/* ===============
+   Markets indices
+================== */
 interface MarketIndex {
+  id: number
   code: string
   value: number
   change: number
+  ytd: number
+  y1: number
 }
 
-const markets = ref([
-  {
-    code: "SMI",
-    value: 13426.72,
-    change: 0.45,
-    ytd: 6.2,
-    y1: 11.8
-  },
-  {
-    code: "SP500",
-    value: 5123.45,
-    change: -0.12,
-    ytd: 4.1,
-    y1: 9.5
-  },
-  {
-    code: "NASDAQ",
-    value: 16234.11,
-    change: 0.78,
-    ytd: 8.9,
-    y1: 15.2
+const markets = ref<MarketIndex[]>([])
+
+async function loadMarkets() {
+  try {
+    const data = await loadJSONFromFolder("settings", "homeSummary.json")
+
+    if (!data?.markets?.indices) {
+      console.warn("No markets data found")
+      markets.value = []
+      return
+    }
+
+    markets.value = data.markets.indices.map((m: any) => ({
+      id: m.id,
+      code: m.code,
+      value: Number(m.close),
+      change: Number(m.delta),
+      ytd: Number(m.ytd),
+      y1: Number(m.y1)
+    }))
+
+  } catch (err) {
+    console.error("Failed to load markets:", err)
+    markets.value = []
   }
-])
+}
 
 </script>
 
@@ -203,21 +212,21 @@ const markets = ref([
                 class="market-change"
                 :class="{ positive: m.change >= 0, negative: m.change < 0 }"
               >
-                {{ m.change >= 0 ? "+" : "" }}{{ m.change }}%
+                {{ m.change >= 0 ? "+" : "" }}{{ m.change.toFixed(2) }}%
               </span>
 
               <span
                 class="market-ytd"
                 :class="{ positive: m.ytd >= 0, negative: m.ytd < 0 }"
               >
-                {{ m.ytd >= 0 ? "+" : "" }}{{ m.ytd }}%
+                {{ m.ytd >= 0 ? "+" : "" }}{{ m.ytd.toFixed(1) }}%
               </span>
 
               <span
                 class="market-y1"
                 :class="{ positive: m.y1 >= 0, negative: m.y1 < 0 }"
               >
-                {{ m.y1 >= 0 ? "+" : "" }}{{ m.y1 }}%
+                {{ m.y1 >= 0 ? "+" : "" }}{{ m.y1.toFixed(1) }}%
               </span>
 
             </div>
