@@ -291,7 +291,7 @@ async function loadFXRates() {
           As of {{ formatDate(asOf,"text") }}
         </div>        
         <div v-if="fxRates.length" class="fx">
-          <div class="fx-header">
+          <div class="col-title-left">
             FX Rates
           </div>
           <div class="fx-list">
