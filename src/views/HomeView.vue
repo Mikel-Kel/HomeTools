@@ -32,6 +32,7 @@ const uiDriveStatus = computed(() => {
 })
 
 import { loadJSONFromFolder } from "@/services/driveAdapter"
+import { formatDate } from "@/utils/dateFormat"
 
 onMounted(async () => {
   await loadSettings();
@@ -77,6 +78,11 @@ interface MarketIndex {
 
 const markets = ref<MarketIndex[]>([])
 
+const asOf = computed(() => {
+  if (!markets.value.length) return null
+  return (markets.value[0] as any).asOf || null
+})
+
 async function loadMarkets() {
   try {
     const data = await loadJSONFromFolder("settings", "homeSummary.json")
@@ -93,7 +99,8 @@ async function loadMarkets() {
       value: Number(m.close),
       change: Number(m.delta),
       ytd: Number(m.ytd),
-      y1: Number(m.y1)
+      y1: Number(m.y1),
+      asOf: m.asOf
     }))
 
   } catch (err) {
@@ -233,6 +240,9 @@ async function loadMarkets() {
             
           </div>
         </div>
+        <div v-if="asOf" class="markets-asof">
+          As of {{ formatDate(asOf,"text") }}
+        </div>        
       </div>
     </div>
 
@@ -388,13 +398,16 @@ async function loadMarkets() {
 /* =========================
    MARKETS
 ========================= */
+.markets {
+  max-width: 420px;
+}
 
 /* GRID COMMUNE */
 /* GRID STRICT */
 .markets-header-grid,
 .market-item {
   display: grid;
-  grid-template-columns: 70px 90px 70px 70px 70px; /* 🔥 fixe */
+  grid-template-columns: 70px 1fr 70px 70px 70px;
   align-items: center;
   gap: 12px;
 }
@@ -467,6 +480,13 @@ async function loadMarkets() {
 .market-ytd.negative,
 .market-y1.negative {
   color: var(--negative);
+}
+
+.markets-asof {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
 }
 
 /* =========================
