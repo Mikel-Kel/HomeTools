@@ -37,6 +37,7 @@ import { formatDate } from "@/utils/dateFormat"
 onMounted(async () => {
   await loadSettings();
   await loadMarkets();
+  await loadFXRates()
 });
 
 /* =========================
@@ -106,6 +107,52 @@ async function loadMarkets() {
   } catch (err) {
     console.error("Failed to load markets:", err)
     markets.value = []
+  }
+}
+
+/* ===============
+   FX Rates
+================== */
+
+interface FXRate {
+  code: string
+  rate: number
+}
+
+const fxRates = ref<FXRate[]>([])
+
+async function loadFXRates() {
+  try {
+    const data = await loadJSONFromFolder("settings", "exchangeRates.json")
+
+    if (!data?.rates) {
+      console.warn("No FX data")
+      fxRates.value = []
+      return
+    }
+
+    // ⚠️ filtrage depuis AppParameters déjà chargé via loadSettings()
+    const settings = await loadJSONFromFolder("settings", "AppParameters.json")
+
+    const mainCurrencies = settings.fx.currencies
+      .filter((c: any) => c.tag === "S")
+      .map((c: any) => c.code)
+
+    fxRates.value = mainCurrencies
+      .map((ccy: string) => {
+        const raw = data.rates[ccy]
+        if (!raw) return null
+
+        return {
+          code: ccy,
+          rate: 1 / Number(raw)   // 🔥 inversion
+        }
+      })
+      .filter(Boolean)
+
+  } catch (err) {
+    console.error("FX load failed:", err)
+    fxRates.value = []
   }
 }
 
@@ -243,7 +290,21 @@ async function loadMarkets() {
         <div v-if="asOf" class="markets-asof">
           As of {{ formatDate(asOf,"text") }}
         </div>        
-      </div>
+        <div v-if="fxRates.length" class="fx">
+          <div class="fx-header">
+            FX Rates
+          </div>
+          <div class="fx-list">
+            <div v-for="f in fxRates" :key="f.code" class="fx-item">
+              <span class="fx-code">{{ f.code }}</span>
+              <span class="fx-value">
+                {{ f.rate.toFixed(4) }}
+              </span>
+            </div>
+          </div>
+
+        </div>
+      </div>  
     </div>
 
     <!-- Version -->
@@ -488,6 +549,40 @@ async function loadMarkets() {
   font-size: 0.7rem;
   color: var(--text-muted);
 }
+
+/* =========================
+   FX RATES
+========================= */
+
+.fx {
+  margin-top: 14px;
+  max-width: 100px;
+}
+
+.fx-header {
+  font-size: 0.75rem;
+  color: var(--text-soft);
+  margin-bottom: 4px;
+}
+
+.fx-item {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 12px;
+
+  font-size: 0.85rem;
+  padding: 4px 0;
+}
+
+.fx-code {
+  font-weight: 500;
+}
+
+.fx-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 
 /* =========================
    FOOTER
