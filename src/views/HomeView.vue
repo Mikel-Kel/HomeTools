@@ -259,7 +259,7 @@ async function loadFXRates() {
               <span class="market-code">{{ m.code }}</span>
 
               <span class="market-value">
-                {{ m.value.toLocaleString() }}
+                {{ Math.round(m.value).toLocaleString() }}
               </span>
 
               <span
@@ -605,4 +605,4 @@ async function loadFXRates() {
   }
 }
 
-</style>
+</style>ƒ
