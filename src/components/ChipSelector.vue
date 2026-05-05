@@ -285,18 +285,22 @@ watch(() => props.items, () => {
 /* =========================================================
    SCROLL BUTTONS
 ========================================================= */
-
 .scroll-btn {
   border: none;
-  background: transparent;
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
   font-size: 18px;
-  opacity: 0.5;
-  padding: 0 4px;
+  font-weight: 700;
+  opacity: 0.85;
+  padding: 0 6px;
+  border-radius: 999px;
 }
 
 .scroll-btn:hover:not(:disabled) {
   opacity: 1;
+  color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .scroll-btn:disabled {
