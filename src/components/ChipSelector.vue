@@ -99,10 +99,9 @@ const canScrollRight = ref(false)
 function updateScrollState() {
   const el = scrollRef.value
   if (!el) return
-
-  canScrollLeft.value = el.scrollLeft > 0
-  canScrollRight.value =
-    el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+  const maxScrollLeft = el.scrollWidth - el.clientWidth
+  canScrollLeft.value = el.scrollLeft > 1
+  canScrollRight.value = el.scrollLeft < maxScrollLeft - 1
 }
 
 function scroll(direction: number) {
