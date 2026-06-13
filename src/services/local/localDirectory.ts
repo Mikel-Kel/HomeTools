@@ -28,6 +28,12 @@ export function setLocalDirectory(
 
 export async function pickLocalDirectory(): Promise<FileSystemDirectoryHandle> {
 
+  if (!("showDirectoryPicker" in window)) {
+    throw new Error(
+      "BROWSER_NOT_SUPPORTED"
+    );
+  }
+
   const dir = await (window as any).showDirectoryPicker({
     mode: "readwrite",
     id: "hometools",

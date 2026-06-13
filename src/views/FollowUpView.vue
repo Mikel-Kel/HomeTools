@@ -105,6 +105,7 @@ const followUpRaw = ref<FollowUpFile | null>(null);
 const budgetRaw = ref<BudgetFile | null>(null);
 
 const analysisScope = ref<AnalysisScope>("YTD");
+const labelFilter = ref("");  
 
 /* =========================
    Drive watcher
@@ -168,6 +169,14 @@ function endOfPreviousMonth(d: Date): Date {
 
 function fmt(n: number): string {
   return Math.round(n).toLocaleString();
+}
+
+function normalizeText(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
 }
 
 /* =========================
@@ -409,13 +418,22 @@ function computeSubCategoryItems(): FollowUpItem[] {
   return out;
 }
 
-const items = computed<FollowUpItem[]>(() => {
-
+const baseItems = computed<FollowUpItem[]>(() => {
   if (selectedCategory.value === "*") {
     return computeCategoryItems();
   }
 
   return computeSubCategoryItems();
+});
+
+const items = computed<FollowUpItem[]>(() => {
+  const q = normalizeText(labelFilter.value);
+
+  if (!q) return baseItems.value;
+
+  return baseItems.value.filter(item =>
+    normalizeText(item.label).includes(q)
+  );
 });
 
 function displayedBudget(item: FollowUpItem) {
@@ -792,6 +810,16 @@ watch(
 
           </div>
 
+          <div class="text-filter-row">
+            <input
+              v-model="labelFilter"
+              class="text-filter"
+              type="search"
+              placeholder="Search label…"
+              autocomplete="off"
+            />
+          </div>
+
           <div class="category-block">
             <!-- Categories -->
             <ChipSelector
@@ -928,6 +956,7 @@ watch(
       :nature="detailsNature"
       :max-month="detailsMaxMonth"
       :include-off-budget="includeOffBudget"
+      :label-filter="labelFilter"
     />
   </div>
 </template>
@@ -1013,6 +1042,30 @@ watch(
 
 .offbudget-toggle {
   margin-left: 4px;
+}
+
+.text-filter-row {
+  padding: 4px 0 8px 0;
+}
+
+.text-filter {
+  width: 100%;
+  max-width: 360px;
+  padding: 7px 12px;
+
+  border-radius: 999px;
+  border: 1px solid var(--border);
+
+  background: var(--surface);
+  color: var(--text);
+
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.text-filter::placeholder {
+  color: var(--text-soft);
+  opacity: 0.6;
 }
 
 /* =========================================================

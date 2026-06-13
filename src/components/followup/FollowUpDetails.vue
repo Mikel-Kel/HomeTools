@@ -57,6 +57,7 @@ const props = defineProps<{
   nature?: "E" | "I" | null;
   maxMonth?: number | null;
   includeOffBudget?: boolean;
+  labelFilter?: string;
 }>();
 
 /* =========================================================
@@ -371,6 +372,14 @@ function reconcilePending() {
   }
 }
 
+function normalizeText(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
 /* =========================================================
    FILTERED ITEMS
 ========================================================= */
@@ -407,6 +416,18 @@ const filteredItems = computed<FollowUpDetailItem[]>(() => {
         getTag(it.tagId)?.offBudget === true;
 
       if (!includeOffBudget && isOffBudget) return false;
+
+      const q = normalizeText(props.labelFilter ?? "");
+      if (q) {
+        const haystack = normalizeText([
+          it.description,
+          partyLabel(it.partyId),
+          it.bankDescription,
+          tagLabel(it.tagId)
+        ].join(" "));
+
+        if (!haystack.includes(q)) return false;
+      }
 
       return true;
     })

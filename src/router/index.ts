@@ -17,6 +17,12 @@ const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: "/select-folder",
+      name: "selectFolder",
+      component: AuthenticationView,
+      meta: { level: 1, title: "Select Folder" },
+    },
+    {
       path: "/",
       name: "home",
       component: HomeView,
@@ -132,18 +138,23 @@ router.beforeEach(async (to, _from, next) => {
 ========================= */
 router.afterEach(async () => {
 
+  const backend = detectStorageBackend();
+
+  if (
+    backend === "LOCAL_DRIVE" &&
+    !getLocalDirectory()
+  ) {
+    return;
+  }
+
   try {
-
     await ensureAppVersionChecked();
-
   } catch (err: any) {
-
     alert(
       "⚠️ Application version inconsistency detected.\n\n" +
       err.message +
       "\n\nPlease refresh your browser and try again."
     );
-
   }
 
 });

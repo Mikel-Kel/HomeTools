@@ -5,6 +5,9 @@ import { useRouter } from "vue-router";
 import PageHeader from "@/components/PageHeader.vue";
 import { useDrive } from "@/composables/useDrive";
 
+import { detectStorageBackend } from "@/utils/storageBackend";
+import { pickLocalDirectory } from "@/services/local/localDirectory";
+
 import {
   readPublishedJSON
 } from "@/services/publishedData/publishedData";
@@ -17,6 +20,35 @@ const router = useRouter();
 /* =========================
    Drive session
 ========================= */
+const backend = detectStorageBackend();
+
+const isLocalDrive = computed(() =>
+  backend === "LOCAL_DRIVE"
+);
+
+async function handlePickLocalDirectory() {
+  try {
+
+    await pickLocalDirectory();
+
+    router.push({ name: "home" });
+
+  } catch (err: any) {
+
+    if (err?.message === "BROWSER_NOT_SUPPORTED") {
+
+      alert(
+        "Local Drive mode requires Chrome or Edge.\n\n" +
+        "Safari does not support folder selection."
+      );
+
+      return;
+    }
+
+    console.error(err);
+  }
+}
+
 const {
   connect,
   driveStatus,
@@ -84,9 +116,21 @@ async function testPublishedData() {
 </script>
 
 <template>
-  <PageHeader title="Authentication" icon="locker" />
+<PageHeader
+  :title="isLocalDrive ? 'Select Folder' : 'Authentication'"
+  :icon="isLocalDrive ? 'folder' : 'locker'"
+/>
 
-  <div class="authentication-view">
+<div class="authentication-view">
+  <template v-if="isLocalDrive">
+    <p>Please select your local HomeTools folder.</p>
+
+    <button @click="handlePickLocalDirectory">
+      Select local folder
+    </button>
+  </template>
+
+  <template v-else>
     <p>
       {{
         isExpired
@@ -107,12 +151,8 @@ async function testPublishedData() {
     <p v-if="driveError && !isExpired" class="error">
       {{ driveError }}
     </p>
-
-  </div>
-
-  <button @click="testPublishedData">
-    Test iCloud Snapshot
-  </button>
+  </template>
+</div>
 
 </template>
 
