@@ -184,6 +184,7 @@ watch(driveStatus, status => {
 watch(selectedFolder, val => {
   selectedSubFolder.value = null  // 👈 AJOUT
   if (val === billsFolderSource.value) {
+    selectedTags.value = [] // None par défaut
     selectedQuarterOffset.value = 0
     selectDefaultPayDateForQuarter()
   } else {
@@ -640,11 +641,19 @@ const filteredItems = computed(() => {
       }
 
       // TAG FILTER
-      if (selectedTags.value.length) {
-        const itemTags = item.tagIDs ?? []
+      const itemTags = item.tagIDs ?? []
+
+      if (isBillsSelected.value && selectedTags.value.length === 0) {
+        // Bills + None => uniquement les factures sans tag
+        if (itemTags.length > 0) return false
+      }
+
+      if (selectedTags.value.length > 0) {
+        // Tag(s) sélectionné(s) => au moins un tag correspondant
         const hasMatch = selectedTags.value.some(tagId =>
           itemTags.includes(tagId)
         )
+
         if (!hasMatch) return false
       }
 
