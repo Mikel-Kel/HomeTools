@@ -643,20 +643,30 @@ const filteredItems = computed(() => {
       // TAG FILTER
       const itemTags = item.tagIDs ?? []
 
-      if (isBillsSelected.value && selectedTags.value.length === 0) {
-        // Bills + None => uniquement les factures sans tag
-        if (itemTags.length > 0) return false
+      if (isBillsSelected.value) {
+        // Bills + None => toutes les factures sauf celles avec le tag 7
+        if (selectedTags.value.length === 0) {
+          if (itemTags.includes(7)) return false
+        }
+
+        // Bills + tag(s) sélectionné(s) => au moins un tag correspondant
+        else {
+          const hasMatch = selectedTags.value.some(tagId =>
+            itemTags.includes(tagId)
+          )
+
+          if (!hasMatch) return false
+        }
+      } else {
+        // Autres dossiers : règle actuelle
+        if (selectedTags.value.length > 0) {
+          const hasMatch = selectedTags.value.some(tagId =>
+            itemTags.includes(tagId)
+          )
+
+          if (!hasMatch) return false
+        }
       }
-
-      if (selectedTags.value.length > 0) {
-        // Tag(s) sélectionné(s) => au moins un tag correspondant
-        const hasMatch = selectedTags.value.some(tagId =>
-          itemTags.includes(tagId)
-        )
-
-        if (!hasMatch) return false
-      }
-
       return true
 
     })
