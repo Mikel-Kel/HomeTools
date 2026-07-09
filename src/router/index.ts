@@ -64,7 +64,7 @@ const router = createRouter({
       name: "events",
       component: EventLogView,
       meta: { level: 1, title: "Events", requiresDrive: true },
-    },
+    }
   ],
 });
 
