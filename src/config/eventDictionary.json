@@ -340,6 +340,24 @@
         }
       }
     },
+    "storage": {
+      "events": {
+        "STORAGE_PULL_REQUESTED": {
+          "version": 1,
+          "publisher": [
+            "PWA"
+          ],
+          "consumer": [
+            "StoragePullProcessor"
+          ],
+          "description": "Request immediate download of one or more specific S3 objects to the local HomeTools data folder.",
+          "payloadRequired": [
+            "paths",
+            "reason"
+          ]
+        }
+      }
+    },
     "system": {
       "events": {
         "HOUSEKEEPING_STARTED": {

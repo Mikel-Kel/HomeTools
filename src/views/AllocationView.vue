@@ -1,396 +1,723 @@
 <script setup lang="ts">
-import { computed, onMounted, nextTick, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onMounted,
+  ref,
+} from "vue";
+
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
 import AppIcon from "@/components/AppIcon.vue";
+import ChipSelector from "@/components/ChipSelector.vue";
+import DateChip from "@/components/DateChip.vue";
 
-import { useDrive } from "@/composables/useDrive";
+import { useStorageAccess } from "@/composables/useStorageAccess";
 
-import { useAppBootstrap } from "@/composables/useAppBootstrap"
-const { loadSettings } = useAppBootstrap()
-
+import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useSpending } from "@/composables/spending/useSpending";
 import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
-import { useAllocationTags } from "@/composables/allocations/useAllocationTags" 
-import { useAmountInput } from "@/composables/useAmountInput"
+import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
+import { useAmountInput } from "@/composables/useAmountInput";
 
-import ChipSelector from "@/components/ChipSelector.vue"
-import DateChip from "@/components/DateChip.vue"
 import { formatDate } from "@/utils/dateFormat";
-import { formatAmount } from "@/utils/amountFormat"
+import { formatAmount } from "@/utils/amountFormat";
 
-import type { SpendingRecord } from "@/composables/spending/useSpending";
+import type {
+  SpendingRecord,
+} from "@/composables/spending/useSpending";
 
 /* =========================
    Router / Props
 ========================= */
+
 const router = useRouter();
-const props = defineProps<{ id: string }>();
+
+const props =
+  defineProps<{
+    id: string;
+  }>();
 
 /* =========================
-   Drive guard (AJOUT MINIMAL)
+   Storage access
 ========================= */
-const { driveStatus } = useDrive();
 
-/* 🔐 Si session perdue → retour authentication */
-watch(driveStatus, (status) => {
-  if (status !== "CONNECTED") {
-    router.replace({ name: "authentication" });
-  }
-});
+const {
+  storageReady,
+  storageUnavailableMessage,
+  ensureStorageReady,
+} = useStorageAccess();
+
+/* =========================
+   Bootstrap
+========================= */
+
+const {
+  loadSettings,
+} = useAppBootstrap();
 
 /* =========================
    Stores
 ========================= */
-const spendingStore = useSpending();
-const categoriesStore = useCategories();
+
+const spendingStore =
+  useSpending();
+
+const categoriesStore =
+  useCategories();
+
+const tagsStore =
+  useAllocationTags();
 
 /* =========================
-   TAG store
+   Record
 ========================= */
-const tagsStore = useAllocationTags()
+
+const record =
+  computed<SpendingRecord | null>(() => {
+    return (
+      spendingStore.records.value.find(
+        item => item.id === props.id
+      ) ?? null
+    );
+  });
+
+const recordReady =
+  computed(() =>
+    record.value !== null
+  );
+
+const recordSafe =
+  computed<SpendingRecord>(() => {
+    return (
+      record.value ??
+      ({} as SpendingRecord)
+    );
+  });
 
 /* =========================
-   Record (nullable)
+   Allocation
 ========================= */
-const record = computed<SpendingRecord | null>(() =>
-  spendingStore.records.value.find(r => r.id === props.id) ?? null
-);
 
-const recordReady = computed(() => record.value !== null);
-
-/* ✅ Alias NON NULL pour le template */
-const recordSafe = computed<SpendingRecord>(() => {
-  return record.value ?? ({} as SpendingRecord);
-});
-
-/* =========================
-   Allocation (créé seulement si record existe)
-========================= */
-const allocation = computed(() =>
-  record.value
-    ? useAllocation(
-        record.value.id,
-        record.value.amount,
-        record.value.partyID,
-        record.value.date
-      )
-    : null
-);
-
-/* SAFE fallback */
-const allocationSafe = computed(() => {
-  return allocation.value ?? {
-    loading: ref(true),
-    busy: ref(false),
-    busyAction: ref(null),
-  };
-});
-
-const loading = computed(() => allocationSafe.value.loading.value);
-const busy = computed(() => allocationSafe.value.busy.value);
-const busyAction = computed(() => allocationSafe.value.busyAction.value);
-
-/* =========================
-   Exposition SAFE pour le template
-========================= */
-const allocations = computed(() => allocation.value?.allocations.value ?? []);
-
-const categoryID = computed<number | null>({
-  get: () => allocation.value?.categoryID.value ?? null,
-  set: v => {
-    if (!allocation.value) return
-
-    if (allocation.value.categoryID.value !== v) {
-      allocation.value.categoryID.value = v
-      allocation.value.subCategoryID.value = null
-      allocation.value.allocatedTagID.value = null
+const allocation =
+  computed(() => {
+    if (!record.value) {
+      return null;
     }
-  },
-});
 
-const subCategoryID = computed<number | null>({
-  get: () => allocation.value?.subCategoryID.value ?? null,
-  set: v => {
-    if (!allocation.value) return
+    return useAllocation(
+      record.value.id,
+      record.value.amount,
+      record.value.partyID,
+      record.value.date
+    );
+  });
 
-    if (allocation.value.subCategoryID.value !== v) {
-      allocation.value.subCategoryID.value = v
-      allocation.value.allocatedTagID.value = null
-    }
-  },
-});
+const allocationSafe =
+  computed(() => {
+    return (
+      allocation.value ?? {
+        loading: ref(true),
+        busy: ref(false),
+        busyAction: ref(null),
+      }
+    );
+  });
 
-const allocatedTagID = computed<number | null>({
-  get: () => allocation.value?.allocatedTagID.value ?? null,
-  set: v => {
-    if (allocation.value) {
-      allocation.value.allocatedTagID.value = v
-    }
-  }
-})
+const loading =
+  computed(() =>
+    allocationSafe.value.loading.value
+  );
 
-const comment = computed<string>({
-  get: () => allocation.value?.comment.value ?? "",
-  set: v => allocation.value && (allocation.value.comment.value = v),
-});
+const busy =
+  computed(() =>
+    allocationSafe.value.busy.value
+  );
 
-const amount = computed<number>({
-  get: () => allocation.value?.amount.value ?? 0,
-  set: v => allocation.value && (allocation.value.amount.value = v),
-});
+const busyAction =
+  computed(() =>
+    allocationSafe.value.busyAction.value
+  );
+
+/* =========================
+   Allocation state
+========================= */
+
+const allocations =
+  computed(() =>
+    allocation.value
+      ?.allocations.value ??
+    []
+  );
+
+const categoryID =
+  computed<number | null>({
+    get: () =>
+      allocation.value
+        ?.categoryID.value ??
+      null,
+
+    set: value => {
+      if (!allocation.value) {
+        return;
+      }
+
+      if (
+        allocation.value.categoryID.value !==
+        value
+      ) {
+        allocation.value.categoryID.value =
+          value;
+
+        allocation.value.subCategoryID.value =
+          null;
+
+        allocation.value.allocatedTagID.value =
+          null;
+      }
+    },
+  });
+
+const subCategoryID =
+  computed<number | null>({
+    get: () =>
+      allocation.value
+        ?.subCategoryID.value ??
+      null,
+
+    set: value => {
+      if (!allocation.value) {
+        return;
+      }
+
+      if (
+        allocation.value.subCategoryID.value !==
+        value
+      ) {
+        allocation.value.subCategoryID.value =
+          value;
+
+        allocation.value.allocatedTagID.value =
+          null;
+      }
+    },
+  });
+
+const allocatedTagID =
+  computed<number | null>({
+    get: () =>
+      allocation.value
+        ?.allocatedTagID.value ??
+      null,
+
+    set: value => {
+      if (!allocation.value) {
+        return;
+      }
+
+      allocation.value.allocatedTagID.value =
+        value;
+    },
+  });
+
+const comment =
+  computed<string>({
+    get: () =>
+      allocation.value
+        ?.comment.value ??
+      "",
+
+    set: value => {
+      if (!allocation.value) {
+        return;
+      }
+
+      allocation.value.comment.value =
+        value;
+    },
+  });
+
+const amount =
+  computed<number>({
+    get: () =>
+      allocation.value
+        ?.amount.value ??
+      0,
+
+    set: value => {
+      if (!allocation.value) {
+        return;
+      }
+
+      allocation.value.amount.value =
+        value;
+    },
+  });
+
+const allocationDate =
+  computed<string | null>({
+    get: () =>
+      allocation.value
+        ?.allocationDate
+        ?.value ??
+      null,
+
+    set: value => {
+      if (!allocation.value) {
+        return;
+      }
+
+      allocation.value.allocationDate.value =
+        value;
+    },
+  });
+
+const showAllocationDate =
+  ref(false);
+
+const remainingAmount =
+  computed(() =>
+    allocation.value
+      ?.remainingAmount.value ??
+    0
+  );
+
+const isBalanced =
+  computed(() =>
+    allocation.value
+      ?.isBalanced.value ??
+    false
+  );
+
+const isLocked =
+  computed(() => {
+    const state =
+      allocation.value?.state.value;
+
+    return (
+      state === "BUSY" ||
+      state === "READONLY"
+    );
+  });
+
+const canSaveDraft =
+  computed(() =>
+    allocation.value
+      ?.canSaveDraft.value ??
+    false
+  );
+
+/* =========================
+   Amount input
+========================= */
 
 const {
   input: amountInputStr,
   onFocus: onAmountFocus,
   onInput: onAmountInput,
-  onBlur: onAmountBlur
+  onBlur: onAmountBlur,
 } = useAmountInput(
   computed({
-    get: () => amount.value,
-    set: (v) => {
-      amount.value = v ?? 0
-    }
+    get: () =>
+      amount.value,
+
+    set: value => {
+      amount.value =
+        value ?? 0;
+    },
   })
-)
-
-const allocationDate = computed<string | null>({
-  get: () => allocation.value?.allocationDate?.value ?? null,
-  set: v => allocation.value && (allocation.value.allocationDate.value = v),
-});
-
-const showAllocationDate = ref(false);
-
-const remainingAmount = computed(
-  () => allocation.value?.remainingAmount.value ?? 0
 );
 
-const isBalanced = computed(
-  () => allocation.value?.isBalanced.value ?? false
-);
+/* =========================
+   Busy display
+========================= */
 
-const isLocked = computed(() =>
-  allocation?.value?.state.value === "BUSY" ||
-  allocation?.value?.state.value === "READONLY"
-)
+const busyMessage =
+  computed(() => {
+    if (loading.value) {
+      return "Loading…";
+    }
 
-const canSaveDraft = computed(
-  () => allocation.value?.canSaveDraft.value ?? false
-);
+    switch (busyAction.value) {
+      case "save":
+        return "Saving…";
 
-const busyMessage = computed(() => {
-  if (loading.value) return "Loading…";
-
-  switch (busyAction.value) {
-    case "save":
-      return "Saving…";
-    default:
-      return "";
-  }
-});
+      default:
+        return "";
+    }
+  });
 
 /* =========================
    Focus
 ========================= */
-const amountInput = ref<HTMLInputElement | null>(null);
+
+const amountInput =
+  ref<HTMLInputElement | null>(
+    null
+  );
 
 async function resetAmountToRemaining() {
   await nextTick();
-  amount.value = Math.abs(remainingAmount.value);
+
+  amount.value =
+    Math.abs(
+      remainingAmount.value
+    );
+
   amountInput.value?.focus();
 }
-
-const dateInput = ref<HTMLInputElement | null>(null);
 
 /* =========================
    Lifecycle
 ========================= */
+
 onMounted(async () => {
-  /* 🔐 sécurité supplémentaire */
-  if (driveStatus.value !== "CONNECTED") {
-    router.replace({ name: "authentication" });
+  const ready =
+    await ensureStorageReady();
+
+  if (!ready) {
+    await router.replace({
+      name: "authentication",
+    });
+
     return;
   }
 
-  /* 🔎 Si record absent → retour spending */
+  /*
+    SpendingView alimente normalement le store avant
+    l'ouverture d'une allocation.
+
+    En cas de rechargement direct de l'URL, on revient
+    vers SpendingView afin qu'il recharge spending.json.
+  */
   if (!record.value) {
-    router.replace({ name: "spending" });
+    await router.replace({
+      name: "spending",
+    });
+
     return;
   }
 
-  await loadSettings()
-  
-  if (allocation.value) {
-    await allocation.value.loadDraft();
+  await loadSettings();
 
-    if (allocation.value.allocations.value.length === 0 && record.value) {
-      allocation.value.categoryID.value = record.value.categoryID;
-      allocation.value.subCategoryID.value = record.value.subCategoryID;
-      allocation.value.comment.value = record.value.allocComment ?? "";
+  if (!allocation.value) {
+    return;
+  }
+
+  await allocation.value.loadDraft();
+
+  if (
+    allocation.value.allocations.value.length === 0 &&
+    record.value
+  ) {
+    allocation.value.categoryID.value =
+      record.value.categoryID;
+
+    allocation.value.subCategoryID.value =
+      record.value.subCategoryID;
+
+    allocation.value.comment.value =
+      record.value.allocComment ?? "";
+  }
+
+  await resetAmountToRemaining();
+});
+
+/* =========================
+   Derived data
+========================= */
+
+const absRemainingAmount =
+  computed(() =>
+    Math.abs(
+      remainingAmount.value
+    )
+  );
+
+const allowedNature =
+  computed(() => {
+    if (!record.value) {
+      return "E";
     }
 
-    await resetAmountToRemaining();
+    return (
+      record.value.amount >= 0
+        ? "I"
+        : "E"
+    );
+  });
+
+const categories =
+  computed(() =>
+    categoriesStore.categories.value
+      .filter(
+        category =>
+          category.nature ===
+          allowedNature.value
+      )
+  );
+
+const subCategories =
+  computed(() => {
+    if (
+      typeof categoryID.value !==
+      "number"
+    ) {
+      return [];
+    }
+
+    return categoriesStore
+      .getSubcategories(
+        categoryID.value
+      );
+  });
+
+const canSelectTag =
+  computed(() =>
+    categoryID.value !== null &&
+    subCategoryID.value !== null
+  );
+
+const tags =
+  computed(() =>
+    tagsStore.tags.value
+  );
+
+/* =========================
+   Chip items
+========================= */
+
+const categoryItems =
+  computed(() =>
+    categories.value.map(
+      category => ({
+        id: category.id,
+        label: category.label,
+      })
+    )
+  );
+
+const subCategoryItems =
+  computed(() =>
+    subCategories.value.map(
+      subCategory => ({
+        id: subCategory.id,
+        label: subCategory.label,
+      })
+    )
+  );
+
+const tagItems =
+  computed(() =>
+    tags.value.map(
+      tag => ({
+        id: tag.id,
+        label: tag.tagName,
+      })
+    )
+  );
+
+/* =========================
+   Currency display
+========================= */
+
+const currencyAmount =
+  computed(() => {
+    const foreignAmount =
+      recordSafe.value.foreignAmount;
+
+    if (
+      foreignAmount != null &&
+      foreignAmount !== 0 &&
+      recordSafe.value.currency
+    ) {
+      return {
+        amount: foreignAmount,
+        code:
+          recordSafe.value.currency,
+      };
+    }
+
+    return null;
+  });
+
+/* =========================
+   Labels
+========================= */
+
+function categoryLabel(
+  id: number | null
+): string {
+  if (id == null) {
+    return "";
   }
-});
 
-/* =========================
-   Derived
-========================= */
-const absRemainingAmount = computed(() =>
-  Math.abs(remainingAmount.value)
-);
-
-const allowedNature = computed(() =>
-  record.value && record.value.amount >= 0 ? "I" : "E"
-);
-
-const categories = computed(() =>
-  categoriesStore.categories.value
-    .filter(c => c.nature === allowedNature.value)
-);
-
-const subCategories = computed(() =>
-  typeof categoryID.value === "number"
-    ? categoriesStore
-        .getSubcategories(categoryID.value)
-    : []
-);
-
-const canSelectTag = computed(() =>
-  categoryID.value !== null &&
-  subCategoryID.value !== null
-)
-
-const tags = computed(() =>
-  tagsStore.tags.value
-)
-
-/* =========================
-   Chips selectors
-   ========================= */
-const categoryItems = computed(() =>
-  categories.value.map(c => ({
-    id: c.id,
-    label: c.label
-  }))
-)
-
-const subCategoryItems = computed(() =>
-  subCategories.value.map(sc => ({
-    id: sc.id,
-    label: sc.label
-  }))
-)
-
-const tagItems = computed(() =>
-  tags.value.map(t => ({
-    id: t.id,
-    label: t.tagName
-  }))
-)
-
-/* =========================
-   Currency display (if present)
-========================= */
-const currencyAmount = computed(() => {
-  const foreignAmount = recordSafe.value.foreignAmount;
-  if (
-    foreignAmount != null &&
-    foreignAmount !== 0 &&
-    recordSafe.value.currency
-  ) {
-    return {
-      amount: foreignAmount,
-      code: recordSafe.value.currency,
-    };
-  }
-  return null;
-});
-
-/* =========================
-   Helpers
-========================= */
-function categoryLabel(id: number | null) {
-  return id == null
-    ? ""
-    : categoriesStore.getCategory(id)?.label ?? "";
-}
-
-function subCategoryLabel(
-  categoryID: number | null,
-  subCategoryID: number | null
-) {
-  if (categoryID == null || subCategoryID == null) return "";
   return (
     categoriesStore
-      .getSubcategories(categoryID)
-      .find(sc => sc.id === subCategoryID)?.label ?? ""
+      .getCategory(id)
+      ?.label ??
+    ""
   );
 }
 
-function tagLabel(id: number | null) {
-  if (!id) return ""
-  return tagsStore.getTag(id)?.tagName ?? ""
+function subCategoryLabel(
+  currentCategoryID:
+    number | null,
+
+  currentSubCategoryID:
+    number | null
+): string {
+  if (
+    currentCategoryID == null ||
+    currentSubCategoryID == null
+  ) {
+    return "";
+  }
+
+  return (
+    categoriesStore
+      .getSubcategories(
+        currentCategoryID
+      )
+      .find(
+        subCategory =>
+          subCategory.id ===
+          currentSubCategoryID
+      )
+      ?.label ??
+    ""
+  );
+}
+
+function tagLabel(
+  id: number | null
+): string {
+  if (!id) {
+    return "";
+  }
+
+  return (
+    tagsStore
+      .getTag(id)
+      ?.tagName ??
+    ""
+  );
 }
 
 /* =========================
    Actions
 ========================= */
+
 async function onAddAllocation() {
-  if (!allocation.value) return;
-  await allocation.value.addAllocation();
-  showAllocationDate.value = false;
-  if (allocation.value.isBalanced.value) {
-    router.push({ name: "spending" });
+  if (!allocation.value) {
     return;
   }
+
+  await allocation.value
+    .addAllocation();
+
+  showAllocationDate.value =
+    false;
+
+  if (
+    allocation.value
+      .isBalanced.value
+  ) {
+    await router.push({
+      name: "spending",
+    });
+
+    return;
+  }
+
   await resetAmountToRemaining();
 }
 
 async function onSaveDraft() {
-  if (!allocation.value) return;
-  await allocation.value.saveDraft();
-  router.push({ name: "spending" });
-}
-
-async function onRemoveAllocation(index: number) {
-  await allocation.value?.removeAllocation(index);
-}
-
-function closeView() {
-  if (busy.value) return;
-
-  if (allocation.value?.hasUnsavedChanges.value) {
-    const ok = confirm(
-      "Discard unsaved allocation changes?"
-    );
-
-    if (!ok) return;
+  if (!allocation.value) {
+    return;
   }
 
-  router.push({ name: "spending" });
+  await allocation.value
+    .saveDraft();
+
+  await router.push({
+    name: "spending",
+  });
+}
+
+async function onRemoveAllocation(
+  index: number
+) {
+  await allocation.value
+    ?.removeAllocation(index);
+}
+
+async function closeView() {
+  if (busy.value) {
+    return;
+  }
+
+  if (
+    allocation.value
+      ?.hasUnsavedChanges.value
+  ) {
+    const confirmed =
+      confirm(
+        "Discard unsaved allocation changes?"
+      );
+
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  await router.push({
+    name: "spending",
+  });
 }
 </script>
 
 <template>
-  <PageHeader title="Allocation" icon="spending" />
+  <PageHeader
+    title="Allocation"
+    icon="spending"
+  />
 
-  <div v-if="driveStatus !== 'CONNECTED'" class="loading">
-    <p>Drive session not available.</p>
+  <div
+    v-if="!storageReady"
+    class="loading"
+  >
+    <p>
+      {{
+        storageUnavailableMessage ||
+        "Storage not available."
+      }}
+    </p>
   </div>
 
-  <div v-else-if="!recordReady" class="loading">
-    <p>Loading allocation...</p>
+  <div
+    v-else-if="!recordReady"
+    class="loading"
+  >
+    <p>Loading allocation…</p>
   </div>
 
-  <div v-else class="allocation-view">
-
+  <div
+    v-else
+    class="allocation-view"
+  >
     <!-- Busy overlay -->
-    <div v-if="loading || busy" class="busy-overlay">
+
+    <div
+      v-if="loading || busy"
+      class="busy-overlay"
+    >
       <div class="busy-box">
         <div class="spinner"></div>
+
         <div class="busy-text">
           {{ busyMessage }}
         </div>
@@ -398,89 +725,142 @@ function closeView() {
     </div>
 
     <!-- =========================
-        1. Record summary
+         Record summary
     ========================== -->
+
     <section class="allocation-record">
       <div class="record-main">
-        <div class="record-party">{{ recordSafe.party }}</div>
-        <div class="record-meta">{{ formatDate(recordSafe.date, "compact") }}</div>
+        <div class="record-party">
+          {{ recordSafe.party }}
+        </div>
+
+        <div class="record-meta">
+          {{
+            formatDate(
+              recordSafe.date,
+              "compact"
+            )
+          }}
+        </div>
       </div>
 
       <div class="record-amounts">
         <div class="amount-box total">
-          <div class="amount-label">Total</div>
-          <div class="amount-value amount-with-currency">
+          <div class="amount-label">
+            Total
+          </div>
+
+          <div
+            class="amount-value amount-with-currency"
+          >
             <span>
-              {{ formatAmount(Math.abs(recordSafe.amount)) }}
+              {{
+                formatAmount(
+                  Math.abs(
+                    recordSafe.amount
+                  )
+                )
+              }}
             </span>
+
             <span
               v-if="currencyAmount"
               class="currency-amount"
             >
-              {{ formatAmount(Math.abs(currencyAmount.amount)) }} {{ currencyAmount.code }}
+              {{
+                formatAmount(
+                  Math.abs(
+                    currencyAmount.amount
+                  )
+                )
+              }}
+              {{ currencyAmount.code }}
             </span>
           </div>
         </div>
 
         <div
           class="amount-box remaining"
-          :class="{ balanced: isBalanced, unbalanced: !isBalanced }"
+          :class="{
+            balanced: isBalanced,
+            unbalanced: !isBalanced
+          }"
         >
-          <div class="amount-label">Remaining</div>
+          <div class="amount-label">
+            Remaining
+          </div>
+
           <div class="amount-value">
-            {{ formatAmount(absRemainingAmount) }}
+            {{
+              formatAmount(
+                absRemainingAmount
+              )
+            }}
           </div>
         </div>
       </div>
     </section>
 
     <!-- =========================
-        2. Allocation form
+         Allocation form
     ========================== -->
+
     <section class="allocation-form">
-      <!-- CATEGORY -->
       <ChipSelector
+        v-model="categoryID"
         label="Category"
         :items="categoryItems"
-        v-model="categoryID"
-        :showAll="false"
-        :alignWithContent="true"
+        :show-all="false"
+        :align-with-content="true"
         :disabled="isLocked"
       />
-      <!-- SUBCATEGORY -->
+
       <ChipSelector
         v-if="categoryID"
+        v-model="subCategoryID"
         label="Sub"
         :items="subCategoryItems"
-        v-model="subCategoryID"
-        :showAll="false"
-        :alignWithContent="true"
+        :show-all="false"
+        :align-with-content="true"
         :disabled="isLocked"
-      />       
-      <!-- 🔽 MONTANT + CALENDRIER -->
+      />
+
       <div class="amount-block">
         <div class="amount-row">
           <input
             ref="amountInput"
             :value="amountInputStr"
-            @input="onAmountInput(($event.target as HTMLInputElement).value)"
-            @focus="onAmountFocus($event)"
-            @blur="onAmountBlur"
             type="text"
             inputmode="decimal"
             class="field field-short amount-input"
             :disabled="isLocked"
+            @input="
+              onAmountInput(
+                (
+                  $event.target as
+                    HTMLInputElement
+                ).value
+              )
+            "
+            @focus="onAmountFocus($event)"
+            @blur="onAmountBlur"
           />
-          <!-- 📅 bouton -->
+
           <button
+            type="button"
             class="date-icon-btn"
-            @click="showAllocationDate = !showAllocationDate"
             :disabled="isLocked"
+            @click="
+              showAllocationDate =
+                !showAllocationDate
+            "
           >
-            <AppIcon name="calendar" :size="32" />
+            <AppIcon
+              name="calendar"
+              :size="32"
+            />
           </button>
 
-          <!-- 📅 chip INLINE -->
           <transition name="fade-slide">
             <DateChip
               v-if="showAllocationDate"
@@ -489,86 +869,149 @@ function closeView() {
             />
           </transition>
         </div>
-      </div> 
-      <!-- tags -->
+      </div>
+
       <ChipSelector
+        v-model="allocatedTagID"
         label="Tag"
         :items="tagItems"
-        v-model="allocatedTagID"
-        :showAll="true"
-        :alignWithContent="true"
-        :disabled="!canSelectTag || isLocked"
+        :show-all="true"
+        :align-with-content="true"
+        :disabled="
+          !canSelectTag ||
+          isLocked
+        "
       />
-      <!-- commentaire + add -->
+
       <div class="comment-row">
-        <input v-model="comment"
+        <input
+          v-model="comment"
           class="field field-long"
           placeholder="(optional comment)"
-          :disabled="allocation?.state.value === 'BUSY'
-                    || allocation?.state.value === 'READONLY'
-                    || !categoryID
-                    || !subCategoryID
-                    || amount === 0"
+          :disabled="
+            isLocked ||
+            !categoryID ||
+            !subCategoryID ||
+            amount === 0
+          "
         />
+
         <button
+          type="button"
           class="theme-toggle"
-          @click="onAddAllocation"
-          :disabled="allocation?.state.value === 'BUSY'
-                    || allocation?.state.value === 'READONLY'
-                    || !categoryID
-                    || !subCategoryID
-                    || amount === 0"
+          :disabled="
+            isLocked ||
+            !categoryID ||
+            !subCategoryID ||
+            amount === 0
+          "
           aria-label="Add allocation"
+          @click="onAddAllocation"
         >
-          <AppIcon name="add" :size="24" />
+          <AppIcon
+            name="add"
+            :size="24"
+          />
         </button>
       </div>
     </section>
-    
+
     <div class="allocation-separator"></div>
 
     <!-- =========================
-        3. Allocations list
+         Allocations list
     ========================== -->
+
     <section class="allocation-list">
       <table>
         <tbody>
-          <tr v-for="a in allocations" :key="a.id">
-
+          <tr
+            v-for="(
+              allocationItem,
+              index
+            ) in allocations"
+            :key="allocationItem.id"
+          >
             <td class="alloc-text">
-            <div class="alloc-comment-row">
-              <span class="alloc-comment">
-                {{ a.comment || "(no comment)" }}
-              </span>
-              <span
-                v-if="a.allocationDate && a.allocationDate !== recordSafe.date"
-                class="alloc-date-badge"
-                :title="a.allocationDate"
-              >
-                {{ formatDate(a.allocationDate, "short") }}
-              </span>
-              <span
-                v-if="a.allocatedTagID"
-                class="alloc-tag-chip"
-              >
-                {{ tagLabel(a.allocatedTagID) }}
-              </span>
-            </div>
+              <div class="alloc-comment-row">
+                <span class="alloc-comment">
+                  {{
+                    allocationItem.comment ||
+                    "(no comment)"
+                  }}
+                </span>
+
+                <span
+                  v-if="
+                    allocationItem.allocationDate &&
+                    allocationItem.allocationDate !==
+                      recordSafe.date
+                  "
+                  class="alloc-date-badge"
+                  :title="
+                    allocationItem.allocationDate
+                  "
+                >
+                  {{
+                    formatDate(
+                      allocationItem.allocationDate,
+                      "short"
+                    )
+                  }}
+                </span>
+
+                <span
+                  v-if="
+                    allocationItem.allocatedTagID
+                  "
+                  class="alloc-tag-chip"
+                >
+                  {{
+                    tagLabel(
+                      allocationItem.allocatedTagID
+                    )
+                  }}
+                </span>
+              </div>
+
               <div class="alloc-category">
-                {{ categoryLabel(a.categoryID) }}
-                <span v-if="a.subCategoryID">
-                  › {{ subCategoryLabel(a.categoryID, a.subCategoryID) }}
+                {{
+                  categoryLabel(
+                    allocationItem.categoryID
+                  )
+                }}
+
+                <span
+                  v-if="
+                    allocationItem.subCategoryID
+                  "
+                >
+                  ›
+                  {{
+                    subCategoryLabel(
+                      allocationItem.categoryID,
+                      allocationItem.subCategoryID
+                    )
+                  }}
                 </span>
               </div>
             </td>
+
             <td class="right alloc-amount">
-              {{ formatAmount(a.amount) }}
+              {{
+                formatAmount(
+                  allocationItem.amount
+                )
+              }}
             </td>
+
             <td class="alloc-action">
               <button
-                @click="onRemoveAllocation(allocations.indexOf(a))"
-                :disabled="allocation?.state.value === 'BUSY'
-                          || allocation?.state.value === 'READONLY'"
+                type="button"
+                :disabled="isLocked"
+                @click="
+                  onRemoveAllocation(index)
+                "
               >
                 ✕
               </button>
@@ -579,33 +1022,43 @@ function closeView() {
     </section>
 
     <!-- =========================
-        4. Footer actions
+         Footer
     ========================== -->
+
     <footer class="allocation-footer">
-      <!--
-      <div class="footer-total">
-        Total allocated: {{ formatAmount(totalAllocated) }}
-      </div>*/
-      -->
       <div class="footer-actions">
         <button
+          type="button"
+          :disabled="
+            busy ||
+            !canSaveDraft
+          "
           @click="onSaveDraft"
-          :disabled="busy || !canSaveDraft"
         >
-          <template v-if="busy && busyAction === 'save'">
+          <template
+            v-if="
+              busy &&
+              busyAction === 'save'
+            "
+          >
             Saving…
           </template>
+
           <template v-else>
             Save draft
           </template>
         </button>
 
-        <button class="secondary" @click="closeView" :disabled="busy">
+        <button
+          type="button"
+          class="secondary"
+          :disabled="busy"
+          @click="closeView"
+        >
           Close
         </button>
       </div>
     </footer>
-
   </div>
 </template>
 
@@ -613,6 +1066,7 @@ function closeView() {
 /* =========================================================
    Base container
 ========================================================= */
+
 .allocation-view {
   position: relative;
   padding: 1rem;
@@ -626,12 +1080,13 @@ function closeView() {
 /* =========================
    Record summary
 ========================= */
+
 .allocation-record {
-  background: var(--surface-2); /* FIX dark mode */
   padding: 14px;
   margin-bottom: 16px;
   border-radius: 10px;
   border: 1px solid var(--border);
+  background: var(--surface-2);
 }
 
 .record-main {
@@ -651,6 +1106,7 @@ function closeView() {
 /* =========================
    Amount boxes
 ========================= */
+
 .record-amounts {
   display: flex;
   justify-content: space-between;
@@ -680,6 +1136,8 @@ function closeView() {
 }
 
 .amount-input {
+  text-align: right;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -701,6 +1159,7 @@ function closeView() {
 /* =========================================================
    Allocation form
 ========================================================= */
+
 .allocation-form {
   display: flex;
   flex-direction: column;
@@ -716,7 +1175,6 @@ function closeView() {
   font-size: 0.9rem;
 }
 
-/* largeur homogène pour tous les ChipSelector de la form */
 :deep(.allocation-form .chip-selector) {
   width: min(650px, 100%);
   max-width: 100%;
@@ -732,14 +1190,10 @@ function closeView() {
   max-width: var(--long-w) !important;
 }
 
-.amount-input {
-  text-align: right;
-  color: var(--text);
-}
-
 /* =========================
    Rows
 ========================= */
+
 .allocation-row {
   display: flex;
   align-items: center;
@@ -756,6 +1210,7 @@ function closeView() {
 /* =========================================================
    Comment row
 ========================================================= */
+
 .comment-row {
   display: flex;
   align-items: center;
@@ -774,6 +1229,7 @@ function closeView() {
 /* =========================================================
    Allocation list
 ========================================================= */
+
 .allocation-list table {
   width: 100%;
   border-collapse: collapse;
@@ -795,7 +1251,6 @@ function closeView() {
   color: var(--negative);
 }
 
-/* hover FIX */
 .allocation-row:hover {
   background: var(--surface-3);
 }
@@ -803,6 +1258,7 @@ function closeView() {
 /* =========================================================
    Text hierarchy
 ========================================================= */
+
 .alloc-comment-row {
   display: flex;
   align-items: center;
@@ -815,7 +1271,8 @@ function closeView() {
   font-weight: 500;
 }
 
-.alloc-date-badge {
+.alloc-date-badge,
+.alloc-tag-chip {
   display: inline-flex;
   align-items: center;
   padding: 1px 6px;
@@ -829,16 +1286,7 @@ function closeView() {
 }
 
 .alloc-tag-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-soft);
-  color: var(--text-soft);
-  font-size: 0.68rem;
   font-weight: 700;
-  white-space: nowrap;
 }
 
 .alloc-category {
@@ -849,14 +1297,17 @@ function closeView() {
 .alloc-amount {
   font-weight: 500;
 }
-/* ligne montant + icône */
+
+/* =========================
+   Amount/date row
+========================= */
+
 .amount-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-/* bouton calendrier */
 .date-icon-btn {
   display: flex;
   align-items: center;
@@ -873,16 +1324,14 @@ function closeView() {
   transition: all 0.15s ease;
 }
 
-.date-icon-btn:hover {
+.date-icon-btn:hover:not(:disabled) {
   background: var(--primary-soft);
 }
 
-/* chip inline */
 .inline-date-chip {
   margin-left: 4px;
 }
 
-/* ligne du DateChip */
 .date-row {
   margin-top: 6px;
 }
@@ -890,6 +1339,7 @@ function closeView() {
 /* =========================================================
    Footer
 ========================================================= */
+
 .footer-actions {
   display: flex;
   justify-content: flex-end;
@@ -899,10 +1349,12 @@ function closeView() {
 /* =========================================================
    Busy HUD
 ========================================================= */
+
 .busy-overlay {
   position: absolute;
   inset: 0;
   z-index: 999;
+
   display: flex;
   align-items: center;
   justify-content: center;
@@ -924,9 +1376,11 @@ function closeView() {
 .spinner {
   width: 22px;
   height: 22px;
+
   border: 2px solid var(--border);
   border-top-color: var(--primary);
   border-radius: 50%;
+
   animation: spin 0.8s linear infinite;
 }
 

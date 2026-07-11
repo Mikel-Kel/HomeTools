@@ -1,1095 +1,2210 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue"
-import PageHeader from "@/components/PageHeader.vue"
+import {
+  computed,
+  onBeforeUnmount,
+  ref,
+  watch,
+} from "vue";
 
-import { useDrive } from "@/composables/useDrive"
-import { useRouter } from "vue-router"
+import PageHeader from "@/components/PageHeader.vue";
+import ChipSelector from "@/components/ChipSelector.vue";
+import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vue";
 
-import { useAppBootstrap } from "@/composables/useAppBootstrap"
-const { loadSettings } = useAppBootstrap()
+import { useStorageAccess } from "@/composables/useStorageAccess";
+import { useAppBootstrap } from "@/composables/useAppBootstrap";
+import { useDriveJsonFile } from "@/composables/useDriveJsonFile";
+import { useDriveWatcher } from "@/composables/useDriveWatcher";
 
-import { loadJSONFromFolder } from "@/services/driveAdapter"
-import { useDriveJsonFile } from "@/composables/useDriveJsonFile"
-import { useDriveWatcher } from "@/composables/useDriveWatcher" 
+import { useParties } from "@/composables/useParties";
+import { useArchiveFolders } from "@/composables/archives/useArchiveFolders";
+import { useTourismFolders } from "@/composables/archives/useTourismFolders";
+import { useVariousFolders } from "@/composables/archives/useVariousFolders";
+import { useDocumentTags } from "@/composables/archives/useDocumentTags";
 
-import { useParties } from "@/composables/useParties"
-import { useArchiveFolders } from "@/composables/archives/useArchiveFolders"
-import { useTourismFolders } from "@/composables/archives/useTourismFolders"
-import { useVariousFolders } from "@/composables/archives/useVariousFolders"
-import ChipSelector from "@/components/ChipSelector.vue"
+import {
+  loadJSONFromFolder,
+} from "@/services/driveAdapter";
 
-import { formatDate } from "@/utils/dateFormat"
-import { formatAmount } from "@/utils/amountFormat"
+import { formatDate } from "@/utils/dateFormat";
+import { formatAmount } from "@/utils/amountFormat";
 
-import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vue"
-
-import { useDocumentTags } from "@/composables/archives/useDocumentTags"
-import type { DocumentTag } from "@/composables/archives/useDocumentTags"
-
-const tagsStore = useDocumentTags()
+import type {
+  DocumentTag,
+} from "@/composables/archives/useDocumentTags";
 
 /* =========================
    Types
 ========================= */
 
 interface ArchiveItem {
-  tocid: number
-  folder: string
-  documentDate: string
-  dtaDate: string | null
-  info1: string
-  info2: string
-  indicatorDTA: number
-  physicalName: string
-  partyID: number
-  refAmount: number
-  googleFileId: string
-  tagIDs?:number[]
-  sourceBucket?:string
-}
-
-interface ArchiveFile {
-  version: number
-  generatedAt: string
-  count: number
-  items: ArchiveItem[]
-}
-
-interface Party {
-  id: number
-  label: string
-}
-
-interface PartyFile {
-  version: number
-  updatedAt: string
-  parties: Party[]
+  tocid: number;
+  folder: string;
+  documentDate: string;
+  dtaDate: string | null;
+  info1: string;
+  info2: string;
+  indicatorDTA: number;
+  physicalName: string;
+  partyID: number;
+  refAmount: number;
+  googleFileId: string;
+  tagIDs?: number[];
+  sourceBucket?: string;
 }
 
 interface ArchiveFolderConfig {
-  id: number
-  source: string
-  label: string
-  order: number
+  id: number;
+  source: string;
+  label: string;
+  order: number;
 }
 
 interface FolderView {
-  source: string
-  label: string
-  order: number
+  source: string;
+  label: string;
+  order: number;
 }
 
+interface ArchiveIndex {
+  years?: number[];
+  foldersUpdated?: string[];
+}
+
+interface ArchiveBucketFile {
+  items?: ArchiveItem[];
+  groups?: Record<
+    string,
+    {
+      items?: ArchiveItem[];
+    }
+  >;
+}
+
+type SubFolder = {
+  id: number;
+  label: string;
+  seqNb?: number;
+};
+
 /* =========================
-   Drive
+   Storage access
 ========================= */
-const router = useRouter()
-const { driveStatus } = useDrive()
 
-const folderLabelToSourceMap = computed(() => {
-  const map = new Map<string, string>()
+const {
+  backend,
+  storageReady,
+  storageUnavailableMessage,
+  ensureStorageReady,
+} = useStorageAccess();
 
-  for (const f of archiveFoldersStore.folders.value) {
-    map.set(f.label, f.source)
-  }
+/* =========================
+   Bootstrap
+========================= */
 
-  return map
-})
+const {
+  loadSettings,
+} = useAppBootstrap();
 
-const indexLastModified = ref<string | null>(null)
+/* =========================
+   Stores
+========================= */
+
+const partiesStore =
+  useParties();
+
+const archiveFoldersStore =
+  useArchiveFolders();
+
+const tourismStore =
+  useTourismFolders();
+
+const variousStore =
+  useVariousFolders();
+
+const tagsStore =
+  useDocumentTags();
 
 /* =========================
    State
 ========================= */
-const loading = ref(false)
-const error = ref<string | null>(null)
 
-const archive = ref<ArchiveItem[]>([])
-const partiesStore = useParties()
-const archiveFoldersStore = useArchiveFolders()
-const tourismStore = useTourismFolders()
-const variousStore = useVariousFolders()
+const loading =
+  ref(false);
 
-const filtersOpen = ref(true)
+const error =
+  ref<string | null>(null);
 
-const selectedFolder = ref<string | null>(null)
+const initialized =
+  ref(false);
 
-type SubFolder = {
-  id: number
-  label: string
-  seqNb?: number
-}
+const archive =
+  ref<ArchiveItem[]>([]);
 
-const selectedFolderConfig = computed(() =>
-  archiveFoldersStore.folders.value.find(
-    f => f.source === selectedFolder.value
-  )
-)
+const indexLastModified =
+  ref<string | null>(null);
 
-const subFolders = computed<SubFolder[]>(() => {
-  const label = selectedFolderConfig.value?.label
-  if (label === "Tourism") {
-    return tourismStore.folders.value
-  }
-  if (label === "Various") {
-    return variousStore.folders.value
-  }
-  return []
-})
+const filtersOpen =
+  ref(true);
 
-const selectedSubFolder = ref<number | null>(null)
+const selectedFolder =
+  ref<string | null>(null);
 
-const selectedDTADate = ref<string | null>(null)
-const selectedTags = ref<number[]>([])  
+const selectedSubFolder =
+  ref<number | null>(null);
 
-const searchText = ref("")
+const selectedDTADate =
+  ref<string | null>(null);
+
+const selectedTags =
+  ref<number[]>([]);
+
+const searchText =
+  ref("");
+
+const selectedQuarterOffset =
+  ref(0);
+
+const selectedItem =
+  ref<ArchiveItem | null>(null);
+
+/* =========================
+   Folder mapping
+========================= */
+
+const folderLabelToSourceMap =
+  computed(() => {
+    const map =
+      new Map<string, string>();
+
+    for (
+      const folder
+      of archiveFoldersStore
+        .folders.value
+    ) {
+      map.set(
+        folder.label,
+        folder.source
+      );
+    }
+
+    return map;
+  });
+
+const folderConfigMap =
+  computed(() => {
+    const map =
+      new Map<
+        string,
+        {
+          label: string;
+          order: number;
+        }
+      >();
+
+    for (
+      const folder
+      of archiveFoldersStore
+        .folders.value
+    ) {
+      map.set(
+        folder.source,
+        {
+          label:
+            folder.label,
+
+          order:
+            folder.order,
+        }
+      );
+    }
+
+    return map;
+  });
+
+const archiveFolders =
+  computed<FolderView[]>(() => {
+    const unique =
+      [
+        ...new Set(
+          archive.value.map(
+            item => item.folder
+          )
+        ),
+      ];
+
+    return unique
+      .map(
+        (
+          folder
+        ): FolderView => {
+          const config =
+            folderConfigMap.value.get(
+              folder
+            );
+
+          if (!config) {
+            console.warn(
+              "No archive folder configuration for:",
+              folder
+            );
+          }
+
+          return {
+            source:
+              folder,
+
+            label:
+              config?.label ??
+              folder,
+
+            order:
+              config?.order ??
+              999,
+          };
+        }
+      )
+      .sort(
+        (a, b) =>
+          a.order - b.order
+      );
+  });
+
+const billsFolderSource =
+  computed(() => {
+    const configs =
+      (
+        archiveFoldersStore
+          .folders.value as
+          ArchiveFolderConfig[]
+      ) ?? [];
+
+    const bills =
+      configs.find(
+        folder =>
+          folder.label ===
+          "Bills"
+      );
+
+    return (
+      bills?.source ??
+      null
+    );
+  });
+
+const defaultFolder =
+  computed(() => {
+    const configs =
+      (
+        archiveFoldersStore
+          .folders.value as
+          ArchiveFolderConfig[]
+      ) ?? [];
+
+    const sorted =
+      [...configs].sort(
+        (a, b) =>
+          a.order - b.order
+      );
+
+    return (
+      sorted[0]?.source ??
+      null
+    );
+  });
+
+const folderItems =
+  computed(() =>
+    archiveFolders.value.map(
+      folder => ({
+        id:
+          folder.source,
+
+        label:
+          folder.label,
+      })
+    )
+  );
+
+/* =========================
+   Subfolders
+========================= */
+
+const selectedFolderConfig =
+  computed(() =>
+    archiveFoldersStore
+      .folders.value
+      .find(
+        folder =>
+          folder.source ===
+          selectedFolder.value
+      )
+  );
+
+const subFolders =
+  computed<SubFolder[]>(() => {
+    const label =
+      selectedFolderConfig.value
+        ?.label;
+
+    if (label === "Tourism") {
+      return tourismStore
+        .folders.value;
+    }
+
+    if (label === "Various") {
+      return variousStore
+        .folders.value;
+    }
+
+    return [];
+  });
+
+const subFolderItems =
+  computed(() =>
+    subFolders.value.map(
+      folder => ({
+        id:
+          folder.id,
+
+        label:
+          folder.label,
+      })
+    )
+  );
 
 /* =========================
    Party map
 ========================= */
-const partyMap = computed(() => {
-  const map = new Map<number, string>()
-  for (const p of partiesStore.parties.value) {
-    map.set(p.id, p.label)
-  }
-  return map
-})
 
-function getPartyLabel(partyID: number) {
-  return partyMap.value.get(partyID) ?? `#${partyID}`
+const partyMap =
+  computed(() => {
+    const map =
+      new Map<
+        number,
+        string
+      >();
+
+    for (
+      const party
+      of partiesStore
+        .parties.value
+    ) {
+      map.set(
+        party.id,
+        party.label
+      );
+    }
+
+    return map;
+  });
+
+function getPartyLabel(
+  partyID: number
+): string {
+  return (
+    partyMap.value.get(
+      partyID
+    ) ??
+    `#${partyID}`
+  );
 }
 
 /* =========================
    Visibility rules
 ========================= */
-const isPayDateVisible = computed(
-  () => selectedFolder.value === billsFolderSource.value
-)
 
-const isBillsSelected = computed(
-  () => selectedFolder.value === billsFolderSource.value
-)
+const isPayDateVisible =
+  computed(() =>
+    selectedFolder.value ===
+    billsFolderSource.value
+  );
 
-/* =========================
-   Drive session watcher
-========================= */
-watch(driveStatus, status => {
-  if (status !== "CONNECTED") {
-    router.replace({ name: "authentication" })
-  }
-})
+const isBillsSelected =
+  computed(() =>
+    selectedFolder.value ===
+    billsFolderSource.value
+  );
 
 /* =========================
    Folder watcher
 ========================= */
-watch(selectedFolder, val => {
-  selectedSubFolder.value = null  // 👈 AJOUT
-  if (val === billsFolderSource.value) {
-    selectedTags.value = [] // None par défaut
-    selectedQuarterOffset.value = 0
-    selectDefaultPayDateForQuarter()
-  } else {
-    selectedDTADate.value = null
+
+watch(
+  selectedFolder,
+  value => {
+    selectedSubFolder.value =
+      null;
+
+    if (
+      value ===
+      billsFolderSource.value
+    ) {
+      selectedTags.value =
+        [];
+
+      selectedQuarterOffset.value =
+        0;
+
+      selectDefaultPayDateForQuarter();
+
+    } else {
+      selectedDTADate.value =
+        null;
+    }
   }
-})
+);
 
 /* =========================
    Platform detection
 ========================= */
-function isRealMacDesktop() {
-  const ua = navigator.userAgent
-  const isMac = ua.includes("Macintosh")
-  const isTouch = navigator.maxTouchPoints > 1
-  return isMac && !isTouch
+
+function isRealMacDesktop():
+  boolean {
+  const userAgent =
+    navigator.userAgent;
+
+  const isMac =
+    userAgent.includes(
+      "Macintosh"
+    );
+
+  const isTouch =
+    navigator.maxTouchPoints >
+    1;
+
+  return (
+    isMac &&
+    !isTouch
+  );
 }
 
 /* =========================
    Open document
 ========================= */
-function openDocument(item: ArchiveItem) {
-  if (isRealMacDesktop()) {
-    const url =
-      `hometools://open?file=${encodeURIComponent(item.physicalName)}`
-    window.location.href = url
-    return
+
+function openLocalDocument(
+  item: ArchiveItem
+): boolean {
+  if (
+    !isRealMacDesktop() ||
+    !item.physicalName
+  ) {
+    return false;
   }
-  if (item.googleFileId) {
-    const driveUrl =
-      `https://drive.google.com/file/d/${item.googleFileId}/view`
-    window.open(driveUrl, "_blank", "noopener")
+
+  const url =
+    "hometools://open?file=" +
+    encodeURIComponent(
+      item.physicalName
+    );
+
+  window.location.href =
+    url;
+
+  return true;
+}
+
+function openGoogleDocument(
+  item: ArchiveItem
+): boolean {
+  if (!item.googleFileId) {
+    return false;
   }
+
+  const driveUrl =
+    "https://drive.google.com/file/d/" +
+    encodeURIComponent(
+      item.googleFileId
+    ) +
+    "/view";
+
+  window.open(
+    driveUrl,
+    "_blank",
+    "noopener"
+  );
+
+  return true;
+}
+
+function openDocument(
+  item: ArchiveItem
+) {
+  /*
+    Transitional archive strategy:
+
+    - Mac desktop:
+      keep opening the physical local archive
+      through the hometools:// protocol.
+
+    - iPad/browser:
+      keep opening the PDF through googleFileId
+      until physical PDFs are migrated to S3.
+  */
+
+  if (
+    openLocalDocument(item)
+  ) {
+    return;
+  }
+
+  if (
+    backend.value ===
+      "GOOGLE_DRIVE" ||
+    backend.value ===
+      "OBJECT_STORAGE"
+  ) {
+    if (
+      openGoogleDocument(item)
+    ) {
+      return;
+    }
+  }
+
+  alert(
+    "This document is not available on this device."
+  );
+}
+
+/* =========================
+   Archive mapping
+========================= */
+
+function mapToFileItems(
+  data: ArchiveBucketFile | null
+): ArchiveItem[] {
+  if (!data?.items) {
+    return [];
+  }
+
+  return data.items.map(
+    item => ({
+      ...item,
+
+      folder:
+        "A Classer",
+
+      sourceBucket:
+        "toFile",
+    })
+  );
+}
+
+function mapYearItems(
+  data: ArchiveBucketFile | null,
+  year: string
+): ArchiveItem[] {
+  if (!data?.groups) {
+    return [];
+  }
+
+  const output:
+    ArchiveItem[] = [];
+
+  for (
+    const [
+      groupName,
+      group,
+    ]
+    of Object.entries(
+      data.groups
+    )
+  ) {
+    const items =
+      group.items ?? [];
+
+    output.push(
+      ...items.map(
+        item => ({
+          ...item,
+
+          folder:
+            folderLabelToSourceMap
+              .value
+              .get(groupName) ??
+            groupName,
+
+          sourceBucket:
+            year,
+        })
+      )
+    );
+  }
+
+  return output;
 }
 
 /* =========================
    Load archive
 ========================= */
+
 async function loadArchive() {
+  if (!storageReady.value) {
+    return;
+  }
 
-  if (driveStatus.value !== "CONNECTED") return
+  loading.value =
+    true;
 
-  loading.value = true
-  error.value = null
+  error.value =
+    null;
 
   try {
-
-    const index = await loadJSONFromFolder<any>(
-      "archive",
-      "index.json"
-    )
+    const index =
+      await loadJSONFromFolder<
+        ArchiveIndex
+      >(
+        "archive",
+        "index.json"
+      );
 
     if (!index) {
-      throw new Error("Index not loaded")
+      throw new Error(
+        "Archive index not loaded"
+      );
     }
 
-    const years: number[] = index.years ?? []
+    const years =
+      index.years ?? [];
 
-    let allItems: ArchiveItem[] = []
+    const allItems:
+      ArchiveItem[] = [];
 
-    // =========================
-    // TO FILE
-    // =========================
-    const toFile = await loadJSONFromFolder<any>(
-      "archive",
-      "toFile.json"
-    )
-
-    if (toFile?.items) {
-      const mapped = toFile.items.map((i: any) => ({
-        ...i,
-        folder: "A Classer",
-        sourceBucket: "toFile"
-      }))
-
-      allItems.push(...mapped)
-    }
-
-    // =========================
-    // YEAR FILES
-    // =========================
-    for (const year of years) {
-
-      const data = await loadJSONFromFolder<any>(
-        "archive",
-        `${year}.json`
-      )
-
-      if (!data?.groups) continue
-
-      for (const [groupName, group] of Object.entries(data.groups)) {
-
-        const items = (group as any).items ?? []
-
-        const mapped = items.map((i: any) => ({
-          ...i,
-          folder:
-            folderLabelToSourceMap.value.get(groupName)
-            ?? groupName,
-          sourceBucket: String(year)
-        }))
-
-        allItems.push(...mapped)
-      }
-    }
-
-    archive.value = allItems
-
-    if (selectedFolder.value === billsFolderSource.value) {
-      selectDefaultPayDateForQuarter()
-    }
-
-  } catch (err: any) {
-
-    error.value = err.message ?? "Failed to load archive"
-
-  } finally {
-
-    loading.value = false
-  }
-}
-
-async function smartReload(index: any) {
-
-  const foldersUpdated: string[] =
-    index.foldersUpdated ?? []
-
-  if (!foldersUpdated.length) {
-    console.log("📦 full reload")
-    await loadArchive()
-    return
-  }
-
-  console.log("📡 smart reload:", foldersUpdated)
-
-  let updatedItems: ArchiveItem[] = []
-
-  for (const f of foldersUpdated) {
-
-    // =========================
-    // TO FILE
-    // =========================
-    if (f === "toFile") {
-
-      const toFile = await loadJSONFromFolder<any>(
+    const toFile =
+      await loadJSONFromFolder<
+        ArchiveBucketFile
+      >(
         "archive",
         "toFile.json"
+      );
+
+    allItems.push(
+      ...mapToFileItems(
+        toFile
       )
+    );
 
-      if (toFile?.items) {
+    for (
+      const year
+      of years
+    ) {
+      const data =
+        await loadJSONFromFolder<
+          ArchiveBucketFile
+        >(
+          "archive",
+          `${year}.json`
+        );
 
-        const mapped = toFile.items.map((i: any) => ({
-          ...i,
-          folder: "A Classer",
-          sourceBucket: "toFile"
-        }))
-
-        updatedItems.push(...mapped)
-      }
+      allItems.push(
+        ...mapYearItems(
+          data,
+          String(year)
+        )
+      );
     }
 
-    // =========================
-    // YEAR FILE
-    // =========================
-    else if (/^\d{4}$/.test(f)) {
+    archive.value =
+      allItems;
 
-      const data = await loadJSONFromFolder<any>(
-        "archive",
-        `${f}.json`
-      )
-
-      if (!data?.groups) continue
-
-      for (const [groupName, group] of Object.entries(data.groups)) {
-
-        const items = (group as any).items ?? []
-
-        const mapped = items.map((i: any) => ({
-          ...i,
-          folder:
-            folderLabelToSourceMap.value.get(groupName)
-            ?? groupName,
-          sourceBucket: f
-        }))
-
-        updatedItems.push(...mapped)
-      }
+    if (
+      selectedFolder.value ===
+      null
+    ) {
+      selectedFolder.value =
+        defaultFolder.value;
     }
+
+    if (
+      selectedFolder.value ===
+      billsFolderSource.value
+    ) {
+      selectDefaultPayDateForQuarter();
+    }
+
+  } catch (err) {
+    console.error(
+      "Archive loading failed",
+      err
+    );
+
+    error.value =
+      err instanceof Error
+        ? err.message
+        : "Failed to load archive";
+
+  } finally {
+    loading.value =
+      false;
   }
-
-  // =========================
-  // Replace buckets cleanly
-  // =========================
-  archive.value = [
-    ...archive.value.filter(
-      item => !foldersUpdated.includes(item.sourceBucket ?? "")
-    ),
-    ...updatedItems
-  ]
-
-  console.log("✅ smart reload done")
 }
 
 /* =========================
-   Folder configuration
+   Smart reload
 ========================= */
-const folderConfigMap = computed(() => {
-  const map = new Map<string, { label: string; order: number }>()
 
-  for (const f of archiveFoldersStore.folders.value) {
-    map.set(f.source, {
-      label: f.label,
-      order: f.order
-    })
+async function smartReload(
+  index: ArchiveIndex
+) {
+  const foldersUpdated =
+    index.foldersUpdated ??
+    [];
+
+  if (
+    foldersUpdated.length ===
+    0
+  ) {
+    console.log(
+      "Archive full reload"
+    );
+
+    await loadArchive();
+
+    return;
   }
 
-  return map
-})
+  console.log(
+    "Archive smart reload:",
+    foldersUpdated
+  );
 
-const archiveFolders = computed<FolderView[]>(() => {
+  const updatedItems:
+    ArchiveItem[] = [];
 
-  const unique = [...new Set(archive.value.map(i => i.folder))]
+  for (
+    const folder
+    of foldersUpdated
+  ) {
+    if (
+      folder ===
+      "toFile"
+    ) {
+      const toFile =
+        await loadJSONFromFolder<
+          ArchiveBucketFile
+        >(
+          "archive",
+          "toFile.json"
+        );
 
-  return unique
-    .map((f): FolderView => {
+      updatedItems.push(
+        ...mapToFileItems(
+          toFile
+        )
+      );
 
-      const cfg = folderConfigMap.value.get(f)
+      continue;
+    }
 
-      if (!cfg) {
-        console.warn("❌ NO MATCH FOR:", f)
-      }
+    if (
+      /^\d{4}$/.test(
+        folder
+      )
+    ) {
+      const data =
+        await loadJSONFromFolder<
+          ArchiveBucketFile
+        >(
+          "archive",
+          `${folder}.json`
+        );
 
-      return {
-        source: f,
-        label: cfg?.label ?? f,
-        order: cfg?.order ?? 999
-      }
-    })
-    .sort((a, b) => a.order - b.order)
-})
+      updatedItems.push(
+        ...mapYearItems(
+          data,
+          folder
+        )
+      );
+    }
+  }
 
-const billsFolderSource = computed(() => {
-  const configs =
-    (archiveFoldersStore.folders.value as ArchiveFolderConfig[]) ?? []
-  const bills = configs.find(f => f.label === "Bills")
-  return bills?.source ?? null
-})
+  archive.value = [
+    ...archive.value.filter(
+      item =>
+        !foldersUpdated.includes(
+          item.sourceBucket ??
+          ""
+        )
+    ),
 
-const folderItems = computed(() =>
-  archiveFolders.value.map(f => ({
-    id: f.source,
-    label: f.label
-  }))
-)
+    ...updatedItems,
+  ];
 
-const subFolderItems = computed(() =>
-  subFolders.value.map(f => ({
-    id: f.id,
-    label: f.label
-  }))
-)
+  if (
+    selectedFolder.value ===
+    billsFolderSource.value
+  ) {
+    selectDefaultPayDateForQuarter();
+  }
+
+  console.log(
+    "Archive smart reload completed"
+  );
+}
 
 /* =========================
    Quarter logic
 ========================= */
 
-const selectedQuarterOffset = ref(0)
+function getQuarterKey(
+  dateString: string
+): string {
+  const [
+    year,
+    month,
+  ] =
+    dateString
+      .split("-")
+      .map(Number);
 
-function getQuarterKey(dateStr: string) {
+  const quarter =
+    Math.floor(
+      (month - 1) / 3
+    ) + 1;
 
-  const [y, m] = dateStr.split("-").map(Number)
-
-  const quarter = Math.floor((m - 1) / 3) + 1
-
-  return `${y} Q${quarter}`
+  return (
+    `${year} Q${quarter}`
+  );
 }
 
-function getCurrentQuarterKey() {
+function getCurrentQuarterKey():
+  string {
+  const now =
+    new Date();
 
-  const now = new Date()
+  const quarter =
+    Math.floor(
+      now.getMonth() / 3
+    ) + 1;
 
-  const q = Math.floor(now.getMonth() / 3) + 1
-
-  return `${now.getFullYear()} Q${q}`
+  return (
+    `${now.getFullYear()} Q${quarter}`
+  );
 }
 
-const payDatesByQuarter = computed(() => {
+const payDatesByQuarter =
+  computed(() => {
+    const map =
+      new Map<
+        string,
+        string[]
+      >();
 
-  const map = new Map<string, string[]>()
+    for (
+      const item
+      of archive.value
+    ) {
+      if (!item.dtaDate) {
+        continue;
+      }
 
-  for (const item of archive.value) {
+      const key =
+        getQuarterKey(
+          item.dtaDate
+        );
 
-    if (!item.dtaDate) continue
+      if (!map.has(key)) {
+        map.set(
+          key,
+          []
+        );
+      }
 
-    const key = getQuarterKey(item.dtaDate)
+      map.get(key)!
+        .push(
+          item.dtaDate
+        );
+    }
 
-    if (!map.has(key)) map.set(key, [])
+    for (
+      const [
+        key,
+        dates,
+      ]
+      of map
+    ) {
+      const unique =
+        [
+          ...new Set(
+            dates
+          ),
+        ];
 
-    map.get(key)!.push(item.dtaDate)
+      unique.sort(
+        (a, b) =>
+          b.localeCompare(a)
+      );
+
+      map.set(
+        key,
+        unique
+      );
+    }
+
+    return map;
+  });
+
+const availableQuarters =
+  computed(() =>
+    [
+      ...payDatesByQuarter
+        .value
+        .keys(),
+    ]
+      .sort()
+      .reverse()
+  );
+
+const activeQuarterIndex =
+  computed(() => {
+    if (
+      availableQuarters
+        .value.length ===
+      0
+    ) {
+      return -1;
+    }
+
+    const index =
+      availableQuarters
+        .value
+        .indexOf(
+          getCurrentQuarterKey()
+        );
+
+    return (
+      index === -1
+        ? 0
+        : index
+    );
+  });
+
+const activeQuarterKey =
+  computed(() => {
+    if (
+      availableQuarters
+        .value.length ===
+      0
+    ) {
+      return null;
+    }
+
+    const base =
+      activeQuarterIndex.value;
+
+    const shifted =
+      base +
+      selectedQuarterOffset.value;
+
+    if (
+      shifted < 0 ||
+      shifted >=
+        availableQuarters
+          .value.length
+    ) {
+      return (
+        availableQuarters
+          .value[base]
+      );
+    }
+
+    return (
+      availableQuarters
+        .value[shifted]
+    );
+  });
+
+const payDatesInActiveQuarter =
+  computed(() => {
+    if (
+      !activeQuarterKey.value
+    ) {
+      return [];
+    }
+
+    return (
+      payDatesByQuarter
+        .value
+        .get(
+          activeQuarterKey.value
+        ) ??
+      []
+    );
+  });
+
+watch(
+  activeQuarterKey,
+  () => {
+    selectDefaultPayDateForQuarter();
   }
+);
 
-  for (const [k, arr] of map) {
-
-    const unique = [...new Set(arr)]
-
-    unique.sort((a, b) => b.localeCompare(a))
-
-    map.set(k, unique)
-  }
-
-  return map
-})
-
-const availableQuarters = computed(() =>
-  [...payDatesByQuarter.value.keys()].sort().reverse()
-)
-
-const activeQuarterIndex = computed(() => {
-
-  if (!availableQuarters.value.length) return -1
-
-  const idx =
-    availableQuarters.value.indexOf(getCurrentQuarterKey())
-
-  return idx === -1 ? 0 : idx
-})
-
-const activeQuarterKey = computed(() => {
-
-  if (!availableQuarters.value.length) return null
-
-  const base = activeQuarterIndex.value
-
-  const shifted = base + selectedQuarterOffset.value
-
-  if (shifted < 0 || shifted >= availableQuarters.value.length)
-    return availableQuarters.value[base]
-
-  return availableQuarters.value[shifted]
-
-})
-
-const payDatesInActiveQuarter = computed(() => {
-
-  if (!activeQuarterKey.value) return []
-
-  return payDatesByQuarter.value.get(activeQuarterKey.value) ?? []
-})
-
-watch(activeQuarterKey, () => {
-  selectDefaultPayDateForQuarter()
-})
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
+function todayISO():
+  string {
+  return new Date()
+    .toISOString()
+    .slice(0, 10);
 }
 
 function selectDefaultPayDateForQuarter() {
+  const quarter =
+    activeQuarterKey.value;
 
-  const quarter = activeQuarterKey.value
+  if (!quarter) {
+    return;
+  }
 
-  if (!quarter) return
+  const dates =
+    payDatesByQuarter
+      .value
+      .get(quarter) ??
+    [];
 
-  const dates = payDatesByQuarter.value.get(quarter) ?? []
+  if (
+    dates.length === 0
+  ) {
+    return;
+  }
 
-  if (!dates.length) return
+  if (
+    quarter ===
+    getCurrentQuarterKey()
+  ) {
+    const ascending =
+      [...dates].sort(
+        (a, b) =>
+          a.localeCompare(b)
+      );
 
-  if (quarter === getCurrentQuarterKey()) {
-
-    const asc = [...dates].sort((a, b) =>
-      a.localeCompare(b)
-    )
-
-    const next = asc.find(d => d >= todayISO())
+    const next =
+      ascending.find(
+        date =>
+          date >= todayISO()
+      );
 
     selectedDTADate.value =
-      next ?? asc[asc.length - 1]
+      next ??
+      ascending[
+        ascending.length - 1
+      ];
 
-  } else {
-
-    selectedDTADate.value = dates[0]
-
+    return;
   }
+
+  selectedDTADate.value =
+    dates[0];
 }
 
-function toggleFilterTag(id: number) {
-  const i = selectedTags.value.indexOf(id)
-  if (i >= 0)
-    selectedTags.value.splice(i, 1)
-  else
-    selectedTags.value.push(id)
+/* =========================
+   Tag filters
+========================= */
+
+function toggleFilterTag(
+  id: number
+) {
+  const index =
+    selectedTags.value.indexOf(
+      id
+    );
+
+  if (index >= 0) {
+    selectedTags.value.splice(
+      index,
+      1
+    );
+  } else {
+    selectedTags.value.push(
+      id
+    );
+  }
 }
 
 /* =========================
    Filtering
 ========================= */
-function resetFilters() {
 
-  selectedFolder.value = defaultFolder.value
-  selectedSubFolder.value = null
-  selectedDTADate.value = null
-  selectedTags.value = []
-  searchText.value = ""
-  selectedQuarterOffset.value = 0
+function resetFilters() {
+  selectedFolder.value =
+    defaultFolder.value;
+
+  selectedSubFolder.value =
+    null;
+
+  selectedDTADate.value =
+    null;
+
+  selectedTags.value =
+    [];
+
+  searchText.value =
+    "";
+
+  selectedQuarterOffset.value =
+    0;
+
+  if (
+    selectedFolder.value ===
+    billsFolderSource.value
+  ) {
+    selectDefaultPayDateForQuarter();
+  }
 }
 
-const defaultFolder = computed(() => {
-  const configs =
-    (archiveFoldersStore.folders.value as ArchiveFolderConfig[]) ?? []
-  const sorted = [...configs].sort((a, b) => a.order - b.order)
-  return sorted[0]?.source ?? null
-})
-
-const filteredItems = computed(() => {
-
-  return archive.value
-    .filter(item => {
-
-      if (
-        selectedFolder.value &&
-        item.folder !== selectedFolder.value
-      )
-        return false
-
-      if (selectedSubFolder.value) {
-        if (item.partyID !== selectedSubFolder.value) {
-          return false
+const filteredItems =
+  computed(() => {
+    return archive.value
+      .filter(item => {
+        if (
+          selectedFolder.value &&
+          item.folder !==
+            selectedFolder.value
+        ) {
+          return false;
         }
-      }
-
-      if (
-        isPayDateVisible.value &&
-        selectedDTADate.value &&
-        item.dtaDate !== selectedDTADate.value
-      )
-        return false
-
-      if (searchText.value.trim()) {
-
-        const t = searchText.value.trim().toLowerCase()
-
-        const party =
-          getPartyLabel(item.partyID).toLowerCase()
-
-        const info1 = item.info1?.toLowerCase() ?? ""
-
-        const info2 = item.info2?.toLowerCase() ?? ""
 
         if (
-          !party.includes(t) &&
-          !info1.includes(t) &&
-          !info2.includes(t)
-        )
-          return false
-      }
-
-      // TAG FILTER
-      const itemTags = item.tagIDs ?? []
-
-      if (isBillsSelected.value) {
-        // Bills + None => toutes les factures sauf celles avec le tag 7
-        if (selectedTags.value.length === 0) {
-          if (itemTags.includes(7)) return false
+          selectedSubFolder.value &&
+          item.partyID !==
+            selectedSubFolder.value
+        ) {
+          return false;
         }
 
-        // Bills + tag(s) sélectionné(s) => au moins un tag correspondant
-        else {
-          const hasMatch = selectedTags.value.some(tagId =>
-            itemTags.includes(tagId)
-          )
-
-          if (!hasMatch) return false
+        if (
+          isPayDateVisible.value &&
+          selectedDTADate.value &&
+          item.dtaDate !==
+            selectedDTADate.value
+        ) {
+          return false;
         }
-      } else {
-        // Autres dossiers : règle actuelle
-        if (selectedTags.value.length > 0) {
-          const hasMatch = selectedTags.value.some(tagId =>
-            itemTags.includes(tagId)
-          )
 
-          if (!hasMatch) return false
+        const query =
+          searchText.value
+            .trim()
+            .toLowerCase();
+
+        if (query) {
+          const party =
+            getPartyLabel(
+              item.partyID
+            ).toLowerCase();
+
+          const info1 =
+            item.info1
+              ?.toLowerCase() ??
+            "";
+
+          const info2 =
+            item.info2
+              ?.toLowerCase() ??
+            "";
+
+          if (
+            !party.includes(
+              query
+            ) &&
+            !info1.includes(
+              query
+            ) &&
+            !info2.includes(
+              query
+            )
+          ) {
+            return false;
+          }
         }
-      }
-      return true
 
-    })
-    .sort((a, b) =>
-      b.documentDate.localeCompare(a.documentDate)
-    )
-})
+        const itemTags =
+          item.tagIDs ?? [];
 
-const resultCount = computed(
-  () => filteredItems.value.length
-)
+        if (
+          isBillsSelected.value
+        ) {
+          if (
+            selectedTags.value
+              .length === 0
+          ) {
+            if (
+              itemTags.includes(7)
+            ) {
+              return false;
+            }
+
+          } else {
+            const hasMatch =
+              selectedTags.value
+                .some(
+                  tagID =>
+                    itemTags.includes(
+                      tagID
+                    )
+                );
+
+            if (!hasMatch) {
+              return false;
+            }
+          }
+
+        } else if (
+          selectedTags.value
+            .length > 0
+        ) {
+          const hasMatch =
+            selectedTags.value
+              .some(
+                tagID =>
+                  itemTags.includes(
+                    tagID
+                  )
+              );
+
+          if (!hasMatch) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          b.documentDate
+            .localeCompare(
+              a.documentDate
+            )
+      );
+  });
+
+const resultCount =
+  computed(() =>
+    filteredItems.value.length
+  );
+
+const headerCountLabel =
+  computed(() => {
+    const count =
+      resultCount.value;
+
+    return (
+      `${count} document` +
+      `${count !== 1 ? "s" : ""}`
+    );
+  });
 
 /* =========================
    Classification sheet
 ========================= */
 
-const selectedItem = ref<ArchiveItem | null>(null)
-
-function openClassification(item: ArchiveItem) {
-  selectedItem.value = item
+function openClassification(
+  item: ArchiveItem
+) {
+  selectedItem.value =
+    item;
 }
 
 function closeClassification() {
-  selectedItem.value = null
+  selectedItem.value =
+    null;
+}
+
+/* =========================
+   Event helpers
+========================= */
+
+function buildEventFileName(
+  tocid: number
+): string {
+  const now =
+    new Date();
+
+  const YYYY =
+    now.getFullYear();
+
+  const MM =
+    String(
+      now.getMonth() + 1
+    ).padStart(2, "0");
+
+  const DD =
+    String(
+      now.getDate()
+    ).padStart(2, "0");
+
+  const HH =
+    String(
+      now.getHours()
+    ).padStart(2, "0");
+
+  const mm =
+    String(
+      now.getMinutes()
+    ).padStart(2, "0");
+
+  const ss =
+    String(
+      now.getSeconds()
+    ).padStart(2, "0");
+
+  return (
+    `TOC_${YYYY}${MM}${DD}` +
+    `${HH}${mm}${ss}_` +
+    `${tocid}.json`
+  );
+}
+
+function formatPartyID(
+  partyID: number
+): string {
+  return (
+    "P" +
+    String(partyID)
+      .padStart(5, "0")
+  );
+}
+
+function buildPhysicalName(
+  item: ArchiveItem
+): string {
+  const documentDate =
+    item.documentDate;
+
+  const dta =
+    item.dtaDate
+      ? `-DTA${item.dtaDate.replace(
+          /-/g,
+          ""
+        )}`
+      : "";
+
+  const info1 =
+    item.info1
+      ? `-IF1${item.info1}`
+      : "";
+
+  const info2 =
+    item.info2
+      ? `-IF2${item.info2}`
+      : "";
+
+  const tags =
+    item.tagIDs?.length
+      ? `-TAG${item.tagIDs.join(
+          "_"
+        )}`
+      : "";
+
+  const amount =
+    item.refAmount
+      ? `-AMT${Math.round(
+          item.refAmount * 100
+        )}`
+      : "";
+
+  const extension =
+    ".pdf";
+
+  if (
+    item.folder ===
+    "A Classer"
+  ) {
+    const partyLabel =
+      getPartyLabel(
+        item.partyID
+      ) ||
+      `${item.partyID}`;
+
+    return (
+      `${documentDate}-` +
+      `${partyLabel}` +
+      `${info1}` +
+      `${info2}` +
+      `${tags}` +
+      `${amount}` +
+      `${extension}`
+    );
+  }
+
+  const year =
+    item.documentDate.slice(
+      0,
+      4
+    );
+
+  const party =
+    formatPartyID(
+      item.partyID
+    );
+
+  return (
+    `${year}/` +
+    `${item.folder}/` +
+    `${party}/` +
+    `${documentDate}` +
+    `${dta}` +
+    `${info1}` +
+    `${info2}` +
+    `${tags}` +
+    `${amount}` +
+    `${extension}`
+  );
 }
 
 /* =========================
    Save classification
 ========================= */
 
-function buildEventFileName(tocid: number): string {
+async function saveClassification(
+  updated: ArchiveItem
+) {
+  if (!storageReady.value) {
+    error.value =
+      storageUnavailableMessage.value ||
+      "Storage not available.";
 
-  const now = new Date()
-
-  const YYYY = now.getFullYear()
-  const MM = String(now.getMonth() + 1).padStart(2, "0")
-  const DD = String(now.getDate()).padStart(2, "0")
-
-  const HH = String(now.getHours()).padStart(2, "0")
-  const mm = String(now.getMinutes()).padStart(2, "0")
-
-  return `TOC_${YYYY}${MM}${DD}${HH}${mm}_${tocid}.json`
-}
-
-
-function formatPartyID(partyID: number): string {
-  return "P" + String(partyID).padStart(5, "0")
-}
-
-
-function buildPhysicalName(item: ArchiveItem): string {
-
-  const docDate = item.documentDate
-
-  const dta =
-    item.dtaDate
-      ? `-DTA${item.dtaDate.replace(/-/g, "")}`
-      : ""
-
-  const if1 =
-    item.info1
-      ? `-IF1${item.info1}`
-      : ""
-
-  const if2 =
-    item.info2
-      ? `-IF2${item.info2}`
-      : ""
-
-  const tags =
-    item.tagIDs?.length
-      ? `-TAG${item.tagIDs.join("_")}`
-      : ""
-
-  const amount =
-    item.refAmount
-      ? `-AMT${Math.round(item.refAmount * 100)}`
-      : ""
-
-  const ext = ".pdf"
-
-  // 🟥 CASE: TO FILE (ROOT)
-  if (item.folder === "A Classer") {
-    const relationLabel =
-      getPartyLabel(item.partyID) || `${item.partyID}`
-    return `${docDate}-${relationLabel}${if1}${if2}${tags}${amount}${ext}`
+    return;
   }
 
-  // 🟩 NORMAL CASE
-  const year = item.documentDate.slice(0, 4)
-  const relation = formatPartyID(item.partyID)
-  return `${year}/${item.folder}/${relation}/${docDate}${dta}${if1}${if2}${tags}${amount}${ext}`
-}
+  const previousItem =
+    archive.value.find(
+      item =>
+        item.tocid ===
+        updated.tocid
+    );
 
+  const previousSnapshot =
+    previousItem
+      ? { ...previousItem }
+      : null;
 
-async function saveClassification(updated: ArchiveItem) {
-
-  const processedFilePhysicalName = updated.physicalName
+  const processedFilePhysicalName =
+    updated.physicalName;
 
   try {
-    // =========================
-    // 1. Optimistic UI
-    // =========================
-    const idx = archive.value.findIndex(
-      x => x.tocid === updated.tocid
-    )
-    if (idx !== -1) {
-      archive.value[idx] = { ...updated }
+    const index =
+      archive.value.findIndex(
+        item =>
+          item.tocid ===
+          updated.tocid
+      );
+
+    if (index !== -1) {
+      archive.value[index] = {
+        ...updated,
+      };
     }
 
-    // =========================
-    // 2. Build physicalName
-    // =========================
-    const newPhysicalName = buildPhysicalName(updated)
+    const newPhysicalName =
+      buildPhysicalName(
+        updated
+      );
 
-    // =========================
-    // 3. Build event
-    // =========================
     const event = {
-      eventType: "ARCHIVE_UPDATED",
-      version: 1,
-      timestamp: new Date().toISOString(),
-      processedFile: processedFilePhysicalName,
+      eventType:
+        "ARCHIVE_UPDATED",
+
+      version:
+        1,
+
+      timestamp:
+        new Date().toISOString(),
+
+      processedFile:
+        processedFilePhysicalName,
 
       archiveMetadata: {
-        tocid: updated.tocid,
-        googleFileId: updated.googleFileId,
+        tocid:
+          updated.tocid,
+
+        googleFileId:
+          updated.googleFileId,
+
         newPhysicalName,
-        folder: updated.folder,
-        partyID: updated.partyID,
-        documentDate: updated.documentDate,
-        dtaDate: updated.dtaDate,
-        info1: updated.info1,
-        info2: updated.info2,
-        refAmount: updated.refAmount,
-        tagIDs: updated.tagIDs ?? []
+
+        folder:
+          updated.folder,
+
+        partyID:
+          updated.partyID,
+
+        documentDate:
+          updated.documentDate,
+
+        dtaDate:
+          updated.dtaDate,
+
+        info1:
+          updated.info1,
+
+        info2:
+          updated.info2,
+
+        refAmount:
+          updated.refAmount,
+
+        tagIDs:
+          updated.tagIDs ??
+          [],
+      },
+    };
+
+    const fileName =
+      buildEventFileName(
+        updated.tocid
+      );
+
+    const {
+      save,
+    } =
+      useDriveJsonFile(
+        "events",
+        fileName
+      );
+
+    await save(event);
+
+    closeClassification();
+
+    /*
+      Do not reload immediately.
+
+      The local backend processor updates the archive
+      indexes, and index.json watcher reloads the
+      affected bucket afterwards.
+
+      Keeping the optimistic update avoids briefly
+      restoring stale index data.
+    */
+
+  } catch (err) {
+    console.error(
+      "Archive classification save failed",
+      err
+    );
+
+    if (
+      previousSnapshot
+    ) {
+      const index =
+        archive.value.findIndex(
+          item =>
+            item.tocid ===
+            previousSnapshot.tocid
+        );
+
+      if (index !== -1) {
+        archive.value[index] = {
+          ...previousSnapshot,
+        };
       }
     }
 
-    // =========================
-    // 4. File name
-    // =========================
-    const fileName = buildEventFileName(updated.tocid)
-
-    // =========================
-    // 5. Write via composable
-    // =========================
-    const { save } = useDriveJsonFile(
-      "events",
-      fileName
-    )
-
-    await save(event)
-    await loadArchive()
-
-  } catch (e) {
-
-    console.error("Save failed", e)
+    error.value =
+      err instanceof Error
+        ? err.message
+        : "Save failed";
   }
 }
 
+/* =========================
+   Delete document
+========================= */
 
-async function deleteDocument(payload: { tocid: number }) {
+async function deleteDocument(
+  payload: {
+    tocid: number;
+  }
+) {
+  if (!storageReady.value) {
+    error.value =
+      storageUnavailableMessage.value ||
+      "Storage not available.";
+
+    return;
+  }
 
   try {
-
-    const fileName = buildEventFileName(payload.tocid)
+    const fileName =
+      buildEventFileName(
+        payload.tocid
+      );
 
     const event = {
-      eventType: "ARCHIVE_DELETED",
-      version: 1,
-      timestamp: new Date().toISOString(),
+      eventType:
+        "ARCHIVE_DELETED",
+
+      version:
+        1,
+
+      timestamp:
+        new Date().toISOString(),
 
       archiveMetadata: {
-        tocid: payload.tocid
-      }
-    }
+        tocid:
+          payload.tocid,
+      },
+    };
 
-    const { save } = useDriveJsonFile(
-      "events",
-      fileName
-    )
+    const {
+      save,
+    } =
+      useDriveJsonFile(
+        "events",
+        fileName
+      );
 
-    await save(event)
+    await save(event);
 
-    // ❌ PAS de reload ici !
-    // 👉 ton watcher index.json va s'en charger
+    closeClassification();
 
-  } catch (e) {
+    /*
+      No optimistic removal:
+      archive/index.json watcher reloads the index
+      after the backend has processed the event.
+    */
 
-    console.error("Delete failed", e)
+  } catch (err) {
+    console.error(
+      "Archive deletion request failed",
+      err
+    );
 
+    error.value =
+      err instanceof Error
+        ? err.message
+        : "Delete failed";
   }
 }
 
-function rowClick(e: MouseEvent, item: ArchiveItem) {
-  const el = e.target as HTMLElement
-  if (el.closest(".classify-btn")) return
-  openDocument(item)
+/* =========================
+   Row click
+========================= */
+
+function rowClick(
+  event: MouseEvent,
+  item: ArchiveItem
+) {
+  const element =
+    event.target as HTMLElement;
+
+  if (
+    element.closest(
+      ".classify-btn"
+    )
+  ) {
+    return;
+  }
+
+  openDocument(item);
 }
 
-const tagMap = computed(() => {
+/* =========================
+   Tags
+========================= */
 
-  const map = new Map<number, DocumentTag>()
+const tagMap =
+  computed(() => {
+    const map =
+      new Map<
+        number,
+        DocumentTag
+      >();
 
-  tagsStore.tags.value.forEach(t => {
-    map.set(t.id, t)
-  })
+    for (
+      const tag
+      of tagsStore.tags.value
+    ) {
+      map.set(
+        tag.id,
+        tag
+      );
+    }
 
-  return map
-})
+    return map;
+  });
 
-const tooltip = ref<{
-  text: string
-  x: number
-  y: number
-} | null>(null)
+const tooltip =
+  ref<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
-let tooltipTimer: ReturnType<typeof setTimeout> | null = null
+let tooltipTimer:
+  ReturnType<
+    typeof setTimeout
+  > | null = null;
 
-function showTagTooltip(e: MouseEvent, tagId: number) {
-  const tag = tagMap.value.get(tagId)
-  if (!tag) return
+function showTagTooltip(
+  event: MouseEvent,
+  tagID: number
+) {
+  const tag =
+    tagMap.value.get(
+      tagID
+    );
 
-  const target = e.currentTarget as HTMLElement
-  const rect = target.getBoundingClientRect()
+  if (!tag) {
+    return;
+  }
+
+  const target =
+    event.currentTarget as
+      HTMLElement;
+
+  const rect =
+    target.getBoundingClientRect();
 
   tooltip.value = {
-    text: tag.tagName,
-    x: rect.left + rect.width / 2,
-    y: rect.top - 8
+    text:
+      tag.tagName,
+
+    x:
+      rect.left +
+      rect.width / 2,
+
+    y:
+      rect.top - 8,
+  };
+
+  if (
+    tooltipTimer
+  ) {
+    clearTimeout(
+      tooltipTimer
+    );
   }
 
-  if (tooltipTimer) clearTimeout(tooltipTimer)
+  tooltipTimer =
+    setTimeout(
+      () => {
+        tooltip.value =
+          null;
 
-  tooltipTimer = setTimeout(() => {
-    tooltip.value = null
-    tooltipTimer = null
-  }, 2000)
+        tooltipTimer =
+          null;
+      },
+
+      2000
+    );
 }
 
 function hideTagTooltip() {
-  if (tooltipTimer) {
-    clearTimeout(tooltipTimer)
-    tooltipTimer = null
+  if (
+    tooltipTimer
+  ) {
+    clearTimeout(
+      tooltipTimer
+    );
+
+    tooltipTimer =
+      null;
   }
-  tooltip.value = null
+
+  tooltip.value =
+    null;
 }
 
 /* =========================
    Formatting
 ========================= */
-function escapeRegExp(str: string) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+function escapeRegExp(
+  value: string
+): string {
+  return value.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
 }
 
-function highlight(text: string | null | undefined) {
+function highlight(
+  text:
+    | string
+    | null
+    | undefined
+): string {
+  if (!text) {
+    return "";
+  }
 
-  if (!text) return ""
+  const query =
+    searchText.value.trim();
 
-  const query = searchText.value?.trim()
+  if (!query) {
+    return text;
+  }
 
-  if (!query) return text
+  const safeQuery =
+    escapeRegExp(
+      query
+    );
 
-  const safeQuery = escapeRegExp(query)
+  const regex =
+    new RegExp(
+      `(${safeQuery})`,
+      "gi"
+    );
 
-  const regex = new RegExp(`(${safeQuery})`, "gi")
-
-  return text.replace(regex, `<mark>$1</mark>`)
+  return text.replace(
+    regex,
+    "<mark>$1</mark>"
+  );
 }
-
-const headerCountLabel = computed(() => {
-
-  const n = resultCount.value
-
-  return `${n} document${n !== 1 ? "s" : ""}`
-})
 
 /* =========================
-   Init
+   Initialize
 ========================= */
+
+async function initializeView() {
+  if (
+    loading.value ||
+    initialized.value
+  ) {
+    return;
+  }
+
+  loading.value =
+    true;
+
+  error.value =
+    null;
+
+  try {
+    const ready =
+      await ensureStorageReady();
+
+    if (!ready) {
+      return;
+    }
+
+    await loadSettings();
+    await loadArchive();
+
+    selectedFolder.value =
+      selectedFolder.value ??
+      defaultFolder.value;
+
+    initialized.value =
+      true;
+
+  } catch (err) {
+    console.error(
+      "Archive initialization failed",
+      err
+    );
+
+    error.value =
+      err instanceof Error
+        ? err.message
+        : String(err);
+
+  } finally {
+    loading.value =
+      false;
+  }
+}
+
 watch(
-  driveStatus,
-  async (status) => {
-    if (status !== "CONNECTED") return
-    await loadSettings()
-    await loadArchive()
+  storageReady,
+  async ready => {
+    if (!ready) {
+      initialized.value =
+        false;
+
+      archive.value =
+        [];
+
+      selectedFolder.value =
+        null;
+
+      return;
+    }
+
+    await initializeView();
   },
-  { immediate: true }
-)
+  {
+    immediate:
+      true,
+  }
+);
+
+/* =========================
+   Archive index watcher
+========================= */
 
 useDriveWatcher({
-  folderId: "archive",
-  fileName: "index.json",
-  lastKnownState: indexLastModified,
-  onChanged: async () => {
-    console.log("📡 index.json changed")
-    const index = await loadJSONFromFolder<any>(
-      "archive",
-      "index.json"
-    )
-    if (!index) return
-    // ⏳ très important (latence backend)
-    await new Promise(r => setTimeout(r, 200))
-    await smartReload(index)
-  }
-})
+  folderId:
+    "archive",
 
-onMounted(() => {
-  selectedFolder.value = defaultFolder.value
-/*  const configs =
-    (archiveFoldersStore.folders.value as ArchiveFolderConfig[]) ?? []
+  fileName:
+    "index.json",
 
-  if (configs.length) {
-    const sorted = [...configs].sort((a, b) => a.order - b.order)
-    selectedFolder.value = sorted[0].source
-  }*/
-})
+  lastKnownState:
+    indexLastModified,
+
+  onChanged:
+    async () => {
+      if (
+        !storageReady.value
+      ) {
+        return;
+      }
+
+      console.log(
+        "Archive index changed"
+      );
+
+      const index =
+        await loadJSONFromFolder<
+          ArchiveIndex
+        >(
+          "archive",
+          "index.json"
+        );
+
+      if (!index) {
+        return;
+      }
+
+      /*
+        Small consistency delay:
+        index.json can be published a fraction before
+        the affected year/toFile object is available.
+      */
+      await new Promise<void>(
+        resolve =>
+          window.setTimeout(
+            resolve,
+            200
+          )
+      );
+
+      await smartReload(
+        index
+      );
+    },
+});
+
+/* =========================
+   Cleanup
+========================= */
+
+onBeforeUnmount(() => {
+  hideTagTooltip();
+});
 </script>
 
 <template>
-  <!-- =========================
-      STICKY STACK
-  ========================= -->
   <div class="sticky-stack">
-    <PageHeader title="Documents archives" icon="bookshelf" />
-    <div v-if="driveStatus !== 'CONNECTED'" class="archives-view muted">
-      Drive session not available.
+    <PageHeader
+      title="Documents archives"
+      icon="bookshelf"
+    />
+
+    <div
+      v-if="!storageReady"
+      class="archives-view muted"
+    >
+      {{
+        storageUnavailableMessage ||
+        "Storage not available."
+      }}
     </div>
-    <div v-else>  
+
+    <div v-else>
       <section class="filters">
         <header
           class="filters-header clickable"
-          @click="filtersOpen = !filtersOpen"
+          @click="
+            filtersOpen =
+              !filtersOpen
+          "
         >
           <span class="arrow">
-            {{ filtersOpen ? "▼" : "►" }}
+            {{
+              filtersOpen
+                ? "▼"
+                : "►"
+            }}
           </span>
 
-          <span class="filters-title">Filters</span>
+          <span class="filters-title">
+            Filters
+          </span>
 
           <button
             v-if="filtersOpen"
+            type="button"
             class="reset-button"
-            @click.stop="resetFilters"
+            @click.stop="
+              resetFilters
+            "
           >
             Reset
           </button>
         </header>
-        <div v-if="filtersOpen" class="filters-body">
-          <!-- Folder -->
+
+        <div
+          v-if="filtersOpen"
+          class="filters-body"
+        >
           <ChipSelector
+            v-model="selectedFolder"
             label="Documents"
             :items="folderItems"
-            v-model="selectedFolder"
-            :showAll="true"
-            :alignWithContent="true"
-          /> 
-          <!-- Sub folders -->
+            :show-all="true"
+            :align-with-content="true"
+          />
+
           <ChipSelector
-            v-if="subFolderItems.length"
+            v-if="
+              subFolderItems.length
+            "
+            v-model="
+              selectedSubFolder
+            "
             label="Type"
-            :items="subFolderItems"
-            v-model="selectedSubFolder"
-            :showAll="true"
-            :alignWithContent="true"
-          /> 
-          <!-- Tags -->
+            :items="
+              subFolderItems
+            "
+            :show-all="true"
+            :align-with-content="
+              true
+            "
+          />
+
           <div
-            v-if="tagsStore.tags.value.length"
+            v-if="
+              tagsStore.tags.value
+                .length
+            "
             class="filter-row with-label"
           >
-            <span class="filter-label">Tags</span>
+            <span class="filter-label">
+              Tags
+            </span>
+
             <div class="chip-line">
-              <!-- All -->
               <button
+                type="button"
                 class="chip"
-                :class="{ active: selectedTags.length === 0 }"
-                @click="selectedTags = []"
+                :class="{
+                  active:
+                    selectedTags
+                      .length === 0
+                }"
+                @click="
+                  selectedTags = []
+                "
               >
                 None
-              </button>               
-              <!-- Tags -->
-              <div
-                v-for="t in tagsStore.tags.value"
-                :key="t.id"
-                class="tag-dot"
-                :class="{ active: selectedTags.includes(t.id) }"
-                :style="{ backgroundColor: t.color }"
-                @click="toggleFilterTag(t.id)"
-                @mouseenter="showTagTooltip($event, t.id)"
-                @mouseleave="hideTagTooltip"
-              ></div>
+              </button>
 
+              <div
+                v-for="
+                  tag
+                  in tagsStore.tags.value
+                "
+                :key="tag.id"
+                class="tag-dot"
+                :class="{
+                  active:
+                    selectedTags.includes(
+                      tag.id
+                    )
+                }"
+                :style="{
+                  backgroundColor:
+                    tag.color
+                }"
+                @click="
+                  toggleFilterTag(
+                    tag.id
+                  )
+                "
+                @mouseenter="
+                  showTagTooltip(
+                    $event,
+                    tag.id
+                  )
+                "
+                @mouseleave="
+                  hideTagTooltip
+                "
+              ></div>
             </div>
           </div>
-          <!-- Pay Date -->
-          <div v-if="isPayDateVisible" class="filter-row paydate-row">
-            <span class="filter-label">Pay date</span>
+
+          <div
+            v-if="
+              isPayDateVisible
+            "
+            class="filter-row paydate-row"
+          >
+            <span class="filter-label">
+              Pay date
+            </span>
+
             <div class="paydate-content">
               <div class="quarter-capsule">
-                <span class="arrow-nav" @click="selectedQuarterOffset--">‹</span>
+                <span
+                  class="arrow-nav"
+                  @click="
+                    selectedQuarterOffset--
+                  "
+                >
+                  ‹
+                </span>
+
                 <span class="quarter-title">
                   {{ activeQuarterKey }}
                 </span>
-                <span class="arrow-nav" @click="selectedQuarterOffset++">›</span>
+
+                <span
+                  class="arrow-nav"
+                  @click="
+                    selectedQuarterOffset++
+                  "
+                >
+                  ›
+                </span>
               </div>
+
               <div class="chip-scroll">
                 <button
-                  v-for="d in payDatesInActiveQuarter"
-                  :key="d"
+                  v-for="
+                    date
+                    in payDatesInActiveQuarter
+                  "
+                  :key="date"
+                  type="button"
                   class="chip"
-                  :class="{ active: selectedDTADate === d }"
-                  @click="selectedDTADate = d"
+                  :class="{
+                    active:
+                      selectedDTADate ===
+                      date
+                  }"
+                  @click="
+                    selectedDTADate =
+                      date
+                  "
                 >
-                  {{ formatDate(d,"text") }}
+                  {{
+                    formatDate(
+                      date,
+                      "text"
+                    )
+                  }}
                 </button>
               </div>
             </div>
           </div>
-          <!-- Search -->
+
           <div class="filter-row with-label">
-            <span class="filter-label">Search</span>
+            <span class="filter-label">
+              Search
+            </span>
+
             <input
               v-model="searchText"
               type="text"
@@ -1099,7 +2214,6 @@ onMounted(() => {
         </div>
       </section>
 
-      <!-- Counter with separators -->
       <div class="archive-counter-wrapper">
         <div class="archive-separator"></div>
 
@@ -1112,123 +2226,260 @@ onMounted(() => {
         <div class="archive-separator"></div>
       </div>
     </div>
-    <!-- =========================
-        SCROLLABLE TABLE AREA
-    ========================= -->
-    <div class="archives-table-wrapper">
-      <table
-        v-if="!loading && !error && filteredItems.length"
-        class="archive-table"
-      >
-        <colgroup>
-          <col class="col-action" style="width: 35px"/>
-          <col class="col-date" style="width: 110px"/>
-          <col class="col-party" />
-          <col class="col-info1" />
-          <col class="col-info2" />
-          <col v-if="isBillsSelected" class="col-dta" style="width: 125px"/>
-          <col v-if="isBillsSelected" class="col-amount" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th class="col-action"></th>
-            <th class="col-date">Date</th>
-            <th class="col-party">Party</th>
-            <th class="col-info1">Info1</th>
-            <th class="col-info2">Info2</th>
-            <th v-if="isBillsSelected" class="col-dta">DTA</th>
-            <th v-if="isBillsSelected" class="col-amount">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="item in filteredItems"
-            :key="item.tocid"
-            class="clickable-row"
-            @click="rowClick($event, item)"
+  </div>
+
+  <div
+    v-if="storageReady"
+    class="archives-table-wrapper"
+  >
+    <div
+      v-if="loading"
+      class="archives-view muted"
+    >
+      Loading…
+    </div>
+
+    <div
+      v-else-if="error"
+      class="archives-view error"
+    >
+      {{ error }}
+    </div>
+
+    <table
+      v-else-if="
+        filteredItems.length
+      "
+      class="archive-table"
+    >
+      <colgroup>
+        <col
+          class="col-action"
+          style="width: 35px"
+        >
+
+        <col
+          class="col-date"
+          style="width: 110px"
+        >
+
+        <col class="col-party">
+        <col class="col-info1">
+        <col class="col-info2">
+
+        <col
+          v-if="isBillsSelected"
+          class="col-dta"
+          style="width: 125px"
+        >
+
+        <col
+          v-if="isBillsSelected"
+          class="col-amount"
+        >
+      </colgroup>
+
+      <thead>
+        <tr>
+          <th class="col-action"></th>
+          <th class="col-date">Date</th>
+          <th class="col-party">Party</th>
+          <th class="col-info1">Info1</th>
+          <th class="col-info2">Info2</th>
+
+          <th
+            v-if="isBillsSelected"
+            class="col-dta"
           >
-            <td class="col-action">
-              <button
-                class="classify-btn"
-                @click.stop="openClassification(item)"
-              >
-                📂
-              </button>
-            </td>            
-            <td class="col-date">{{ formatDate(item.documentDate, "text") }}</td>
-            <td class="col-party" v-html="highlight(getPartyLabel(item.partyID))"></td>
-            <td class="col-info1" v-html="highlight(item.info1)"></td>
-            <td class="col-info2">
-              <div class="info2-cell">
-                <span
-                  class="info2-text"
-                  v-html="highlight(item.info2)"
-                ></span>
+            DTA
+          </th>
+
+          <th
+            v-if="isBillsSelected"
+            class="col-amount"
+          >
+            Amount
+          </th>
+        </tr>
+      </thead>
+
+      <tbody>
+        <tr
+          v-for="
+            item
+            in filteredItems
+          "
+          :key="item.tocid"
+          class="clickable-row"
+          @click="
+            rowClick(
+              $event,
+              item
+            )
+          "
+        >
+          <td class="col-action">
+            <button
+              type="button"
+              class="classify-btn"
+              @click.stop="
+                openClassification(
+                  item
+                )
+              "
+            >
+              📂
+            </button>
+          </td>
+
+          <td class="col-date">
+            {{
+              formatDate(
+                item.documentDate,
+                "text"
+              )
+            }}
+          </td>
+
+          <td
+            class="col-party"
+            v-html="
+              highlight(
+                getPartyLabel(
+                  item.partyID
+                )
+              )
+            "
+          ></td>
+
+          <td
+            class="col-info1"
+            v-html="
+              highlight(
+                item.info1
+              )
+            "
+          ></td>
+
+          <td class="col-info2">
+            <div class="info2-cell">
               <span
-                v-if="item.tagIDs?.length"
+                class="info2-text"
+                v-html="
+                  highlight(
+                    item.info2
+                  )
+                "
+              ></span>
+
+              <span
+                v-if="
+                  item.tagIDs?.length
+                "
                 class="tag-squares"
               >
                 <span
-                  v-for="tagId in item.tagIDs"
-                  :key="tagId"
+                  v-for="
+                    tagID
+                    in item.tagIDs
+                  "
+                  :key="tagID"
                   class="tag-square"
-                  :style="{ backgroundColor: tagMap.get(tagId)?.color ?? '#ccc' }"
-                  @mouseenter="showTagTooltip($event, tagId)"
-                  @mouseleave="hideTagTooltip"
+                  :style="{
+                    backgroundColor:
+                      tagMap.get(
+                        tagID
+                      )?.color ??
+                      '#ccc'
+                  }"
+                  @mouseenter="
+                    showTagTooltip(
+                      $event,
+                      tagID
+                    )
+                  "
+                  @mouseleave="
+                    hideTagTooltip
+                  "
                 ></span>
               </span>
-              </div>
-            </td>
-            <td v-if="isBillsSelected" class="col-dta">
-              <span
-                v-if="item.indicatorDTA === 1"
-                class="dta-badge"
-              >
-                {{ formatDate(item.dtaDate, "text") }}
-              </span>
-            </td>
-            <td v-if="isBillsSelected" class="col-amount">
-              {{ formatAmount(item.refAmount) }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div
-        v-else-if="filteredItems.length === 0"
-        class="empty-state"
-      >
-        Check filters
-      </div>
-      <div v-if="loading" class="archives-view muted">
-        Loading…
-      </div>
-      <div v-else-if="error" class="archives-view error">
-        {{ error }}
-      </div>
+            </div>
+          </td>
+
+          <td
+            v-if="isBillsSelected"
+            class="col-dta"
+          >
+            <span
+              v-if="
+                item.indicatorDTA ===
+                1
+              "
+              class="dta-badge"
+            >
+              {{
+                formatDate(
+                  item.dtaDate,
+                  "text"
+                )
+              }}
+            </span>
+          </td>
+
+          <td
+            v-if="isBillsSelected"
+            class="col-amount"
+          >
+            {{
+              formatAmount(
+                item.refAmount
+              )
+            }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div
+      v-else
+      class="empty-state"
+    >
+      Check filters
     </div>
-    
   </div>
+
   <ArchiveDocumentSheet
     v-if="selectedItem"
     :doc="selectedItem"
-    @close="closeClassification"
-    @save="saveClassification"
-    @delete="deleteDocument"
+    @close="
+      closeClassification
+    "
+    @save="
+      saveClassification
+    "
+    @delete="
+      deleteDocument
+    "
   />
+
   <div
-  v-if="tooltip"
-  class="tag-tooltip"
-  :style="{
-    left: tooltip.x + 'px',
-    top: tooltip.y + 'px'
-  }"
->
-  {{ tooltip.text }}
-</div>
+    v-if="tooltip"
+    class="tag-tooltip"
+    :style="{
+      left:
+        tooltip.x +
+        'px',
+
+      top:
+        tooltip.y +
+        'px'
+    }"
+  >
+    {{ tooltip.text }}
+  </div>
 </template>
 
 <style scoped>
-
 /* =========================================================
    BASE LAYOUT
 ========================================================= */
@@ -1237,49 +2488,96 @@ onMounted(() => {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 4px;
-  backdrop-filter: blur(6px);
 
-  /* 🔥 FIX DARK MODE */
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  border-bottom:
+    1px solid
+    var(--border);
 
-  --sticky-offset: 0px;
+  padding-bottom:
+    4px;
+
+  backdrop-filter:
+    blur(6px);
+
+  background:
+    color-mix(
+      in srgb,
+      var(--bg) 92%,
+      transparent
+    );
+
+  --sticky-offset:
+    0px;
 }
+
 /* =========================================================
-   FILTER HEADER (avec reset)
+   FILTER HEADER
 ========================================================= */
+
 .filters-header {
-  padding: 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  padding:
+    0.5rem;
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  gap:
+    0.5rem;
 }
 
 .filters-title {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-soft);
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    600;
+
+  color:
+    var(--text-soft);
 }
 
-/* Reset button (identique Spending) */
 .reset-button {
-  padding: 2px 20px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-soft);
-  color: var(--text-soft);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  padding:
+    2px 20px;
+
+  border-radius:
+    999px;
+
+  border:
+    1px solid
+    var(--border);
+
+  background:
+    var(--surface-soft);
+
+  color:
+    var(--text-soft);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    600;
+
+  cursor:
+    pointer;
+
+  transition:
+    all 0.15s ease;
 }
 
 .reset-button:hover {
-  background: var(--primary-soft);
-  border-color: var(--primary);
-  color: var(--primary);
+  background:
+    var(--primary-soft);
+
+  border-color:
+    var(--primary);
+
+  color:
+    var(--primary);
 }
 
 /* =========================================================
@@ -1287,33 +2585,111 @@ onMounted(() => {
 ========================================================= */
 
 .filters-body {
-  padding: 6px 12px 8px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  padding:
+    6px 12px 8px;
+
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  gap:
+    10px;
 }
 
-/* 🔥 STRUCTURE UNIFIÉE (Documents + Type alignés) */
 .filter-row.with-label {
-  display: grid;
-  grid-template-columns: 90px minmax(0, 1fr);
-  align-items: center;
-  gap: 0.75rem;
+  display:
+    grid;
+
+  grid-template-columns:
+    90px
+    minmax(0, 1fr);
+
+  align-items:
+    center;
+
+  gap:
+    0.75rem;
 }
 
 .filter-label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-soft);
+  font-size:
+    0.85rem;
+
+  font-weight:
+    500;
+
+  color:
+    var(--text-soft);
+}
+
+.filter-row input {
+  box-sizing:
+    border-box;
+
+  width:
+    100%;
+
+  max-width:
+    420px;
+
+  padding:
+    7px 10px;
+
+  border:
+    1px solid
+    var(--border);
+
+  border-radius:
+    8px;
+
+  background:
+    var(--surface);
+
+  color:
+    var(--text);
+
+  font-family:
+    inherit;
+}
+
+.filter-row input:focus {
+  outline:
+    none;
+
+  border-color:
+    var(--primary);
+
+  box-shadow:
+    0 0 0 2px
+    var(--primary-soft);
+}
+
+/* =========================================================
+   EMPTY / STATES
+========================================================= */
+
+.archives-view {
+  padding:
+    1rem;
 }
 
 .empty-state {
-  padding: 1rem 1rem;
-  text-align: center;
-  font-size: 1.05rem;
-  color: var(--positive);
-  opacity: 1;
-  font-style: italic;
+  padding:
+    1rem;
+
+  text-align:
+    center;
+
+  font-size:
+    1.05rem;
+
+  color:
+    var(--positive);
+
+  font-style:
+    italic;
 }
 
 /* =========================================================
@@ -1321,127 +2697,236 @@ onMounted(() => {
 ========================================================= */
 
 .chip {
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.75rem;
-  font-weight: 600;
-  opacity: 0.7;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s ease;
+  padding:
+    6px 10px;
+
+  border-radius:
+    999px;
+
+  border:
+    1px solid
+    var(--border);
+
+  background:
+    var(--surface);
+
+  color:
+    var(--text);
+
+  font-size:
+    0.75rem;
+
+  font-weight:
+    600;
+
+  opacity:
+    0.7;
+
+  cursor:
+    pointer;
+
+  white-space:
+    nowrap;
+
+  transition:
+    all 0.15s ease;
 }
 
 .chip:hover {
-  opacity: 0.9;
+  opacity:
+    0.9;
 }
 
 .chip.active {
-  opacity: 1;
-  background: var(--primary-soft);
-  border-color: var(--primary);
-  color: var(--primary);
+  opacity:
+    1;
+
+  background:
+    var(--primary-soft);
+
+  border-color:
+    var(--primary);
+
+  color:
+    var(--primary);
 }
 
-/* ligne simple (Documents) */
 .chip-line {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
+  display:
+    flex;
+
+  gap:
+    6px;
+
+  flex-wrap:
+    wrap;
+
+  align-items:
+    center;
 }
 
 /* =========================================================
-   TAG FILTERS (aligned like chips)
+   TAG FILTERS
 ========================================================= */
+
 .tag-dot {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  opacity: 0.7;
-  transition: all 0.15s ease;
+  width:
+    18px;
+
+  height:
+    18px;
+
+  border-radius:
+    5px;
+
+  border:
+    1px solid
+    var(--border);
+
+  cursor:
+    pointer;
+
+  opacity:
+    0.75;
+
+  transition:
+    all 0.15s ease;
+
+  display:
+    inline-flex;
 }
 
 .tag-dot:hover {
-  opacity: 1;
-  transform: scale(1.1);
+  opacity:
+    1;
+
+  transform:
+    scale(1.1);
 }
 
 .tag-dot.active {
-  opacity: 1;
-  border: 2px solid var(--primary);
-  transform: scale(1.15);
-}
+  opacity:
+    1;
 
-.tag-dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  opacity: 0.75;
-  transition: all 0.15s ease;
+  border:
+    2px solid
+    var(--primary);
 
-  display: inline-flex;
+  transform:
+    scale(1.15);
 }
 
 .chip + .tag-dot {
-  margin-left: 4px;
+  margin-left:
+    4px;
 }
 
 /* =========================================================
    PAY DATE
 ========================================================= */
+
 .paydate-row {
-  display: grid;
-  grid-template-columns: 90px minmax(0, 1fr);
-  align-items: center;
-  gap: 0.75rem;
+  display:
+    grid;
+
+  grid-template-columns:
+    90px
+    minmax(0, 1fr);
+
+  align-items:
+    center;
+
+  gap:
+    0.75rem;
 }
 
 .paydate-content {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 0;
-  width: 100%;
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  gap:
+    0.75rem;
+
+  min-width:
+    0;
+
+  width:
+    100%;
 }
 
 .quarter-capsule {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  flex: 0 0 auto;
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  gap:
+    6px;
+
+  padding:
+    4px 10px;
+
+  border-radius:
+    999px;
+
+  border:
+    1px solid
+    var(--primary);
+
+  background:
+    var(--primary-soft);
+
+  color:
+    var(--primary);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    600;
+
+  flex:
+    0 0 auto;
 }
 
 .arrow-nav {
-  opacity: 0.6;
-  cursor: pointer;
-  padding: 0 2px;
-  transition: opacity 0.15s;
+  opacity:
+    0.6;
+
+  cursor:
+    pointer;
+
+  padding:
+    0 2px;
+
+  transition:
+    opacity 0.15s;
 }
 
 .arrow-nav:hover {
-  opacity: 1;
+  opacity:
+    1;
 }
 
 .chip-scroll {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  min-width: 0;
-  flex: 1 1 auto;
+  display:
+    flex;
+
+  gap:
+    6px;
+
+  overflow-x:
+    auto;
+
+  min-width:
+    0;
+
+  flex:
+    1 1 auto;
 }
 
 /* =========================================================
@@ -1449,28 +2934,51 @@ onMounted(() => {
 ========================================================= */
 
 .archive-counter-wrapper {
-  margin-top: 4px;
+  margin-top:
+    4px;
 }
 
 .archive-separator {
-  height: 1px;
-  background: var(--border);
+  height:
+    1px;
+
+  background:
+    var(--border);
 }
 
 .archive-counter {
-  display: flex;
-  justify-content: center;
-  padding: 4px 0;
+  display:
+    flex;
+
+  justify-content:
+    center;
+
+  padding:
+    4px 0;
 }
 
 .status-pill {
-  padding: 2px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-size: 0.7rem;
-  font-weight: 600;
+  padding:
+    2px 10px;
+
+  border-radius:
+    999px;
+
+  border:
+    1px solid
+    var(--primary);
+
+  background:
+    var(--primary-soft);
+
+  color:
+    var(--primary);
+
+  font-size:
+    0.7rem;
+
+  font-weight:
+    600;
 }
 
 /* =========================================================
@@ -1478,10 +2986,17 @@ onMounted(() => {
 ========================================================= */
 
 .archives-table-wrapper {
-  height: calc(100vh - 220px);
-  overflow-y: auto;
-  padding: 0 1.5rem 1.5rem 1.5rem;
-  scrollbar-gutter: stable;
+  height:
+    calc(100vh - 220px);
+
+  overflow-y:
+    auto;
+
+  padding:
+    0 1.5rem 1.5rem;
+
+  scrollbar-gutter:
+    stable;
 }
 
 /* =========================================================
@@ -1489,46 +3004,94 @@ onMounted(() => {
 ========================================================= */
 
 .archive-table {
-  width: 100%;
-  table-layout: fixed;
-  font-size: 0.85rem;
+  width:
+    100%;
+
+  table-layout:
+    fixed;
+
+  font-size:
+    0.85rem;
 }
 
-.archive-table col.col-party  { width: auto; }
-.archive-table col.col-info1  { width: auto; }
-.archive-table col.col-info2  { width: auto; }
-.archive-table col.col-dta    { width: 100px; }
-.archive-table col.col-amount { width: 80px; }
+.archive-table col.col-party {
+  width:
+    auto;
+}
+
+.archive-table col.col-info1 {
+  width:
+    auto;
+}
+
+.archive-table col.col-info2 {
+  width:
+    auto;
+}
+
+.archive-table col.col-dta {
+  width:
+    100px;
+}
+
+.archive-table col.col-amount {
+  width:
+    80px;
+}
 
 .archive-table thead th {
-  position: sticky;
-  top: var(--sticky-offset);
-  z-index: 50;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-  font-weight: 700;
+  position:
+    sticky;
 
-  /* 🔥 FIX lisibilité dark */
-  background: color-mix(in srgb, var(--bg) 96%, transparent);
+  top:
+    var(--sticky-offset);
+
+  z-index:
+    50;
+
+  border-bottom:
+    1px solid
+    var(--border);
+
+  font-weight:
+    700;
+
+  background:
+    color-mix(
+      in srgb,
+      var(--bg) 96%,
+      transparent
+    );
 }
 
 .archive-table th,
 .archive-table td {
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--border);
-  vertical-align: middle;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+  padding:
+    0.5rem 0.6rem;
 
-/* alignements */
+  border-bottom:
+    1px solid
+    var(--border);
+
+  vertical-align:
+    middle;
+
+  white-space:
+    nowrap;
+
+  overflow:
+    hidden;
+
+  text-overflow:
+    ellipsis;
+}
 
 .archive-table th.col-date,
 .archive-table td.col-date,
 .archive-table th.col-dta,
 .archive-table td.col-dta {
-  text-align: center;
+  text-align:
+    center;
 }
 
 .archive-table th.col-party,
@@ -1537,13 +3100,17 @@ onMounted(() => {
 .archive-table td.col-info1,
 .archive-table th.col-info2,
 .archive-table td.col-info2 {
-  text-align: left;
+  text-align:
+    left;
 }
 
 .archive-table th.col-amount,
 .archive-table td.col-amount {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+  text-align:
+    right;
+
+  font-variant-numeric:
+    tabular-nums;
 }
 
 /* =========================================================
@@ -1551,12 +3118,16 @@ onMounted(() => {
 ========================================================= */
 
 .clickable-row {
-  cursor: pointer;
-  transition: background 0.15s ease;
+  cursor:
+    pointer;
+
+  transition:
+    background 0.15s ease;
 }
 
 .clickable-row:hover {
-  background: var(--primary-soft);
+  background:
+    var(--primary-soft);
 }
 
 /* =========================================================
@@ -1564,28 +3135,50 @@ onMounted(() => {
 ========================================================= */
 
 .col-action {
-  width: 30px;
-  text-align: center;
+  width:
+    30px;
+
+  text-align:
+    center;
 }
 
 .classify-btn {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 16px;
-  opacity: 0.7;
+  border:
+    none;
+
+  background:
+    transparent;
+
+  cursor:
+    pointer;
+
+  font-size:
+    16px;
+
+  opacity:
+    0.7;
 }
 
 .classify-btn:hover {
-  opacity: 1;
+  opacity:
+    1;
 }
 
 .dta-badge {
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-size: 0.75rem;
+  padding:
+    2px 6px;
+
+  border-radius:
+    6px;
+
+  background:
+    var(--primary-soft);
+
+  color:
+    var(--primary);
+
+  font-size:
+    0.75rem;
 }
 
 /* =========================================================
@@ -1593,31 +3186,61 @@ onMounted(() => {
 ========================================================= */
 
 .info2-cell {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    space-between;
+
+  gap:
+    8px;
 }
 
 .info2-text {
-  min-width: 0;
-  flex: 1 1 auto;
+  min-width:
+    0;
+
+  flex:
+    1 1 auto;
 }
 
 .tag-squares {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  flex:
+    0 0 auto;
+
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  gap:
+    4px;
 }
 
 .tag-square {
-  width: 11px;
-  height: 11px;
-  border-radius: 2px;
-  border: 1px solid var(--border);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1); /* 🔥 FIX */
-  cursor: pointer;
+  width:
+    11px;
+
+  height:
+    11px;
+
+  border-radius:
+    2px;
+
+  border:
+    1px solid
+    var(--border);
+
+  box-shadow:
+    inset 0 0 0 1px
+    rgba(255, 255, 255, 0.1);
+
+  cursor:
+    pointer;
 }
 
 /* =========================================================
@@ -1625,17 +3248,38 @@ onMounted(() => {
 ========================================================= */
 
 .tag-tooltip {
-  position: fixed;
-  transform: translate(-50%, -100%);
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text); /* 🔥 FIX */
-  font-size: 0.75rem;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 3000;
-  box-shadow: var(--shadow-sm); /* 🔥 FIX */
+  position:
+    fixed;
+
+  transform:
+    translate(-50%, -100%);
+
+  padding:
+    4px 8px;
+
+  border-radius:
+    6px;
+
+  background:
+    var(--surface);
+
+  color:
+    var(--text);
+
+  font-size:
+    0.75rem;
+
+  white-space:
+    nowrap;
+
+  pointer-events:
+    none;
+
+  z-index:
+    3000;
+
+  box-shadow:
+    var(--shadow-sm);
 }
 
 /* =========================================================
@@ -1643,18 +3287,26 @@ onMounted(() => {
 ========================================================= */
 
 mark {
-  background: var(--primary-soft);
-  color: var(--primary);
-  padding: 0 2px;
-  border-radius: 3px;
+  background:
+    var(--primary-soft);
+
+  color:
+    var(--primary);
+
+  padding:
+    0 2px;
+
+  border-radius:
+    3px;
 }
 
 .muted {
-  opacity: 0.6;
+  opacity:
+    0.6;
 }
 
 .error {
-  color: var(--negative);
+  color:
+    var(--negative);
 }
-
 </style>

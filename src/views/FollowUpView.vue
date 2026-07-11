@@ -1,35 +1,46 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
-import { useDriveWatcher } from "@/composables/useDriveWatcher";
+import {
+  computed,
+  ref,
+  watch,
+} from "vue";
+
+import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
 import FollowUpBar from "@/components/followup/FollowUpBar.vue";
 import CategorySheet from "@/components/followup/CategorySheet.vue";
+import FollowUpDetails from "@/components/followup/FollowUpDetails.vue";
+import ChipSelector from "@/components/ChipSelector.vue";
 
-import { useDrive } from "@/composables/useDrive";
-import { useRouter } from "vue-router";
+import { useStorageAccess } from "@/composables/useStorageAccess";
+import { useDriveWatcher } from "@/composables/useDriveWatcher";
 
-import { useAppBootstrap } from "@/composables/useAppBootstrap"
-const { loadSettings } = useAppBootstrap()
+import { useAppBootstrap } from "@/composables/useAppBootstrap";
+import { useCategories } from "@/composables/useCategories";
+import { useAppParameters } from "@/composables/useAppParameters";
 
 import { loadJSONFromFolder } from "@/services/driveAdapter";
 
-import { useCategories } from "@/composables/useCategories";
-import type { CategoryNature } from "@/composables/useCategories";
-
-import ChipSelector from "@/components/ChipSelector.vue";
-
-import FollowUpDetails from "@/components/followup/FollowUpDetails.vue";
-
-import { useAppParameters } from "@/composables/useAppParameters";
-
 import { formatDate } from "@/utils/dateFormat";
+
+import type {
+  CategoryNature,
+} from "@/composables/useCategories";
 
 /* =========================
    Types
 ========================= */
 
-type AnalysisScope = "FULL" | "MTD" | "YTD";
+type AnalysisScope =
+  | "FULL"
+  | "MTD"
+  | "YTD";
+
+type NatureFilter =
+  | "ALL"
+  | "I"
+  | "E";
 
 /* ---- Follow-up ---- */
 
@@ -85,470 +96,982 @@ interface FollowUpItem {
 }
 
 /* =========================
+   Router / Storage
+========================= */
+
+const router =
+  useRouter();
+
+const {
+  storageReady,
+  storageUnavailableMessage,
+  ensureStorageReady,
+} = useStorageAccess();
+
+/* =========================
+   Bootstrap
+========================= */
+
+const {
+  loadSettings,
+} = useAppBootstrap();
+
+/* =========================
+   Stores
+========================= */
+
+const categoriesStore =
+  useCategories();
+
+const {
+  appParameters,
+} = useAppParameters();
+
+/* =========================
    State
 ========================= */
 
-const router = useRouter();
-const { driveStatus } = useDrive();
+const loading =
+  ref(false);
 
-const categoriesStore = useCategories();
+const loadError =
+  ref<string | null>(null);
 
-const categorySheetOpen = ref(false);
+const initialized =
+  ref(false);
 
-const year = ref<number>(2026);
-const selectedCategory = ref<string>("*");
-const selectedSubCategory = ref<string | null>(null);
+const categorySheetOpen =
+  ref(false);
 
-const includeOffBudget = ref(true);
+const year =
+  ref<number>(
+    new Date().getFullYear()
+  );
 
-const followUpRaw = ref<FollowUpFile | null>(null);
-const budgetRaw = ref<BudgetFile | null>(null);
+const selectedCategory =
+  ref<string>("*");
 
-const analysisScope = ref<AnalysisScope>("YTD");
-const labelFilter = ref("");  
+const selectedSubCategory =
+  ref<string | null>(null);
+
+const includeOffBudget =
+  ref(true);
+
+const followUpRaw =
+  ref<FollowUpFile | null>(
+    null
+  );
+
+const budgetRaw =
+  ref<BudgetFile | null>(
+    null
+  );
+
+const analysisScope =
+  ref<AnalysisScope>("YTD");
+
+const labelFilter =
+  ref("");
+
+const filtersOpen =
+  ref(true);
+
+const natureFilter =
+  ref<NatureFilter>("E");
+
+const showSecondaryCategories =
+  ref(false);
+
+const followUpSpreadLimit =
+  ref(10);
 
 /* =========================
-   Drive watcher
+   Storage watcher
 ========================= */
 
-const followUpLastModified = ref<string | null>(null);
+const followUpLastModified =
+  ref<string | null>(null);
 
-watch(driveStatus, (status) => {
-  if (status !== "CONNECTED") {
-    router.replace({ name: "authentication" });
-  }
-});
-
+/*
+  Le composable garde encore son nom historique
+  useDriveWatcher, mais il utilise désormais la
+  façade multi-backend pour lire les métadonnées.
+*/
 useDriveWatcher({
-  folderId: "allocations/budget",
-  fileName: "FollowUp.json",
-  lastKnownState: followUpLastModified,
-  onChanged: loadFollowUp,
+  folderId:
+    "allocations/budget",
+
+  fileName:
+    "FollowUp.json",
+
+  lastKnownState:
+    followUpLastModified,
+
+  onChanged:
+    async () => {
+      if (!storageReady.value) {
+        return;
+      }
+
+      await loadFollowUp();
+    },
 });
 
 /* =========================
    Filters
 ========================= */
 
-const filtersOpen = ref(true);
+watch(
+  natureFilter,
+  () => {
+    selectedCategory.value =
+      "*";
 
-type NatureFilter = "ALL" | "I" | "E";
-const natureFilter = ref<NatureFilter>("E");
-
-const showSecondaryCategories = ref(false);
-
-watch(natureFilter, () => {
-  selectedCategory.value = "*";
-  selectedSubCategory.value = null;
-});
+    selectedSubCategory.value =
+      null;
+  }
+);
 
 /* =========================
    Year / scope validity
 ========================= */
 
-const currentYear = new Date().getFullYear();
-const isCurrentYear = computed(() => year.value === currentYear);
+const currentYear =
+  new Date().getFullYear();
 
-watch(year, () => {
-  if (!isCurrentYear.value && analysisScope.value !== "FULL") {
-    analysisScope.value = "FULL";
+const isCurrentYear =
+  computed(() =>
+    year.value === currentYear
+  );
+
+watch(
+  year,
+  () => {
+    if (
+      !isCurrentYear.value &&
+      analysisScope.value !== "FULL"
+    ) {
+      analysisScope.value =
+        "FULL";
+    }
   }
-});
+);
 
 /* =========================
    Helpers
 ========================= */
 
-function getMonthIndex(): number {
-  return new Date().getMonth() + 1;
+function getMonthIndex():
+  number {
+
+  return (
+    new Date().getMonth() + 1
+  );
 }
 
-function endOfPreviousMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), 0);
+function fmt(
+  value: number
+): string {
+
+  return Math
+    .round(value)
+    .toLocaleString();
 }
 
-function fmt(n: number): string {
-  return Math.round(n).toLocaleString();
-}
+function normalizeText(
+  value: string
+): string {
 
-function normalizeText(s: string): string {
-  return s
+  return value
     .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
+    .replace(
+      /\p{Diacritic}/gu,
+      ""
+    )
     .toLowerCase()
     .trim();
 }
 
 /* =========================
-   CATEGORY CHIPS
+   Category visibility
 ========================= */
-function isCategoryVisible(meta: any): boolean {
-  if (!meta) return false;
-  if (meta.displayScope === "X") return false;
+
+function isCategoryVisible(
+  meta: any
+): boolean {
+
+  if (!meta) {
+    return false;
+  }
+
   if (
-    natureFilter.value !== "ALL" &&
-    meta.nature !== natureFilter.value
+    meta.displayScope === "X"
   ) {
     return false;
   }
+
   if (
-    meta.displayScope === "S" &&
+    natureFilter.value !==
+      "ALL" &&
+    meta.nature !==
+      natureFilter.value
+  ) {
+    return false;
+  }
+
+  if (
+    meta.displayScope ===
+      "S" &&
     !showSecondaryCategories.value
   ) {
     return false;
   }
+
   return true;
 }
 
-const categoryChips = computed(() => {
-  if (!followUpRaw.value) return [];
+/* =========================
+   Category chips
+========================= */
 
-  return followUpRaw.value.categories
-    .map((c: any) =>
-      categoriesStore.getCategory(c.categoryId)
-    )
-    .filter((meta): meta is NonNullable<typeof meta> => !!meta)
-    .filter(isCategoryVisible)
-    .sort((a, b) => a.seq - b.seq);
-});
-
-const categoryChipItems = computed(() => {
-  const base = categoryChips.value.map(cat => ({
-    id: String(cat.id),
-    label: cat.label
-  }));
-  return [
-    { id: "*", label: "All" },
-    ...base,
-    {
-      id: "__TOGGLE__",
-      label: showSecondaryCategories.value ? "←" : "→"
+const categoryChips =
+  computed(() => {
+    if (!followUpRaw.value) {
+      return [];
     }
-  ];
-});
+
+    return followUpRaw.value
+      .categories
+      .map(category =>
+        categoriesStore
+          .getCategory(
+            category.categoryId
+          )
+      )
+      .filter(
+        (
+          meta
+        ): meta is NonNullable<
+          typeof meta
+        > => !!meta
+      )
+      .filter(
+        isCategoryVisible
+      )
+      .sort(
+        (a, b) =>
+          a.seq - b.seq
+      );
+  });
+
+const categoryChipItems =
+  computed(() => {
+    const base =
+      categoryChips.value.map(
+        category => ({
+          id:
+            String(
+              category.id
+            ),
+
+          label:
+            category.label,
+        })
+      );
+
+    return [
+      {
+        id: "*",
+        label: "All",
+      },
+      ...base,
+      {
+        id: "__TOGGLE__",
+
+        label:
+          showSecondaryCategories.value
+            ? "←"
+            : "→",
+      },
+    ];
+  });
 
 /* =========================
    Derived state
 ========================= */
-let followUpSpreadLimit = ref(10)
 
-const availableYears = computed(() => {
-  if (!followUpRaw.value) return [];
-  return followUpRaw.value.categories
-    .flatMap(c => c.years.map(y => y.year))
-    .filter((v, i, a) => a.indexOf(v) === i)
-    .sort((a, b) => b - a);
-});
+const availableYears =
+  computed(() => {
+    if (!followUpRaw.value) {
+      return [];
+    }
 
-const activeCategory = computed(() => {
-  if (selectedCategory.value === "*") return null;
-  return categoriesStore.getCategory(Number(selectedCategory.value));
-});
+    return followUpRaw.value
+      .categories
+      .flatMap(category =>
+        category.years.map(
+          item => item.year
+        )
+      )
+      .filter(
+        (
+          value,
+          index,
+          array
+        ) =>
+          array.indexOf(value) ===
+          index
+      )
+      .sort(
+        (a, b) => b - a
+      );
+  });
 
-const subCategoryChips = computed(() => {
-  if (!activeCategory.value) return [];
-  return categoriesStore
-    .getSubcategories(activeCategory.value.id)
-    .sort((a, b) => a.seq - b.seq);
-});
+const activeCategory =
+  computed(() => {
+    if (
+      selectedCategory.value ===
+      "*"
+    ) {
+      return null;
+    }
 
-const subCategoryChipItems = computed(() => {
-  if (!activeCategory.value) return [];
-  return [
-    { id: "*", label: "All" },
-    ...subCategoryChips.value.map(sub => ({
-      id: String(sub.id),
-      label: sub.label
-    }))
-  ];
-});
+    return categoriesStore
+      .getCategory(
+        Number(
+          selectedCategory.value
+        )
+      );
+  });
+
+const subCategoryChips =
+  computed(() => {
+    if (!activeCategory.value) {
+      return [];
+    }
+
+    return categoriesStore
+      .getSubcategories(
+        activeCategory.value.id
+      )
+      .slice()
+      .sort(
+        (a, b) =>
+          a.seq - b.seq
+      );
+  });
+
+const subCategoryChipItems =
+  computed(() => {
+    if (!activeCategory.value) {
+      return [];
+    }
+
+    return [
+      {
+        id: "*",
+        label: "All",
+      },
+
+      ...subCategoryChips.value.map(
+        subCategory => ({
+          id:
+            String(
+              subCategory.id
+            ),
+
+          label:
+            subCategory.label,
+        })
+      ),
+    ];
+  });
 
 function selectAllCategories() {
-  selectedCategory.value = "*";
-  selectedSubCategory.value = null;
+  selectedCategory.value =
+    "*";
+
+  selectedSubCategory.value =
+    null;
 }
 
-function selectCategory(id: number) {
-  selectedCategory.value = String(id);
-  selectedSubCategory.value = null;
+function selectCategory(
+  id: number
+) {
+  selectedCategory.value =
+    String(id);
+
+  selectedSubCategory.value =
+    null;
 }
 
-function onCategorySelect(id: string) {
+function onCategorySelect(
+  id: string
+) {
   if (id === "__TOGGLE__") {
-    showSecondaryCategories.value = !showSecondaryCategories.value;
+    showSecondaryCategories.value =
+      !showSecondaryCategories.value;
+
     return;
   }
+
   if (id === "*") {
     selectAllCategories();
     return;
   }
-  selectCategory(Number(id));
+
+  selectCategory(
+    Number(id)
+  );
 }
 
-function selectSubCategory(id: number) {
-  selectedSubCategory.value = String(id);
+function selectSubCategory(
+  id: number
+) {
+  selectedSubCategory.value =
+    String(id);
 }
 
-function onSubCategorySelect(id: string) {
+function onSubCategorySelect(
+  id: string
+) {
   if (id === "*") {
-    selectedSubCategory.value = null;
+    selectedSubCategory.value =
+      null;
+
     return;
   }
-  selectSubCategory(Number(id));
+
+  selectSubCategory(
+    Number(id)
+  );
 }
 
 function analysedValue(
   amount: number,
   offBudget?: number
-) {
-  if (includeOffBudget.value) return amount;
-  return amount - (offBudget ?? 0);
+): number {
+
+  if (
+    includeOffBudget.value
+  ) {
+    return amount;
+  }
+
+  return (
+    amount -
+    (offBudget ?? 0)
+  );
 }
 
 /* =========================
    Follow-up computation
 ========================= */
 
-function computeCategoryItems(): FollowUpItem[] {
-  if (!followUpRaw.value) return [];
+function computeCategoryItems():
+  FollowUpItem[] {
 
-  const out: FollowUpItem[] = [];
+  if (!followUpRaw.value) {
+    return [];
+  }
 
-  for (const c of followUpRaw.value.categories) {
+  const output:
+    FollowUpItem[] = [];
 
-    const meta = categoriesStore.getCategory(c.categoryId);
-    if (!meta) continue;
+  for (
+    const category
+    of followUpRaw.value.categories
+  ) {
+    const meta =
+      categoriesStore
+        .getCategory(
+          category.categoryId
+        );
 
-    if (!isCategoryVisible(meta)) continue;
+    if (!meta) {
+      continue;
+    }
 
-    const yearData = c.years.find(y => y.year === year.value);
-    if (!yearData) continue;
+    if (
+      !isCategoryVisible(meta)
+    ) {
+      continue;
+    }
 
-    const amount = yearData.items.reduce((sum, i) => {
+    const yearData =
+      category.years.find(
+        item =>
+          item.year ===
+          year.value
+      );
 
-      const base =
-        analysisScope.value === "MTD"
-          ? i.monthToDate
-          : i.amount;
+    if (!yearData) {
+      continue;
+    }
 
-      const off =
-        analysisScope.value === "MTD"
-          ? i.monthToDateOffBudget
-          : i.amountOffBudget;
+    const amount =
+      yearData.items.reduce(
+        (
+          total,
+          item
+        ) => {
+          const base =
+            analysisScope.value ===
+              "MTD"
+              ? item.monthToDate
+              : item.amount;
 
-      return sum + analysedValue(base, off);
+          const offBudget =
+            analysisScope.value ===
+              "MTD"
+              ? item
+                  .monthToDateOffBudget
+              : item
+                  .amountOffBudget;
 
-    }, 0);
+          return (
+            total +
+            analysedValue(
+              base,
+              offBudget
+            )
+          );
+        },
+        0
+      );
 
-    out.push({
-      id: String(c.categoryId),
-      label: meta.label,
-      amount
+    output.push({
+      id:
+        String(
+          category.categoryId
+        ),
+
+      label:
+        meta.label,
+
+      amount,
     });
   }
 
-  return out.sort((a, b) => a.label.localeCompare(b.label));
+  return output.sort(
+    (a, b) =>
+      a.label.localeCompare(
+        b.label
+      )
+  );
 }
 
-function computeSubCategoryItems(): FollowUpItem[] {
+function computeSubCategoryItems():
+  FollowUpItem[] {
 
-  if (!followUpRaw.value) return [];
+  if (!followUpRaw.value) {
+    return [];
+  }
 
-  const catId = Number(selectedCategory.value);
+  const categoryId =
+    Number(
+      selectedCategory.value
+    );
 
-  const cat =
-    followUpRaw.value.categories
-      .find(c => c.categoryId === catId);
+  const category =
+    followUpRaw.value
+      .categories
+      .find(
+        item =>
+          item.categoryId ===
+          categoryId
+      );
 
   const meta =
-    categoriesStore.getCategory(catId);
+    categoriesStore
+      .getCategory(
+        categoryId
+      );
 
-  if (!cat || !meta) return [];
+  if (
+    !category ||
+    !meta
+  ) {
+    return [];
+  }
 
   const yearData =
-    cat.years.find(y => y.year === year.value);
+    category.years.find(
+      item =>
+        item.year ===
+        year.value
+    );
 
-  if (!yearData) return [];
+  if (!yearData) {
+    return [];
+  }
 
-  const subTotals = new Map<number, number>();
+  const subTotals =
+    new Map<
+      number,
+      number
+    >();
 
-  for (const i of yearData.items) {
-
+  for (
+    const item
+    of yearData.items
+  ) {
     const base =
-      analysisScope.value === "MTD"
-        ? i.monthToDate
-        : i.amount;
+      analysisScope.value ===
+        "MTD"
+        ? item.monthToDate
+        : item.amount;
 
-    const off =
-      analysisScope.value === "MTD"
-        ? i.monthToDateOffBudget
-        : i.amountOffBudget;
+    const offBudget =
+      analysisScope.value ===
+        "MTD"
+        ? item
+            .monthToDateOffBudget
+        : item
+            .amountOffBudget;
 
-    const value = analysedValue(base, off);
+    const value =
+      analysedValue(
+        base,
+        offBudget
+      );
 
     subTotals.set(
-      i.subCategoryId,
-      (subTotals.get(i.subCategoryId) ?? 0) + value
+      item.subCategoryId,
+
+      (
+        subTotals.get(
+          item.subCategoryId
+        ) ?? 0
+      ) + value
     );
   }
 
-  const out: FollowUpItem[] = [];
+  const output:
+    FollowUpItem[] = [];
 
-  const officialSubs =
+  const officialSubCategories =
     meta.subcategories
       .slice()
-      .sort((a, b) => a.seq - b.seq);
+      .sort(
+        (a, b) =>
+          a.seq - b.seq
+      );
 
-  for (const sub of officialSubs) {
-
-    if (!subTotals.has(sub.id)) continue;
+  for (
+    const subCategory
+    of officialSubCategories
+  ) {
+    if (
+      !subTotals.has(
+        subCategory.id
+      )
+    ) {
+      continue;
+    }
 
     if (
-      selectedSubCategory.value !== null &&
-      Number(selectedSubCategory.value) !== sub.id
-    ) continue;
+      selectedSubCategory.value !==
+        null &&
+      Number(
+        selectedSubCategory.value
+      ) !== subCategory.id
+    ) {
+      continue;
+    }
 
-    out.push({
-      id: String(sub.id),
-      label: sub.label,
-      amount: subTotals.get(sub.id) ?? 0
+    output.push({
+      id:
+        String(
+          subCategory.id
+        ),
+
+      label:
+        subCategory.label,
+
+      amount:
+        subTotals.get(
+          subCategory.id
+        ) ?? 0,
     });
   }
 
-  return out;
+  return output;
 }
 
-const baseItems = computed<FollowUpItem[]>(() => {
-  if (selectedCategory.value === "*") {
-    return computeCategoryItems();
+const baseItems =
+  computed<FollowUpItem[]>(
+    () => {
+      if (
+        selectedCategory.value ===
+        "*"
+      ) {
+        return computeCategoryItems();
+      }
+
+      return computeSubCategoryItems();
+    }
+  );
+
+const items =
+  computed<FollowUpItem[]>(
+    () => {
+      const query =
+        normalizeText(
+          labelFilter.value
+        );
+
+      if (!query) {
+        return baseItems.value;
+      }
+
+      return baseItems.value
+        .filter(item =>
+          normalizeText(
+            item.label
+          ).includes(query)
+        );
+    }
+  );
+
+/* =========================
+   Budget computation
+========================= */
+
+function displayedBudget(
+  item: FollowUpItem
+): number | undefined {
+
+  if (!budgetRaw.value) {
+    return undefined;
   }
 
-  return computeSubCategoryItems();
-});
+  const currentMonth =
+    getMonthIndex();
 
-const items = computed<FollowUpItem[]>(() => {
-  const q = normalizeText(labelFilter.value);
+  const rows =
+    budgetRaw.value.budgets
+      .filter(row => {
+        if (
+          row.year !==
+          year.value
+        ) {
+          return false;
+        }
 
-  if (!q) return baseItems.value;
+        if (
+          analysisScope.value ===
+          "FULL"
+        ) {
+          return true;
+        }
 
-  return baseItems.value.filter(item =>
-    normalizeText(item.label).includes(q)
-  );
-});
+        if (
+          analysisScope.value ===
+          "MTD"
+        ) {
+          return (
+            row.month <
+            currentMonth
+          );
+        }
 
-function displayedBudget(item: FollowUpItem) {
-  if (!budgetRaw.value) return undefined;
+        if (
+          analysisScope.value ===
+          "YTD"
+        ) {
+          return (
+            row.month <=
+            currentMonth
+          );
+        }
 
-  const currentMonth = getMonthIndex();
-
-  const rows = budgetRaw.value.budgets.filter(b => {
-    if (b.year !== year.value) return false;
-
-    if (analysisScope.value === "FULL") return true;
-    if (analysisScope.value === "MTD") return b.month < currentMonth;
-    if (analysisScope.value === "YTD") return b.month <= currentMonth;
-
-    return false;
-  });
+        return false;
+      });
 
   let total = 0;
 
-  /* =========================================================
-     MODE 1 — catégories
-  ========================================================= */
-  if (selectedCategory.value === "*") {
-    const categoryId = Number(item.id);
+  if (
+    selectedCategory.value ===
+    "*"
+  ) {
+    const categoryId =
+      Number(item.id);
 
-    for (const r of rows) {
-      for (const i of r.items) {
-        if (i.categoryId === categoryId) {
-          total += i.amount;
+    for (
+      const row
+      of rows
+    ) {
+      for (
+        const budgetItem
+        of row.items
+      ) {
+        if (
+          budgetItem.categoryId ===
+          categoryId
+        ) {
+          total +=
+            budgetItem.amount;
         }
       }
     }
 
-    return total || undefined;
+    return (
+      total ||
+      undefined
+    );
   }
 
-  /* =========================================================
-     MODE 2 / 3 — sous-catégories
-  ========================================================= */
-  const categoryId = Number(selectedCategory.value);
-  const subCategoryId = Number(item.id);
+  const categoryId =
+    Number(
+      selectedCategory.value
+    );
 
-  for (const r of rows) {
-    for (const i of r.items) {
+  const subCategoryId =
+    Number(item.id);
+
+  for (
+    const row
+    of rows
+  ) {
+    for (
+      const budgetItem
+      of row.items
+    ) {
       if (
-        i.categoryId === categoryId &&
-        i.subCategoryId === subCategoryId
+        budgetItem.categoryId ===
+          categoryId &&
+        budgetItem.subCategoryId ===
+          subCategoryId
       ) {
-        total += i.amount;
+        total +=
+          budgetItem.amount;
       }
     }
   }
 
-  return total || undefined;
+  return (
+    total ||
+    undefined
+  );
 }
 
-/* =========================
-   Budget helpers
-========================= */
+function allocatedValue(
+  item: FollowUpItem
+): number {
 
-function allocatedValue(item: FollowUpItem) {
   return item.amount;
 }
 
-function totalAllocatedValue() {
-  return items.value.reduce((s, i) => s + i.amount, 0);
+function totalAllocatedValue():
+  number {
+
+  return items.value.reduce(
+    (
+      total,
+      item
+    ) =>
+      total + item.amount,
+    0
+  );
 }
 
-const totalItem = computed<FollowUpItem | null>(() => {
+const totalItem =
+  computed<
+    FollowUpItem | null
+  >(() => {
+    if (
+      !items.value.length
+    ) {
+      return null;
+    }
 
-  if (!items.value.length) return null;
+    const amount =
+      totalAllocatedValue();
 
-  const amount = totalAllocatedValue();
+    const budget =
+      items.value
+        .map(
+          item =>
+            displayedBudget(
+              item
+            ) ?? 0
+        )
+        .reduce(
+          (a, b) => a + b,
+          0
+        );
 
-  const budget = items.value
-    .map(i => displayedBudget(i) ?? 0)
-    .reduce((a, b) => a + b, 0);
-
-  return {
-    id: "total",
-    label: "Total",
-    amount,
-    budget
-  };
-});
+    return {
+      id: "total",
+      label: "Total",
+      amount,
+      budget,
+    };
+  });
 
 /* =========================
    Display helpers
 ========================= */
 
-const currentNature = computed<CategoryNature | "-">(() => {
+const currentNature =
+  computed<
+    CategoryNature | "-"
+  >(() => {
+    if (
+      natureFilter.value ===
+      "ALL"
+    ) {
+      return "-";
+    }
 
-  if (natureFilter.value === "ALL") return "-";
+    return natureFilter.value;
+  });
 
-  return natureFilter.value;
-});
+const scale =
+  computed(() => {
+    const values =
+      items.value.map(
+        item =>
+          Math.abs(
+            item.amount
+          )
+      );
 
+    const max =
+      Math.max(
+        ...values,
+        1
+      );
 
-const scale = computed(() => {
+    return {
+      min: 0,
+      max,
+    };
+  });
 
-  const values = items.value.map(i => Math.abs(i.amount));
+function allocatedClass(
+  amount: number,
+  budget?: number
+): string {
 
-  const max = Math.max(...values, 1);
+  const budgetValue =
+    budget ?? 0;
 
-  return {
-    min: 0,
-    max
-  };
+  if (
+    amount >
+    budgetValue
+  ) {
+    return "allocated-bad";
+  }
 
-});
+  if (
+    amount <
+    budgetValue
+  ) {
+    return "allocated-good";
+  }
 
-function allocatedClass(amount: number, budget?: number) {
-  const b = budget ?? 0;
-  if (amount > b) return "allocated-bad";
-  if (amount < b) return "allocated-good";
   return "allocated-neutral";
 }
 
@@ -556,258 +1079,524 @@ function allocatedClass(amount: number, budget?: number) {
    Labels
 ========================= */
 
-const statusAsOfLabel = computed(() => {
+const statusAsOfLabel =
+  computed(() => {
+    if (
+      !followUpRaw.value
+        ?.updatedAt
+    ) {
+      return "";
+    }
 
-  if (!followUpRaw.value?.updatedAt) return "";
+    const date =
+      new Date(
+        followUpRaw.value
+          .updatedAt
+      );
 
-  const d = new Date(followUpRaw.value.updatedAt);
+    return (
+      "as of " +
+      formatDate(
+        date,
+        "text"
+      )
+    );
+  });
 
-  return "as of " + formatDate(d, "text");
-});
+const allocatedColumnLabel =
+  computed(() => {
+    if (
+      analysisScope.value ===
+      "MTD"
+    ) {
+      return "MTD";
+    }
 
-const allocatedColumnLabel = computed(() => {
+    if (
+      analysisScope.value ===
+      "YTD"
+    ) {
+      return "YTD";
+    }
 
-  if (analysisScope.value === "MTD") return "MTD";
-
-  if (analysisScope.value === "YTD") return "YTD";
-
-  return "Total";
-});
+    return "Total";
+  });
 
 /* =========================
    Details
 ========================= */
 
-const showAllocationsDetail = computed(() => {
-  return selectedCategory.value !== "*";
-});
+const showAllocationsDetail =
+  computed(() =>
+    selectedCategory.value !==
+    "*"
+  );
 
-const allocationCategoryIds = computed(() => {
+const allocationCategoryIds =
+  computed(() => {
+    if (
+      selectedCategory.value ===
+      "*"
+    ) {
+      return [];
+    }
 
-  if (selectedCategory.value === "*") return [];
+    return [
+      Number(
+        selectedCategory.value
+      ),
+    ];
+  });
 
-  return [Number(selectedCategory.value)];
-});
+const allocationSubCategoryId =
+  computed(() => {
+    if (
+      !selectedSubCategory.value
+    ) {
+      return null;
+    }
 
-const allocationSubCategoryId = computed(() => {
+    return Number(
+      selectedSubCategory.value
+    );
+  });
 
-  if (!selectedSubCategory.value) return null;
+const detailsMonthlyBudgetMap =
+  computed<
+    Record<string, number>
+  >(() => {
+    if (
+      !budgetRaw.value ||
+      selectedCategory.value ===
+        "*" ||
+      !selectedSubCategory.value
+    ) {
+      return {};
+    }
 
-  return Number(selectedSubCategory.value);
-});
+    const categoryId =
+      Number(
+        selectedCategory.value
+      );
 
-const detailsMonthlyBudgetMap = computed<Record<string, number>>(() => {
-  if (
-    !budgetRaw.value ||
-    selectedCategory.value === "*" ||
-    !selectedSubCategory.value
-  ) {
-    return {};
-  }
+    const subCategoryId =
+      Number(
+        selectedSubCategory.value
+      );
 
-  const catId = Number(selectedCategory.value);
-  const subId = Number(selectedSubCategory.value);
+    const map:
+      Record<
+        string,
+        number
+      > = {};
 
-  const map: Record<string, number> = {};
+    for (
+      const month
+      of budgetRaw.value.budgets
+    ) {
+      if (
+        month.year !==
+        year.value
+      ) {
+        continue;
+      }
 
-  for (const m of budgetRaw.value.budgets) {
-    if (m.year !== year.value) continue;
+      const budget =
+        month.items
+          .filter(item =>
+            item.categoryId ===
+              categoryId &&
+            item.subCategoryId ===
+              subCategoryId
+          )
+          .reduce(
+            (
+              total,
+              item
+            ) =>
+              total +
+              item.amount,
+            0
+          );
 
-    const budget = m.items
-      .filter(
-        it =>
-          it.categoryId === catId &&
-          it.subCategoryId === subId
-      )
-      .reduce((s, it) => s + it.amount, 0);
+      const key =
+        `${month.year}-${String(
+          month.month
+        ).padStart(2, "0")}`;
 
-    const key = `${m.year}-${String(m.month).padStart(2, "0")}`;
+      map[key] =
+        budget;
+    }
 
-    map[key] = budget;
-  }
+    return map;
+  });
 
-  return map;
-});
+const detailsNature =
+  computed(() => {
+    return (
+      currentNature.value ===
+      "-"
+        ? null
+        : currentNature.value
+    );
+  });
 
-const detailsNature = computed(() => {
-  return currentNature.value === "-" ? null : currentNature.value;
-});
+const detailsMaxMonth =
+  computed<number | null>(
+    () => {
+      const currentMonth =
+        getMonthIndex();
 
-const detailsMaxMonth = computed<number | null>(() => {
-  const currentMonth = getMonthIndex();
+      if (
+        analysisScope.value ===
+        "FULL"
+      ) {
+        return null;
+      }
 
-  if (analysisScope.value === "FULL") {
-    return null;
-  }
+      if (
+        analysisScope.value ===
+        "MTD"
+      ) {
+        return (
+          currentMonth - 1
+        );
+      }
 
-  if (analysisScope.value === "MTD") {
-    return currentMonth - 1;
-  }
+      if (
+        analysisScope.value ===
+        "YTD"
+      ) {
+        return currentMonth;
+      }
 
-  if (analysisScope.value === "YTD") {
-    return currentMonth;
-  }
-
-  return null;
-});
+      return null;
+    }
+  );
 
 /* =========================
    Loaders
 ========================= */
 
 async function loadFollowUp() {
-
-  const folderId =
-    "allocations/budget";
-
   const data =
-    await loadJSONFromFolder<FollowUpFile>(
-      folderId,
+    await loadJSONFromFolder<
+      FollowUpFile
+    >(
+      "allocations/budget",
       "FollowUp.json"
     );
 
-  if (!data)
-    throw new Error("FollowUp.json not found");
+  if (!data) {
+    throw new Error(
+      "FollowUp.json not found"
+    );
+  }
 
-  followUpRaw.value = data;
+  followUpRaw.value =
+    data;
 }
 
 async function loadBudget() {
-
-  const folderId =
-    "allocations/budget";
-
   const data =
-    await loadJSONFromFolder<BudgetFile>(
-      folderId,
+    await loadJSONFromFolder<
+      BudgetFile
+    >(
+      "allocations/budget",
       "budget.json"
     );
 
-  if (!data)
-    throw new Error("budget.json not found");
+  if (!data) {
+    throw new Error(
+      "budget.json not found"
+    );
+  }
 
-  budgetRaw.value = data;
+  budgetRaw.value =
+    data;
 }
 
-/* =========================
-   Init
-========================= */
+async function initializeView() {
+  if (loading.value) {
+    return;
+  }
 
-watch(
-  () => driveStatus,
-  async state => {
+  loading.value =
+    true;
 
-    if (!state || driveStatus.value !== "CONNECTED") {
-      router.replace({ name: "authentication" });
+  loadError.value =
+    null;
+
+  try {
+    const ready =
+      await ensureStorageReady();
+
+    if (!ready) {
+      await router.replace({
+        name:
+          "authentication",
+      });
+
       return;
     }
 
     await loadSettings();
     await loadFollowUp();
     await loadBudget();
-/*    await FollowUpDetails();*/
-    const { appParameters } = useAppParameters()
 
     followUpSpreadLimit.value =
-      appParameters.value?.followUpSpreadLimit ?? 10
+      appParameters.value
+        ?.followUpSpreadLimit ??
+      10;
+
+    if (
+      availableYears.value.length &&
+      !availableYears.value.includes(
+        year.value
+      )
+    ) {
+      year.value =
+        availableYears.value[0];
+    }
+
+    initialized.value =
+      true;
+
+  } catch (err) {
+    console.error(
+      "Follow-up initialization failed",
+      err
+    );
+
+    loadError.value =
+      err instanceof Error
+        ? err.message
+        : String(err);
+
+  } finally {
+    loading.value =
+      false;
+  }
+}
+
+/* =========================
+   Storage readiness watcher
+========================= */
+
+watch(
+  storageReady,
+  async ready => {
+    if (!ready) {
+      initialized.value =
+        false;
+
+      return;
+    }
+
+    await initializeView();
   },
-  { immediate: true }
+  {
+    immediate: true,
+  }
 );
 </script>
 
 <template>
-  <div v-if="driveStatus !== 'CONNECTED'" class="loading">
-    <p>Drive session not available.</p>
+  <div
+    v-if="!storageReady"
+    class="loading"
+  >
+    <p>
+      {{
+        storageUnavailableMessage ||
+        "Storage not available."
+      }}
+    </p>
   </div>
+
+  <div
+    v-else-if="loading && !initialized"
+    class="loading"
+  >
+    <p>Loading follow-up…</p>
+  </div>
+
+  <div
+    v-else-if="loadError"
+    class="loading error"
+  >
+    <p>{{ loadError }}</p>
+  </div>
+
   <div v-else>
-    <PageHeader title="Follow-up" icon="followup" />
+    <PageHeader
+      title="Follow-up"
+      icon="followup"
+    />
 
     <!-- =========================
-        STICKY STACK (Filters + Header + Total)
-    ========================= -->
+         STICKY STACK
+    ========================== -->
+
     <div
       class="sticky-stack"
-      :key="selectedCategory + '-' + selectedSubCategory"
-    >  
-
+      :key="
+        selectedCategory +
+        '-' +
+        selectedSubCategory
+      "
+    >
       <!-- Filters -->
+
       <section class="filters">
         <header
           class="filters-header clickable"
-          @click="filtersOpen = !filtersOpen"
+          @click="
+            filtersOpen =
+              !filtersOpen
+          "
         >
-          <span class="arrow">{{ filtersOpen ? "▼" : "►" }}</span>
+          <span class="arrow">
+            {{
+              filtersOpen
+                ? "▼"
+                : "►"
+            }}
+          </span>
+
           <h2>Filters</h2>
         </header>
 
-        <div v-if="filtersOpen" class="filters-body">
-          <!-- PRIMARY FILTERS -->
+        <div
+          v-if="filtersOpen"
+          class="filters-body"
+        >
           <div class="primary-group">
-            <!-- Year -->
             <div class="year-segmented">
               <button
-                v-for="y in availableYears"
-                :key="y"
+                v-for="
+                  availableYear
+                  in availableYears
+                "
+                :key="
+                  availableYear
+                "
                 class="year-segment"
-                :class="{ active: year === y }"
-                @click="year = y"
+                :class="{
+                  active:
+                    year ===
+                    availableYear
+                }"
+                @click="
+                  year =
+                    availableYear
+                "
               >
-                {{ y }}
+                {{ availableYear }}
               </button>
             </div>
 
-            <!-- Scope -->
             <div class="scope-selector">
               <button
-                v-for="s in ['FULL', 'MTD', 'YTD']"
-                :key="s"
+                v-for="
+                  scope
+                  in [
+                    'FULL',
+                    'MTD',
+                    'YTD'
+                  ]
+                "
+                :key="scope"
                 class="scope-btn"
                 :class="{
-                  active: analysisScope === s,
-                  disabled: !isCurrentYear && s !== 'FULL'
+                  active:
+                    analysisScope ===
+                    scope,
+
+                  disabled:
+                    !isCurrentYear &&
+                    scope !==
+                      'FULL'
                 }"
-                :disabled="!isCurrentYear && s !== 'FULL'"
-                @click="analysisScope = s as AnalysisScope"
+                :disabled="
+                  !isCurrentYear &&
+                  scope !== 'FULL'
+                "
+                @click="
+                  analysisScope =
+                    scope as
+                      AnalysisScope
+                "
               >
-                {{ s }}
+                {{ scope }}
               </button>
             </div>
 
-            <!-- Nature -->
             <div class="scope-selector">
               <button
                 class="scope-btn"
-                :class="{ active: natureFilter === 'ALL' }"
-                @click="natureFilter = 'ALL'"
+                :class="{
+                  active:
+                    natureFilter ===
+                    'ALL'
+                }"
+                @click="
+                  natureFilter =
+                    'ALL'
+                "
               >
                 All
               </button>
+
               <button
                 class="scope-btn"
-                :class="{ active: natureFilter === 'I' }"
-                @click="natureFilter = 'I'"
+                :class="{
+                  active:
+                    natureFilter ===
+                    'I'
+                }"
+                @click="
+                  natureFilter =
+                    'I'
+                "
               >
                 Income
               </button>
+
               <button
                 class="scope-btn"
-                :class="{ active: natureFilter === 'E' }"
-                @click="natureFilter = 'E'"
+                :class="{
+                  active:
+                    natureFilter ===
+                    'E'
+                }"
+                @click="
+                  natureFilter =
+                    'E'
+                "
               >
                 Expenses
               </button>
             </div>
+
             <button
               class="scope-btn offbudget-toggle"
-              :class="{ active: includeOffBudget }"
-              @click="includeOffBudget = !includeOffBudget"
-              :title="includeOffBudget
-                ? 'Off-budget included'
-                : 'Off-budget excluded'"
+              :class="{
+                active:
+                  includeOffBudget
+              }"
+              :title="
+                includeOffBudget
+                  ? 'Off-budget included'
+                  : 'Off-budget excluded'
+              "
+              @click="
+                includeOffBudget =
+                  !includeOffBudget
+              "
             >
               Off-Budget
             </button>
-
           </div>
 
           <div class="text-filter-row">
@@ -821,32 +1610,50 @@ watch(
           </div>
 
           <div class="category-block">
-            <!-- Categories -->
             <ChipSelector
               label="Category"
-              :items="categoryChipItems"
-              :model-value="selectedCategory"
-              @update:modelValue="onCategorySelect"
-              :align-with-content="false"
+              :items="
+                categoryChipItems
+              "
+              :model-value="
+                selectedCategory
+              "
+              :align-with-content="
+                false
+              "
+              @update:model-value="
+                onCategorySelect
+              "
             />
 
-            <!-- Subcategories -->
             <ChipSelector
               v-if="activeCategory"
               label=""
-              :items="subCategoryChipItems"
-              :model-value="selectedSubCategory ?? '*'"
-              @update:modelValue="onSubCategorySelect"
-              :align-with-content="false"
+              :items="
+                subCategoryChipItems
+              "
+              :model-value="
+                selectedSubCategory ??
+                '*'
+              "
+              :align-with-content="
+                false
+              "
+              @update:model-value="
+                onSubCategorySelect
+              "
             />
           </div>
         </div>
       </section>
 
-      <!-- Header band -->
+      <!-- Header -->
+
       <div class="followup-header-wrapper">
         <div class="followup-grid followup-header">
-          <div class="col-label">Categories</div>
+          <div class="col-label">
+            Categories
+          </div>
 
           <div class="col-chart centered">
             <span class="status-pill">
@@ -858,435 +1665,766 @@ watch(
             {{ allocatedColumnLabel }}
           </div>
 
-          <div class="col-budget">Budget</div>
+          <div class="col-budget">
+            Budget
+          </div>
         </div>
       </div>
 
-      <!-- Total row (sticky as part of the stack) -->
-      <div v-if="totalItem" class="followup-total-wrapper">
+      <!-- Total -->
+
+      <div
+        v-if="totalItem"
+        class="followup-total-wrapper"
+      >
         <div class="followup-grid followup-row total">
-          <div class="label">{{ totalItem.label }}</div>
+          <div class="label">
+            {{ totalItem.label }}
+          </div>
 
           <div class="chart">
             <FollowUpBar
-              :amount="totalItem.amount"
-              :budget="totalItem.budget"
+              :amount="
+                totalItem.amount
+              "
+              :budget="
+                totalItem.budget
+              "
               :scale="scale"
-              :spreadLimit="followUpSpreadLimit"
-              :nature="currentNature === '-' ? null : currentNature"
+              :spread-limit="
+                followUpSpreadLimit
+              "
+              :nature="
+                currentNature ===
+                  '-'
+                  ? null
+                  : currentNature
+              "
             />
           </div>
 
           <div
             class="allocated"
-            :class="allocatedClass(
-              totalAllocatedValue(),
-              totalItem.budget
-            )"
+            :class="
+              allocatedClass(
+                totalAllocatedValue(),
+                totalItem.budget
+              )
+            "
           >
-            {{ fmt(totalAllocatedValue()) }}
+            {{
+              fmt(
+                totalAllocatedValue()
+              )
+            }}
           </div>
 
           <div class="budget">
-            <span v-if="totalItem.budget !== undefined">
-              {{ fmt(totalItem.budget) }}
+            <span
+              v-if="
+                totalItem.budget !==
+                undefined
+              "
+            >
+              {{
+                fmt(
+                  totalItem.budget
+                )
+              }}
             </span>
-            <span v-else class="muted">—</span>
+
+            <span
+              v-else
+              class="muted"
+            >
+              —
+            </span>
           </div>
         </div>
       </div>
-
     </div>
 
     <!-- =========================
-        CONTENT (scrolls under sticky stack)
-    ========================= -->
+         CONTENT
+    ========================== -->
+
     <div class="followup-table">
       <div
         v-for="item in items"
+        v-if="
+          selectedSubCategory ===
+          null
+        "
         :key="item.id"
-        v-if="selectedSubCategory === null"
         class="followup-grid followup-row"
       >
-        <div class="label">{{ item.label }}</div>
+        <div class="label">
+          {{ item.label }}
+        </div>
 
         <div class="chart">
           <FollowUpBar
             :amount="item.amount"
-            :budget="displayedBudget(item) ?? 0"
+            :budget="
+              displayedBudget(
+                item
+              ) ?? 0
+            "
             :scale="scale"
-            :spreadLimit="followUpSpreadLimit"
-            :nature="currentNature === '-' ? null : currentNature"
+            :spread-limit="
+              followUpSpreadLimit
+            "
+            :nature="
+              currentNature ===
+                '-'
+                ? null
+                : currentNature
+            "
           />
         </div>
 
         <div
           class="allocated"
-          :class="allocatedClass(
-            allocatedValue(item),
-            displayedBudget(item)
-          )"
+          :class="
+            allocatedClass(
+              allocatedValue(item),
+              displayedBudget(
+                item
+              )
+            )
+          "
         >
-          {{ fmt(allocatedValue(item)) }}
+          {{
+            fmt(
+              allocatedValue(item)
+            )
+          }}
         </div>
 
         <div class="budget">
-          <span v-if="displayedBudget(item) !== undefined">
-            {{ fmt(displayedBudget(item)!) }}
+          <span
+            v-if="
+              displayedBudget(
+                item
+              ) !== undefined
+            "
+          >
+            {{
+              fmt(
+                displayedBudget(
+                  item
+                )!
+              )
+            }}
           </span>
-          <span v-else class="muted">—</span>
+
+          <span
+            v-else
+            class="muted"
+          >
+            —
+          </span>
         </div>
       </div>
     </div>
 
-    <!-- le reste inchangé -->
     <CategorySheet
-      v-model="selectedCategory"
-      :open="categorySheetOpen"
+      v-model="
+        selectedCategory
+      "
+      :open="
+        categorySheetOpen
+      "
       :categories="[]"
-      @close="categorySheetOpen = false"
+      @close="
+        categorySheetOpen =
+          false
+      "
     />
 
     <FollowUpDetails
-      v-if="showAllocationsDetail"
+      v-if="
+        showAllocationsDetail
+      "
       :year="year"
-      :category-ids="allocationCategoryIds"
-      :sub-category-id="allocationSubCategoryId"
-      :monthly-budget-map="detailsMonthlyBudgetMap"
-      :nature="detailsNature"
-      :max-month="detailsMaxMonth"
-      :include-off-budget="includeOffBudget"
-      :label-filter="labelFilter"
+      :category-ids="
+        allocationCategoryIds
+      "
+      :sub-category-id="
+        allocationSubCategoryId
+      "
+      :monthly-budget-map="
+        detailsMonthlyBudgetMap
+      "
+      :nature="
+        detailsNature
+      "
+      :max-month="
+        detailsMaxMonth
+      "
+      :include-off-budget="
+        includeOffBudget
+      "
+      :label-filter="
+        labelFilter
+      "
     />
   </div>
 </template>
 
 <style scoped>
 /* =========================================================
-   1️⃣ STICKY STACK (Filters + Header + Total)
+   1. STICKY STACK
 ========================================================= */
+
 .sticky-stack {
   position: sticky;
   top: 0;
   z-index: 200;
 
-  /* 🔥 FIX dark mode translucide */
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  background:
+    color-mix(
+      in srgb,
+      var(--bg) 92%,
+      transparent
+    );
 
-  transform: translateZ(0);
+  transform:
+    translateZ(0);
 }
 
-
 /* =========================================================
-   2️⃣ FILTERS
+   2. FILTERS
 ========================================================= */
+
 .filters {
-  font-size: var(--font-size-sm);
-  background: var(--bg);
+  font-size:
+    var(--font-size-sm);
+
+  background:
+    var(--bg);
 }
 
 .filters-header {
-  padding: 0.5rem 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  padding:
+    0.5rem;
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  gap:
+    0.5rem;
 }
 
 .filters-header h2 {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-soft);
+  margin:
+    0;
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    600;
+
+  color:
+    var(--text-soft);
 }
 
 .filters-body {
-  padding: 0 8px 10px 8px;
+  padding:
+    0 8px 10px;
 }
 
-/* Filter rows with aligned labels */
 .filter-row.with-label {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-top: 6px;
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  gap:
+    0.75rem;
+
+  flex-wrap:
+    wrap;
+
+  margin-top:
+    6px;
 }
 
 .filter-label {
-  width: 90px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-soft); /* 🔥 FIX */
+  width:
+    90px;
+
+  font-size:
+    0.85rem;
+
+  font-weight:
+    500;
+
+  color:
+    var(--text-soft);
 }
 
 .category-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px; /* espace léger global */
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  gap:
+    6px;
 }
 
-/* vraie séparation visuelle */
 .subcategory-row {
-  margin-top: 6px;
-  padding-left: 110px; /* 🔥 aligne avec les chips (important) */
+  margin-top:
+    6px;
+
+  padding-left:
+    110px;
 }
 
-/* Primary group */
 .primary-group {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  padding: 8px 0;
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  gap:
+    1.5rem;
+
+  flex-wrap:
+    wrap;
+
+  padding:
+    8px 0;
 }
 
 .offbudget-toggle {
-  margin-left: 4px;
+  margin-left:
+    4px;
 }
 
 .text-filter-row {
-  padding: 4px 0 8px 0;
+  padding:
+    4px 0 8px;
 }
 
 .text-filter {
-  width: 100%;
-  max-width: 360px;
-  padding: 7px 12px;
+  width:
+    100%;
 
-  border-radius: 999px;
-  border: 1px solid var(--border);
+  max-width:
+    360px;
 
-  background: var(--surface);
-  color: var(--text);
+  padding:
+    7px 12px;
 
-  font-size: var(--font-size-sm);
-  font-weight: 500;
+  border-radius:
+    999px;
+
+  border:
+    1px solid
+    var(--border);
+
+  background:
+    var(--surface);
+
+  color:
+    var(--text);
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    500;
 }
 
 .text-filter::placeholder {
-  color: var(--text-soft);
-  opacity: 0.6;
+  color:
+    var(--text-soft);
+
+  opacity:
+    0.6;
 }
 
 /* =========================================================
-   3️⃣ HEADER BAND
+   3. HEADER BAND
 ========================================================= */
+
 .followup-header-wrapper {
-  background: var(--bg-soft);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  padding: 0 12px;
-  margin-top: 10px;
+  background:
+    var(--bg-soft);
+
+  border-top:
+    1px solid
+    var(--border);
+
+  border-bottom:
+    1px solid
+    var(--border);
+
+  padding:
+    0 12px;
+
+  margin-top:
+    10px;
 }
 
 .followup-header {
-  padding: 10px 0;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-soft);
+  padding:
+    10px 0;
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    700;
+
+  text-transform:
+    uppercase;
+
+  letter-spacing:
+    0.04em;
+
+  color:
+    var(--text-soft);
 }
 
-
 /* =========================================================
-   4️⃣ TOTAL
+   4. TOTAL
 ========================================================= */
+
 .followup-total-wrapper {
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  background:
+    var(--bg);
+
+  border-bottom:
+    1px solid
+    var(--border);
 }
 
 .followup-row.total {
-  font-weight: 700;
-  padding: 10px 12px;
-  margin: 0;
+  font-weight:
+    700;
+
+  padding:
+    10px 12px;
+
+  margin:
+    0;
 }
 
 /* =========================================================
-   5️⃣ TABLE & GRID
+   5. TABLE & GRID
 ========================================================= */
+
 .followup-table {
-  padding: 0 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  padding:
+    0 12px;
+
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  gap:
+    10px;
 }
 
 .followup-grid {
-  display: grid;
+  display:
+    grid;
+
   grid-template-columns:
     220px
     1fr
     90px
     90px;
-  align-items: center;
-  column-gap: 16px;
+
+  align-items:
+    center;
+
+  column-gap:
+    16px;
 }
 
-/* Cells */
 .label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size:
+    0.85rem;
+
+  font-weight:
+    500;
+
+  white-space:
+    nowrap;
+
+  overflow:
+    hidden;
+
+  text-overflow:
+    ellipsis;
 }
 
 .chart {
-  height: 20px;
+  height:
+    20px;
 }
 
 .col-chart.centered {
-  text-align: center;
+  text-align:
+    center;
 }
 
 .col-allocated,
 .col-budget,
 .allocated,
 .budget {
-  text-align: right;
-  font-size: 0.85rem;
-  font-weight: 600;
-  white-space: nowrap;
+  text-align:
+    right;
+
+  font-size:
+    0.85rem;
+
+  font-weight:
+    600;
+
+  white-space:
+    nowrap;
 }
 
 .muted {
-  opacity: 0.4;
+  opacity:
+    0.4;
 }
 
-
 /* =========================================================
-   6️⃣ CONTROLS
+   6. CONTROLS
 ========================================================= */
 
-/* Year segmented */
 .year-segmented {
-  display: inline-flex;
-  padding: 2px;
-  gap: 2px;
-  background: var(--bg-soft);
-  border-radius: 999px;
-  border: 1px solid var(--border);
+  display:
+    inline-flex;
+
+  padding:
+    2px;
+
+  gap:
+    2px;
+
+  background:
+    var(--bg-soft);
+
+  border-radius:
+    999px;
+
+  border:
+    1px solid
+    var(--border);
 }
 
 .year-segment {
-  padding: 6px 16px;
-  border-radius: 999px;
-  border: none;
-  background: transparent;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  color: var(--text-soft);
-  opacity: 0.6;
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.15s ease;
+  padding:
+    6px 16px;
+
+  border-radius:
+    999px;
+
+  border:
+    none;
+
+  background:
+    transparent;
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    600;
+
+  color:
+    var(--text-soft);
+
+  opacity:
+    0.6;
+
+  cursor:
+    pointer;
+
+  user-select:
+    none;
+
+  transition:
+    all 0.15s ease;
 }
 
 .year-segment.active {
-  background: var(--primary-soft);
-  border: 1px solid var(--primary);
-  color: var(--primary);
-  opacity: 1;
+  background:
+    var(--primary-soft);
 
-  /* 🔥 FIX shadow */
-  box-shadow: var(--shadow-sm);
+  border:
+    1px solid
+    var(--primary);
+
+  color:
+    var(--primary);
+
+  opacity:
+    1;
+
+  box-shadow:
+    var(--shadow-sm);
 }
 
-
-/* Scope selector */
 .scope-selector {
-  display: inline-flex;
-  gap: 4px;
-  padding: 2px;
-  background: var(--bg-soft);
-  border-radius: 999px;
+  display:
+    inline-flex;
+
+  gap:
+    4px;
+
+  padding:
+    2px;
+
+  background:
+    var(--bg-soft);
+
+  border-radius:
+    999px;
 }
 
 .scope-btn {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  color: var(--text-soft);
-  background: transparent;
-  opacity: 0.6;
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.15s ease;
+  padding:
+    6px 14px;
+
+  border-radius:
+    999px;
+
+  border:
+    1px solid
+    transparent;
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    600;
+
+  color:
+    var(--text-soft);
+
+  background:
+    transparent;
+
+  opacity:
+    0.6;
+
+  cursor:
+    pointer;
+
+  user-select:
+    none;
+
+  transition:
+    all 0.15s ease;
 }
 
 .scope-btn.active {
-  background: var(--primary-soft);
-  border-color: var(--primary);
-  color: var(--primary);
-  opacity: 1;
+  background:
+    var(--primary-soft);
 
-  /* 🔥 FIX shadow */
-  box-shadow: var(--shadow-sm);
+  border-color:
+    var(--primary);
+
+  color:
+    var(--primary);
+
+  opacity:
+    1;
+
+  box-shadow:
+    var(--shadow-sm);
 }
 
 .scope-btn.disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
+  opacity:
+    0.35;
+
+  cursor:
+    not-allowed;
 }
-
-
-/* Chips */
-.chip {
-  padding: 8px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  opacity: 0.7;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.chip:hover {
-  opacity: 0.9;
-}
-
-.chip.active {
-  opacity: 1;
-  background: var(--primary-soft);
-  border-color: var(--primary);
-  color: var(--primary); /* 🔥 FIX */
-}
-
 
 /* =========================================================
-   7️⃣ STATUS & STATES
+   7. STATUS & STATES
 ========================================================= */
+
 .status-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  white-space: nowrap;
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  padding:
+    4px 12px;
+
+  border-radius:
+    999px;
+
+  border:
+    1px solid
+    var(--primary);
+
+  background:
+    var(--primary-soft);
+
+  color:
+    var(--primary);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    600;
+
+  white-space:
+    nowrap;
 }
 
 .allocated-good {
-  color: var(--positive);
+  color:
+    var(--positive);
 }
 
 .allocated-bad {
-  color: var(--negative);
-  font-weight: 700;
+  color:
+    var(--negative);
+
+  font-weight:
+    700;
 }
 
 .allocated-neutral {
-  color: var(--primary);
+  color:
+    var(--primary);
 }
 
+.loading {
+  padding:
+    1rem;
+
+  color:
+    var(--text-soft);
+}
+
+.error {
+  color:
+    var(--negative);
+}
 </style>

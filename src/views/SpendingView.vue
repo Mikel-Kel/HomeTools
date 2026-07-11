@@ -1,20 +1,23 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, computed, ref, watch} from "vue";
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
+
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
 import AppIcon from "@/components/AppIcon.vue";
+import ChipSelector from "@/components/ChipSelector.vue";
+import DateChip from "@/components/DateChip.vue";
 
-import { useDrive } from "@/composables/useDrive";
-const { driveStatus } = useDrive();
+import { useStorageAccess } from "@/composables/useStorageAccess";
+import { useDriveWatcher } from "@/composables/useDriveWatcher";
 
-import { useAppBootstrap } from "@/composables/useAppBootstrap"
-const { loadSettings } = useAppBootstrap()
-
-import { listFiles, loadJSONFromFolder } from "@/services/driveAdapter";
-
-import ChipSelector from "@/components/ChipSelector.vue"
-import DateChip from "@/components/DateChip.vue"
+import { useAppBootstrap } from "@/composables/useAppBootstrap";
 
 import {
   useSpending,
@@ -22,445 +25,839 @@ import {
   type AllocationStatus,
 } from "@/composables/spending/useSpending";
 
-import { transformSpendingRaw } from "@/spending/transformSpendingRaw";
-import { releaseDraftsBatch } from "@/composables/allocations/releaseBatch";
-import { useDriveWatcher } from "@/composables/useDriveWatcher";
+import {
+  releaseDraftsBatch,
+} from "@/composables/allocations/releaseBatch";
 
-import { formatDate } from "@/utils/dateFormat";
-import { formatAmount } from "@/utils/amountFormat"
+import {
+  listFiles,
+  loadJSONFromFolder,
+} from "@/services/driveAdapter";
+
+import {
+  transformSpendingRaw,
+} from "@/spending/transformSpendingRaw";
+
+import {
+  formatDate,
+} from "@/utils/dateFormat";
+
+import {
+  formatAmount,
+} from "@/utils/amountFormat";
 
 /* =========================
-   Router & Stores
+   Router / storage
 ========================= */
-const router = useRouter();
-const statusFilter = ref<Set<AllocationStatus>>(new Set());
 
-const spending = useSpending();
-const draftsState = ref<string | null>(null);
-const releasedState = ref<string | null>(null);
+const router =
+  useRouter();
 
-const SPENDING_FILTERS_KEY = "spendingFilters"
+const {
+  storageReady,
+  storageUnavailableMessage,
+  ensureStorageReady,
+} = useStorageAccess();
 
 /* =========================
-   Drive watcher
+   Bootstrap
 ========================= */
-useDriveWatcher({
-  folderId: "spending",
-  fileName: "spending.json",
-  lastKnownState: spending.spendingLastModified,
-  onChanged: loadFromDrive,
-});
 
-useDriveWatcher({
-  folderId: "allocations/drafts",
-  lastKnownState: draftsState,
-  onChanged: loadAllocationStatusFromDrive,
-});
+const {
+  loadSettings,
+} = useAppBootstrap();
 
-useDriveWatcher({
-  folderId: "allocations/released",
-  lastKnownState: releasedState,
-  onChanged: loadAllocationStatusFromDrive,
-});
+/* =========================
+   Store
+========================= */
 
-watch(driveStatus, (s) => {
-  if (s !== "CONNECTED") {
-    spending.clear();  // méthode à créer
-  }
-});
+const spending =
+  useSpending();
+
+/* =========================
+   View state
+========================= */
+
+const loading =
+  ref(false);
+
+const loadError =
+  ref<string | null>(null);
+
+const initialized =
+  ref(false);
+
+/* =========================
+   Watcher state
+========================= */
+
+const draftsState =
+  ref<string | null>(null);
+
+const releasedState =
+  ref<string | null>(null);
 
 /* =========================
    Filters
 ========================= */
-const filtersOpen = ref(false);
-const ownerFilter = ref<Set<string>>(new Set());
-const dateFrom = ref("");
-const dateTo = ref("");
-const minAmount = ref<number | null>(null);
-const maxAmount = ref<number | null>(null);
+
+const SPENDING_FILTERS_KEY =
+  "spendingFilters";
+
+const filtersOpen =
+  ref(false);
+
+const ownerFilter =
+  ref<Set<string>>(
+    new Set()
+  );
+
+const statusFilter =
+  ref<Set<AllocationStatus>>(
+    new Set()
+  );
+
+const currencyFilter =
+  ref<Set<string>>(
+    new Set()
+  );
+
+const dateFrom =
+  ref("");
+
+const dateTo =
+  ref("");
+
+const minAmount =
+  ref<number | null>(
+    null
+  );
+
+const maxAmount =
+  ref<number | null>(
+    null
+  );
 
 /* =========================
    Collapse accounts
 ========================= */
-const collapsedAccounts = ref<Set<string>>(new Set());
 
-const toggleAccount = (id: string) =>
-  collapsedAccounts.value.has(id)
-    ? collapsedAccounts.value.delete(id)
-    : collapsedAccounts.value.add(id);
+const collapsedAccounts =
+  ref<Set<string>>(
+    new Set()
+  );
 
-const isCollapsed = (id: string) =>
-  collapsedAccounts.value.has(id);
+function toggleAccount(
+  id: string
+) {
+  if (
+    collapsedAccounts.value.has(
+      id
+    )
+  ) {
+    collapsedAccounts.value.delete(
+      id
+    );
+
+    return;
+  }
+
+  collapsedAccounts.value.add(
+    id
+  );
+}
+
+function isCollapsed(
+  id: string
+): boolean {
+  return collapsedAccounts.value.has(
+    id
+  );
+}
 
 /* =========================
-   Helpers
+   Accounts / owners
 ========================= */
-const accounts = computed(() => spending.accounts.value);
 
-const availableOwners = computed(() => {
-  const set = new Set<string>();
-  spending.records.value.forEach(r => {
-    if (r.owner) set.add(r.owner);
-  });
-  return Array.from(set).sort();
-});
+const accounts =
+  computed(() =>
+    spending.accounts.value
+  );
 
-const ownerItems = computed(() =>
-  availableOwners.value.map(owner => ({
-    id: owner,
-    label: owner || "-"
-  }))
-)
+const availableOwners =
+  computed(() => {
+    const owners =
+      new Set<string>();
 
-const availableCurrencies = computed(() => {
-  const foreignCurrencies = new Set<string>()
-
-  spending.records.value.forEach(r => {
-    if (
-      r.currency &&
-      r.currency !== "CHF" &&
-      r.foreignAmount != null
+    for (
+      const record
+      of spending.records.value
     ) {
-      foreignCurrencies.add(r.currency)
+      if (record.owner) {
+        owners.add(
+          record.owner
+        );
+      }
     }
-  })
 
-  if (foreignCurrencies.size === 0) {
-    return []
-  }
+    return Array
+      .from(owners)
+      .sort();
+  });
 
-  return [
-    "CHF",
-    ...Array.from(foreignCurrencies).sort()
-  ]
-})
+const ownerItems =
+  computed(() =>
+    availableOwners.value.map(
+      owner => ({
+        id: owner,
+        label:
+          owner || "-",
+      })
+    )
+  );
 
-const currencyItems = computed(() =>
-  availableCurrencies.value.map(currency => ({
-    id: currency,
-    label: currency
-  }))
-)
+const ownerFilterArray =
+  computed<string[]>({
+    get: () =>
+      Array.from(
+        ownerFilter.value
+      ),
 
-const currencyFilter = ref<Set<string>>(new Set())
+    set: value => {
+      ownerFilter.value =
+        new Set(value);
+    },
+  });
 
-const currencyFilterArray = computed<string[]>({
-  get: () => Array.from(currencyFilter.value),
-  set: value => {
-    currencyFilter.value = new Set(value)
-  }
-})
+/* =========================
+   Status filters
+========================= */
 
-const statusItems = computed(() =>
-  allStatuses.map(status => ({
-    id: status,
-    label: status
-  }))
-)
+const allStatuses:
+  AllocationStatus[] = [
+    "none",
+    "partial",
+    "draft",
+    "released",
+  ];
 
-const ownerFilterArray = computed<string[]>({
-  get: () => Array.from(ownerFilter.value),
-  set: (value) => {
-    ownerFilter.value = new Set(value)
-  }
-})
+const statusItems =
+  computed(() =>
+    allStatuses.map(
+      status => ({
+        id: status,
+        label: status,
+      })
+    )
+  );
 
-const statusFilterArray = computed<AllocationStatus[]>({
-  get: () => Array.from(statusFilter.value),
-  set: (value) => {
-    statusFilter.value = new Set(value)
-  }
-})
+const statusFilterArray =
+  computed<AllocationStatus[]>({
+    get: () =>
+      Array.from(
+        statusFilter.value
+      ),
 
-const allStatuses: AllocationStatus[] = [
-  "none",
-  "partial",
-  "draft",
-  "released",
-];
+    set: value => {
+      statusFilter.value =
+        new Set(value);
+    },
+  });
 
-function toggleStatus(status: AllocationStatus) {
-  statusFilter.value.has(status)
-    ? statusFilter.value.delete(status)
-    : statusFilter.value.add(status);
-}
+/* =========================
+   Currency filters
+========================= */
 
-const isStatusActive = (s: AllocationStatus) =>
-  statusFilter.value.has(s);
+const availableCurrencies =
+  computed(() => {
+    const currencies =
+      new Set<string>();
 
-function toggleOwner(owner: string) {
-  ownerFilter.value.has(owner)
-    ? ownerFilter.value.delete(owner)
-    : ownerFilter.value.add(owner);
-}
+    for (
+      const record
+      of spending.records.value
+    ) {
+      if (
+        record.currency &&
+        record.currency !== "CHF" &&
+        record.foreignAmount != null
+      ) {
+        currencies.add(
+          record.currency
+        );
+      }
+    }
 
-const isOwnerActive = (o: string) =>
-  ownerFilter.value.has(o);
+    if (
+      currencies.size === 0
+    ) {
+      return [];
+    }
 
-const isAllStatusesActive = computed(
-  () => statusFilter.value.size === 0
-);
+    return [
+      "CHF",
+      ...Array
+        .from(currencies)
+        .sort(),
+    ];
+  });
+
+const currencyItems =
+  computed(() =>
+    availableCurrencies.value.map(
+      currency => ({
+        id: currency,
+        label: currency,
+      })
+    )
+  );
+
+const currencyFilterArray =
+  computed<string[]>({
+    get: () =>
+      Array.from(
+        currencyFilter.value
+      ),
+
+    set: value => {
+      currencyFilter.value =
+        new Set(value);
+    },
+  });
+
+/* =========================
+   Filter helpers
+========================= */
 
 function resetFilters() {
-  ownerFilter.value = new Set();
-  statusFilter.value = new Set();
-  currencyFilter.value = new Set()
+  ownerFilter.value =
+    new Set();
+
+  statusFilter.value =
+    new Set();
+
+  currencyFilter.value =
+    new Set();
+
   dateFrom.value = "";
   dateTo.value = "";
-  minAmount.value = null;
-  maxAmount.value = null;
-  sessionStorage.removeItem(SPENDING_FILTERS_KEY)
-}
 
-function applyFilters(records: SpendingWithStatus[]) {
-  return records.filter(r => {
-    if (
-      statusFilter.value.size &&
-      !statusFilter.value.has(r.allocationStatus)
-    )
-      return false;
+  minAmount.value =
+    null;
 
-    if (ownerFilter.value.size && !ownerFilter.value.has(r.owner))
-      return false;
+  maxAmount.value =
+    null;
 
-    if (currencyFilter.value.size) {
-      const recordCurrency =
-        isForeign(r)
-          ? r.currency!
-          : "CHF"
-
-      if (!currencyFilter.value.has(recordCurrency))
-        return false
-    }
-
-    if (dateFrom.value && r.date < dateFrom.value) return false;
-    if (dateTo.value && r.date > dateTo.value) return false;
-
-    const abs = Math.abs(r.amount);
-    if (minAmount.value !== null && abs < minAmount.value) return false;
-    if (maxAmount.value !== null && abs > maxAmount.value) return false;
-
-    return true;
-  });
-}
-
-function saveFiltersToSession() {
-  sessionStorage.setItem(
-    SPENDING_FILTERS_KEY,
-    JSON.stringify({
-      owner: Array.from(ownerFilter.value),
-      status: Array.from(statusFilter.value),
-      currency: Array.from(currencyFilter.value),
-      dateFrom: dateFrom.value,
-      dateTo: dateTo.value,
-      minAmount: minAmount.value,
-      maxAmount: maxAmount.value,
-      filtersOpen: filtersOpen.value
-    })
-  )
-}
-
-function restoreFiltersFromSession() {
-  const raw =
-    sessionStorage.getItem(SPENDING_FILTERS_KEY)
-
-  if (!raw) return
-
-  try {
-    const saved = JSON.parse(raw)
-
-    ownerFilter.value = new Set(saved.owner ?? [])
-    statusFilter.value = new Set(saved.status ?? [])
-    currencyFilter.value = new Set(saved.currency ?? [])
-
-    dateFrom.value = saved.dateFrom ?? ""
-    dateTo.value = saved.dateTo ?? ""
-
-    minAmount.value = saved.minAmount ?? null
-    maxAmount.value = saved.maxAmount ?? null
-
-    filtersOpen.value = saved.filtersOpen ?? false
-
-  } catch {
-    // ignore corrupted storage
-  }
-}
-
-function selectAllStatuses() {
-  statusFilter.value.clear();
-}
-
-function recordsFor(accountId: string) {
-  return applyFilters(
-    spending.getRecordsForAccount(accountId)
+  sessionStorage.removeItem(
+    SPENDING_FILTERS_KEY
   );
 }
 
-function totalFor(accountId: string) {
-  return recordsFor(accountId).reduce(
-    (s, r) => s + r.amount,
-    0
-  );
-}
-
-const remainingAmount = computed(() =>
-  accounts.value.reduce(
-    (sum, account) => sum + totalFor(account.id),
-    0
-  )
-);
-
-const absRemainingAmount = computed(() =>
-  Math.abs(remainingAmount.value)
-);
-
-function openFollowUp() {
-  router.push({
-    name: "followup",
-  });
-}
-
-function isForeign(record: SpendingWithStatus) {
-  return (
+function isForeign(
+  record: SpendingWithStatus
+): boolean {
+  return Boolean(
     record.foreignAmount != null &&
     record.currency &&
     record.currency !== "CHF"
   );
 }
 
-const fxPopover = ref<{
-  record: SpendingWithStatus;
-  x: number;
-  y: number;
-} | null>(null);
+function applyFilters(
+  records: SpendingWithStatus[]
+): SpendingWithStatus[] {
+  return records.filter(
+    record => {
+      if (
+        statusFilter.value.size &&
+        !statusFilter.value.has(
+          record.allocationStatus
+        )
+      ) {
+        return false;
+      }
 
-let fxTimer: number | null = null;
+      if (
+        ownerFilter.value.size &&
+        !ownerFilter.value.has(
+          record.owner
+        )
+      ) {
+        return false;
+      }
 
-function showFxPopover(event: MouseEvent, record: SpendingWithStatus) {
-  if (!isForeign(record)) return;
+      if (
+        currencyFilter.value.size
+      ) {
+        const recordCurrency =
+          isForeign(record)
+            ? record.currency!
+            : "CHF";
 
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        if (
+          !currencyFilter.value.has(
+            recordCurrency
+          )
+        ) {
+          return false;
+        }
+      }
 
-  fxPopover.value = {
-    record,
-    x: rect.right - 10,
-    y: rect.top - 8,
-  };
+      if (
+        dateFrom.value &&
+        record.date <
+          dateFrom.value
+      ) {
+        return false;
+      }
 
-  if (fxTimer) clearTimeout(fxTimer);
+      if (
+        dateTo.value &&
+        record.date >
+          dateTo.value
+      ) {
+        return false;
+      }
 
-  fxTimer = window.setTimeout(() => {
-    fxPopover.value = null;
-  }, 2000);
+      const absoluteAmount =
+        Math.abs(
+          record.amount
+        );
+
+      if (
+        minAmount.value !== null &&
+        absoluteAmount <
+          minAmount.value
+      ) {
+        return false;
+      }
+
+      if (
+        maxAmount.value !== null &&
+        absoluteAmount >
+          maxAmount.value
+      ) {
+        return false;
+      }
+
+      return true;
+    }
+  );
 }
 
-function closeFxPopover() {
-  fxPopover.value = null;
-  if (fxTimer) clearTimeout(fxTimer);
+function saveFiltersToSession() {
+  sessionStorage.setItem(
+    SPENDING_FILTERS_KEY,
+
+    JSON.stringify({
+      owner:
+        Array.from(
+          ownerFilter.value
+        ),
+
+      status:
+        Array.from(
+          statusFilter.value
+        ),
+
+      currency:
+        Array.from(
+          currencyFilter.value
+        ),
+
+      dateFrom:
+        dateFrom.value,
+
+      dateTo:
+        dateTo.value,
+
+      minAmount:
+        minAmount.value,
+
+      maxAmount:
+        maxAmount.value,
+
+      filtersOpen:
+        filtersOpen.value,
+    })
+  );
+}
+
+function restoreFiltersFromSession() {
+  const raw =
+    sessionStorage.getItem(
+      SPENDING_FILTERS_KEY
+    );
+
+  if (!raw) {
+    return;
+  }
+
+  try {
+    const saved =
+      JSON.parse(raw);
+
+    ownerFilter.value =
+      new Set(
+        saved.owner ?? []
+      );
+
+    statusFilter.value =
+      new Set(
+        saved.status ?? []
+      );
+
+    currencyFilter.value =
+      new Set(
+        saved.currency ?? []
+      );
+
+    dateFrom.value =
+      saved.dateFrom ?? "";
+
+    dateTo.value =
+      saved.dateTo ?? "";
+
+    minAmount.value =
+      saved.minAmount ?? null;
+
+    maxAmount.value =
+      saved.maxAmount ?? null;
+
+    filtersOpen.value =
+      saved.filtersOpen ?? false;
+
+  } catch {
+    // Ignore corrupted session storage.
+  }
 }
 
 /* =========================
-   Release all drafts
+   Records / totals
 ========================= */
 
-const draftRecords = computed(() =>
-  spending.getReleaseableDraftRecords()
-);
-
-const draftCount = computed(
-  () => draftRecords.value.length
-);
-
-const canReleaseAll = computed(
-  () => draftCount.value > 0
-);
-
-async function releaseAllDrafts() {
-  if (!canReleaseAll.value) return;
-  const ok = confirm(
-    `Release ${draftCount.value} draft(s)?\nThis action cannot be undone.`
+function recordsFor(
+  accountId: string
+): SpendingWithStatus[] {
+  return applyFilters(
+    spending
+      .getRecordsForAccount(
+        accountId
+      )
   );
-  if (!ok) return;
-  await releaseDraftsBatch(draftRecords.value);
 }
+
+function totalFor(
+  accountId: string
+): number {
+  return recordsFor(
+    accountId
+  ).reduce(
+    (
+      total,
+      record
+    ) =>
+      total +
+      record.amount,
+
+    0
+  );
+}
+
+const remainingAmount =
+  computed(() =>
+    accounts.value.reduce(
+      (
+        total,
+        account
+      ) =>
+        total +
+        totalFor(
+          account.id
+        ),
+
+      0
+    )
+  );
+
+const absRemainingAmount =
+  computed(() =>
+    Math.abs(
+      remainingAmount.value
+    )
+  );
 
 /* =========================
    Navigation
 ========================= */
-function openAllocation(record: SpendingWithStatus) {
-  router.push({
+
+async function openFollowUp() {
+  await router.push({
+    name: "followup",
+  });
+}
+
+async function openAllocation(
+  record: SpendingWithStatus
+) {
+  await router.push({
     name: "allocation",
-    params: { id: record.id },
+
+    params: {
+      id: record.id,
+    },
   });
 }
 
 /* =========================
-   Drive loader
+   FX popover
 ========================= */
-async function loadFromDrive() {
-  const folderId = "spending";
 
-  const raw = await loadJSONFromFolder<any>(
-    folderId,
-    "spending.json"
-  );
-  if (!raw) return;
+const fxPopover =
+  ref<{
+    record: SpendingWithStatus;
+    x: number;
+    y: number;
+  } | null>(null);
 
-  // 🔑 mémorise la date de mise à jour Drive
-  if (raw.modifiedTime) {
-    spending.setSpendingLastModified(raw.modifiedTime);
+let fxTimer:
+  number | null = null;
+
+function showFxPopover(
+  event: MouseEvent,
+  record: SpendingWithStatus
+) {
+  if (
+    !isForeign(record)
+  ) {
+    return;
   }
-  const { accounts, records } =
-    transformSpendingRaw(raw.items);
-  spending.replaceAll(accounts, records);
 
-  await loadAllocationStatusFromDrive();
+  const target =
+    event.currentTarget as
+      HTMLElement;
+
+  const rect =
+    target.getBoundingClientRect();
+
+  fxPopover.value = {
+    record,
+    x:
+      rect.right - 10,
+    y:
+      rect.top - 8,
+  };
+
+  if (fxTimer !== null) {
+    window.clearTimeout(
+      fxTimer
+    );
+  }
+
+  fxTimer =
+    window.setTimeout(
+      () => {
+        fxPopover.value =
+          null;
+
+        fxTimer =
+          null;
+      },
+
+      2000
+    );
 }
 
-async function loadAllocationStatusFromDrive() {
-  const draftsFolder = "allocations/drafts";
-  const releasedFolder = "allocations/released";
+function closeFxPopover() {
+  fxPopover.value =
+    null;
 
-  const [draftFiles, releasedFiles] =
-    await Promise.all([
-      listFiles(draftsFolder),
-      listFiles(releasedFolder),
-    ]);
+  if (fxTimer !== null) {
+    window.clearTimeout(
+      fxTimer
+    );
 
-  const draftIds = new Set<string>();
-  const readyDraftIds = new Set<string>();
+    fxTimer =
+      null;
+  }
+}
 
-  for (const file of draftFiles) {
-    if (!file.name.endsWith(".json")) continue;
+/* =========================
+   Release drafts
+========================= */
 
-    const id = file.name.replace(".json", "");
+const draftRecords =
+  computed(() =>
+    spending
+      .getReleaseableDraftRecords()
+  );
+
+const draftCount =
+  computed(() =>
+    draftRecords.value.length
+  );
+
+const canReleaseAll =
+  computed(() =>
+    draftCount.value > 0
+  );
+
+async function releaseAllDrafts() {
+  if (
+    !canReleaseAll.value
+  ) {
+    return;
+  }
+
+  const confirmed =
+    confirm(
+      `Release ${draftCount.value} draft(s)?\n` +
+      "This action cannot be undone."
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  await releaseDraftsBatch(
+    draftRecords.value
+  );
+
+  await loadAllocationStatus();
+}
+
+/* =========================
+   Storage loaders
+========================= */
+
+async function loadSpending() {
+  const raw =
+    await loadJSONFromFolder<any>(
+      "spending",
+      "spending.json"
+    );
+
+  if (!raw) {
+    spending.clear();
+
+    throw new Error(
+      "spending.json not found"
+    );
+  }
+
+  /*
+    Certains exports peuvent contenir modifiedTime.
+    Le watcher utilise sinon les métadonnées du backend.
+  */
+  if (raw.modifiedTime) {
+    spending
+      .setSpendingLastModified(
+        raw.modifiedTime
+      );
+  }
+
+  const {
+    accounts:
+      transformedAccounts,
+
+    records:
+      transformedRecords,
+  } = transformSpendingRaw(
+    raw.items
+  );
+
+  spending.replaceAll(
+    transformedAccounts,
+    transformedRecords
+  );
+
+  await loadAllocationStatus();
+}
+
+async function loadAllocationStatus() {
+  const draftsFolder =
+    "allocations/drafts";
+
+  const releasedFolder =
+    "allocations/released";
+
+  const [
+    draftFiles,
+    releasedFiles,
+  ] = await Promise.all([
+    listFiles(
+      draftsFolder
+    ),
+
+    listFiles(
+      releasedFolder
+    ),
+  ]);
+
+  const draftIds =
+    new Set<string>();
+
+  const readyDraftIds =
+    new Set<string>();
+
+  for (
+    const file
+    of draftFiles
+  ) {
+    if (
+      !file.name.endsWith(
+        ".json"
+      )
+    ) {
+      continue;
+    }
+
+    const id =
+      file.name.replace(
+        /\.json$/i,
+        ""
+      );
+
     draftIds.add(id);
 
     try {
-      const raw = await loadJSONFromFolder<any>(
-        draftsFolder,
-        file.name
-      );
+      const raw =
+        await loadJSONFromFolder<any>(
+          draftsFolder,
+          file.name
+        );
 
-      if (raw?.toProcess === true) {
+      if (
+        raw?.toProcess === true
+      ) {
         readyDraftIds.add(id);
       }
 
     } catch (err) {
       console.warn(
-        "[AllocationStatus] Ignored invalid draft file:",
+        "[AllocationStatus] Invalid draft ignored:",
         file.name,
         err
       );
     }
   }
 
-  const releasedIds = new Set(
-    releasedFiles
-      .filter(f => f.name.endsWith(".json"))
-      .map(f => f.name.replace(".json", ""))
-  );
-  
+  const releasedIds =
+    new Set<string>(
+      releasedFiles
+        .filter(file =>
+          file.name.endsWith(
+            ".json"
+          )
+        )
+        .map(file =>
+          file.name.replace(
+            /\.json$/i,
+            ""
+          )
+        )
+    );
+
   spending.applyAllocationStatus(
     draftIds,
     releasedIds,
@@ -469,41 +866,82 @@ async function loadAllocationStatusFromDrive() {
 }
 
 /* =========================
-   Lifecycle
+   Watchers
 ========================= */
-onMounted(async () => {
-  restoreFiltersFromSession()
-  await loadFromDrive()
-})
 
-/* =========================
-   Sticky header sizing
-========================= */
-const stickyRef = ref<HTMLElement | null>(null);
-let ro: ResizeObserver | null = null;
+/*
+  Nom historique conservé.
+  Le watcher utilise la façade multi-backend.
+*/
 
-onMounted(() => {
-  const el = stickyRef.value;
-  if (!el) return;
+useDriveWatcher({
+  folderId: "spending",
+  fileName: "spending.json",
 
-  const apply = () => {
-    const h = el.getBoundingClientRect().height;
-    el.style.setProperty(
-      "--sticky-height",
-      `${Math.ceil(h)}px`
-    );
-  };
+  lastKnownState:
+    spending.spendingLastModified,
 
-  apply();
-  ro = new ResizeObserver(apply);
-  ro.observe(el);
+  onChanged:
+    async () => {
+      if (
+        !storageReady.value
+      ) {
+        return;
+      }
+
+      await loadSpending();
+    },
 });
 
-onBeforeUnmount(() => {
-  if (ro && stickyRef.value)
-    ro.unobserve(stickyRef.value);
-  ro = null;
+useDriveWatcher({
+  folderId:
+    "allocations/drafts",
+
+  lastKnownState:
+    draftsState,
+
+  onChanged:
+    async () => {
+      if (
+        !storageReady.value
+      ) {
+        return;
+      }
+
+      await loadAllocationStatus();
+    },
 });
+
+useDriveWatcher({
+  folderId:
+    "allocations/released",
+
+  lastKnownState:
+    releasedState,
+
+  onChanged:
+    async () => {
+      if (
+        !storageReady.value
+      ) {
+        return;
+      }
+
+      await loadAllocationStatus();
+    },
+});
+
+watch(
+  storageReady,
+  ready => {
+    if (!ready) {
+      initialized.value =
+        false;
+
+      spending.clear();
+    }
+  }
+);
 
 watch(
   [
@@ -514,14 +952,137 @@ watch(
     dateTo,
     minAmount,
     maxAmount,
-    filtersOpen
+    filtersOpen,
   ],
-  saveFiltersToSession,
-  { deep: true }
-)
 
+  saveFiltersToSession,
+
+  {
+    deep: true,
+  }
+);
+
+/* =========================
+   Initialization
+========================= */
+
+async function initializeView() {
+  if (
+    loading.value
+  ) {
+    return;
+  }
+
+  loading.value =
+    true;
+
+  loadError.value =
+    null;
+
+  try {
+    const ready =
+      await ensureStorageReady();
+
+    if (!ready) {
+      await router.replace({
+        name:
+          "authentication",
+      });
+
+      return;
+    }
+
+    await loadSettings();
+    await loadSpending();
+
+    initialized.value =
+      true;
+
+  } catch (err) {
+    console.error(
+      "Spending initialization failed",
+      err
+    );
+
+    loadError.value =
+      err instanceof Error
+        ? err.message
+        : String(err);
+
+  } finally {
+    loading.value =
+      false;
+  }
+}
+
+onMounted(async () => {
+  restoreFiltersFromSession();
+
+  await initializeView();
+});
+
+/* =========================
+   Sticky sizing
+========================= */
+
+const stickyRef =
+  ref<HTMLElement | null>(
+    null
+  );
+
+let resizeObserver:
+  ResizeObserver | null =
+    null;
+
+onMounted(() => {
+  const element =
+    stickyRef.value;
+
+  if (!element) {
+    return;
+  }
+
+  const applyHeight = () => {
+    const height =
+      element
+        .getBoundingClientRect()
+        .height;
+
+    element.style.setProperty(
+      "--sticky-height",
+      `${Math.ceil(height)}px`
+    );
+  };
+
+  applyHeight();
+
+  resizeObserver =
+    new ResizeObserver(
+      applyHeight
+    );
+
+  resizeObserver.observe(
+    element
+  );
+});
+
+onBeforeUnmount(() => {
+  closeFxPopover();
+
+  if (
+    resizeObserver &&
+    stickyRef.value
+  ) {
+    resizeObserver.unobserve(
+      stickyRef.value
+    );
+  }
+
+  resizeObserver =
+    null;
+});
 </script>
-  
+
 <template>
   <PageHeader
     title="Spending"
@@ -529,7 +1090,6 @@ watch(
   >
     <template #actions>
       <div class="header-actions">
-        <!-- Groupe navigation -->
         <div class="header-group">
           <AppIcon
             name="followup"
@@ -540,12 +1100,21 @@ watch(
           />
         </div>
 
-        <!-- Groupe action forte -->
         <div
           class="header-group danger"
-          :class="{ disabled: !canReleaseAll }"
-          :title="canReleaseAll ? 'Release all drafts' : 'No drafts to release'"
-          @click="canReleaseAll && releaseAllDrafts()"
+          :class="{
+            disabled:
+              !canReleaseAll
+          }"
+          :title="
+            canReleaseAll
+              ? 'Release all drafts'
+              : 'No drafts to release'
+          "
+          @click="
+            canReleaseAll &&
+            releaseAllDrafts()
+          "
         >
           <AppIcon
             name="rss"
@@ -556,62 +1125,133 @@ watch(
       </div>
     </template>
   </PageHeader>
-  <div class="spending-scroll">
-    <!-- Sticky zone (Filters) -->
-    <div ref="stickyRef" class="sticky-zone">
+
+  <div
+    v-if="!storageReady"
+    class="loading-state"
+  >
+    {{
+      storageUnavailableMessage ||
+      "Storage not available."
+    }}
+  </div>
+
+  <div
+    v-else-if="
+      loading &&
+      !initialized
+    "
+    class="loading-state"
+  >
+    Loading spending…
+  </div>
+
+  <div
+    v-else-if="loadError"
+    class="loading-state error"
+  >
+    {{ loadError }}
+  </div>
+
+  <div
+    v-else
+    class="spending-scroll"
+  >
+    <!-- Sticky filters -->
+
+    <div
+      ref="stickyRef"
+      class="sticky-zone"
+    >
       <section class="filters">
         <header
           class="filters-header clickable"
-          @click="filtersOpen = !filtersOpen"
+          @click="
+            filtersOpen =
+              !filtersOpen
+          "
         >
-          <span class="arrow">{{ filtersOpen ? "▼" : "►" }}</span>
+          <span class="arrow">
+            {{
+              filtersOpen
+                ? "▼"
+                : "►"
+            }}
+          </span>
+
           <h2>Filters</h2>
+
           <button
             v-if="filtersOpen"
+            type="button"
             class="reset-button"
-            @click.stop="resetFilters"
+            @click.stop="
+              resetFilters
+            "
           >
             Reset
           </button>
         </header>
-        <div v-if="filtersOpen" class="filters-body">
-          <!-- Owner -->  
+
+        <div
+          v-if="filtersOpen"
+          class="filters-body"
+        >
           <ChipSelector
+            v-model="
+              ownerFilterArray
+            "
             label="Owner"
             :items="ownerItems"
-            v-model="ownerFilterArray"
             :multiple="true"
-            :showAll="true"
-            :alignWithContent="true"
+            :show-all="true"
+            :align-with-content="
+              true
+            "
           />
-          <!-- Status -->  
+
           <ChipSelector
+            v-model="
+              statusFilterArray
+            "
             label="Status"
             :items="statusItems"
-            v-model="statusFilterArray"
             :multiple="true"
-            :showAll="true"
-            :alignWithContent="true"
+            :show-all="true"
+            :align-with-content="
+              true
+            "
           />
-          <!-- Currency -->  
+
           <ChipSelector
-            v-if="availableCurrencies.length > 0"
+            v-if="
+              availableCurrencies.length >
+              0
+            "
+            v-model="
+              currencyFilterArray
+            "
             label="Currency"
             :items="currencyItems"
-            v-model="currencyFilterArray"
             :multiple="true"
-            :showAll="true"
-            :alignWithContent="true"
+            :show-all="true"
+            :align-with-content="
+              true
+            "
           />
-          <!-- Period -->
+
           <div class="filter-row with-label">
-            <span class="label">Period</span>
+            <span class="label">
+              Period
+            </span>
+
             <div class="filter-content">
               <div class="dates-row">
                 <DateChip
                   v-model="dateFrom"
                   placeholder="From"
                 />
+
                 <DateChip
                   v-model="dateTo"
                   placeholder="To"
@@ -619,24 +1259,32 @@ watch(
               </div>
             </div>
           </div>
-          <!-- Amount -->
+
           <div class="filter-row with-label">
-            <span class="label">Amount</span>
+            <span class="label">
+              Amount
+            </span>
+
             <div class="filter-content">
               <div class="amount-inputs">
                 <input
+                  v-model.number="
+                    minAmount
+                  "
                   type="number"
                   min="0"
                   step="0.01"
                   placeholder="Min"
-                  v-model.number="minAmount"
                 />
+
                 <input
+                  v-model.number="
+                    maxAmount
+                  "
                   type="number"
                   min="0"
                   step="0.01"
                   placeholder="Max"
-                  v-model.number="maxAmount"
                 />
               </div>
             </div>
@@ -644,28 +1292,84 @@ watch(
         </div>
       </section>
     </div>
+
     <!-- Accounts -->
+
     <div class="spending-view">
-      <section v-for="account in accounts" :key="account.id" class="account">
+      <section
+        v-for="
+          account
+          in accounts
+        "
+        :key="account.id"
+        class="account"
+      >
         <div class="account-separator"></div>
-        <header class="account-header clickable" @click="toggleAccount(account.id)">
-          <!-- gauche : flèche + label + ops -->
+
+        <header
+          class="account-header clickable"
+          @click="
+            toggleAccount(
+              account.id
+            )
+          "
+        >
           <div class="account-title">
-            <span class="arrow">{{ isCollapsed(account.id) ? "►" : "▼" }}</span>
-            <h2>{{ account.label }}</h2>
-            <span class="ops-count">{{ recordsFor(account.id).length }} ops</span>
+            <span class="arrow">
+              {{
+                isCollapsed(
+                  account.id
+                )
+                  ? "►"
+                  : "▼"
+              }}
+            </span>
+
+            <h2>
+              {{ account.label }}
+            </h2>
+
+            <span class="ops-count">
+              {{
+                recordsFor(
+                  account.id
+                ).length
+              }}
+              ops
+            </span>
           </div>
 
-          <!-- droite : total aligné sur Amount -->
           <div
             class="total right"
-            :class="totalFor(account.id) >= 0 ? 'positive' : 'negative'"
+            :class="
+              totalFor(
+                account.id
+              ) >= 0
+                ? 'positive'
+                : 'negative'
+            "
           >
-            {{ formatAmount(totalFor(account.id), { showPlus: true }) }}
+            {{
+              formatAmount(
+                totalFor(
+                  account.id
+                ),
+                {
+                  showPlus: true
+                }
+              )
+            }}
           </div>
         </header>
-        <!-- ✅ TABLE ALIGNÉE -->
-        <table v-if="!isCollapsed(account.id)" class="spending-table">
+
+        <table
+          v-if="
+            !isCollapsed(
+              account.id
+            )
+          "
+          class="spending-table"
+        >
           <colgroup>
             <col class="col-date">
             <col class="col-party">
@@ -674,6 +1378,7 @@ watch(
             <col class="col-currency">
             <col class="col-amount">
           </colgroup>
+
           <thead>
             <tr>
               <th>Date</th>
@@ -681,52 +1386,118 @@ watch(
               <th>Owner</th>
               <th>Status</th>
               <th class="currency-col"></th>
-              <th class="right">Amount</th>
+              <th class="right">
+                Amount
+              </th>
             </tr>
           </thead>
 
           <tbody>
             <tr
-              v-for="record in recordsFor(account.id)"
+              v-for="
+                record
+                in recordsFor(
+                  account.id
+                )
+              "
               :key="record.id"
               class="row"
-              @click="openAllocation(record)"
+              @click="
+                openAllocation(
+                  record
+                )
+              "
             >
-              <td>{{ formatDate(record.date, "compact") }}</td>
-              <td>{{ record.party }}</td>
-              <td>{{ record.owner }}</td>
+              <td>
+                {{
+                  formatDate(
+                    record.date,
+                    "compact"
+                  )
+                }}
+              </td>
+
+              <td>
+                {{ record.party }}
+              </td>
+
+              <td>
+                {{ record.owner }}
+              </td>
+
               <td>
                 <span
-                  :class="['status-pill', record.allocationStatus]"
+                  :class="[
+                    'status-pill',
+                    record
+                      .allocationStatus
+                  ]"
                 >
-                  {{ record.allocationStatus }}
+                  {{
+                    record
+                      .allocationStatus
+                  }}
                 </span>
               </td>
+
               <td class="currency-cell">
                 <span
-                  v-if="isForeign(record)"
+                  v-if="
+                    isForeign(
+                      record
+                    )
+                  "
                   class="fx-code"
                 >
                   {{ record.currency }}
                 </span>
               </td>
+
               <td
                 class="right amount-cell"
                 :class="[
-                  record.amount >= 0 ? 'positive' : 'negative',
-                  { foreign: isForeign(record) }
+                  record.amount >= 0
+                    ? 'positive'
+                    : 'negative',
+
+                  {
+                    foreign:
+                      isForeign(
+                        record
+                      )
+                  }
                 ]"
-                @click.stop="showFxPopover($event, record)"
+                @click.stop="
+                  showFxPopover(
+                    $event,
+                    record
+                  )
+                "
               >
                 {{
-                  isForeign(record)
+                  isForeign(
+                    record
+                  )
                     ? formatAmount(
                         record.amount >= 0
-                          ? Math.abs(record.foreignAmount ?? 0)
-                          : -Math.abs(record.foreignAmount ?? 0),
-                        { showPlus: true }
+                          ? Math.abs(
+                              record.foreignAmount ??
+                              0
+                            )
+                          : -Math.abs(
+                              record.foreignAmount ??
+                              0
+                            ),
+                        {
+                          showPlus: true
+                        }
                       )
-                    : formatAmount(record.amount, { showPlus: true })
+                    : formatAmount(
+                        record.amount,
+                        {
+                          showPlus: true
+                        }
+                      )
                 }}
               </td>
             </tr>
@@ -735,21 +1506,40 @@ watch(
       </section>
     </div>
   </div>
-  <!-- FX micro popover -->
+
   <div
     v-if="fxPopover"
     class="fx-popover"
-    :style="{ top: fxPopover.y + 'px', left: fxPopover.x + 'px' }"
-    @click.stop="closeFxPopover"
+    :style="{
+      top:
+        fxPopover.y +
+        'px',
+
+      left:
+        fxPopover.x +
+        'px'
+    }"
+    @click.stop="
+      closeFxPopover
+    "
   >
-    {{ formatAmount(fxPopover.record.amount, { showPlus: true }) }} CHF
+    {{
+      formatAmount(
+        fxPopover.record.amount,
+        {
+          showPlus: true
+        }
+      )
+    }}
+    CHF
   </div>
 </template>
 
 <style scoped>
 /* =========================================================
-   1️⃣ HEADER ACTIONS
+   HEADER ACTIONS
 ========================================================= */
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -763,23 +1553,20 @@ watch(
   transition: opacity 0.15s ease;
 }
 
-/* séparateur */
 .header-group + .header-group {
   padding-left: 12px;
   border-left: 1px solid var(--border);
 }
 
-/* danger */
 .header-group.danger .header-icon {
   color: var(--negative);
 }
 
 .header-group.danger:not(.disabled):hover .header-icon {
-  background: var(--primary-soft); /* 🔥 FIX (neutralisé) */
+  background: var(--primary-soft);
   border-radius: 6px;
 }
 
-/* disabled */
 .header-group.disabled {
   opacity: 0.35;
   cursor: default;
@@ -787,8 +1574,22 @@ watch(
 }
 
 /* =========================================================
-   2️⃣ ROOT SCROLL
+   LOAD STATES
 ========================================================= */
+
+.loading-state {
+  padding: 1rem;
+  color: var(--text-soft);
+}
+
+.loading-state.error {
+  color: var(--negative);
+}
+
+/* =========================================================
+   ROOT SCROLL
+========================================================= */
+
 .spending-scroll {
   height: calc(100vh - 64px);
   overflow-y: auto;
@@ -797,17 +1598,25 @@ watch(
 }
 
 /* =========================================================
-   3️⃣ STICKY ZONE
+   STICKY ZONE
 ========================================================= */
+
 .sticky-zone {
   position: sticky;
   top: 0;
   z-index: 200;
 
-  /* 🔥 FIX dark translucide */
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  background:
+    color-mix(
+      in srgb,
+      var(--bg) 92%,
+      transparent
+    );
 
-  border-bottom: 1px solid var(--border);
+  border-bottom:
+    1px solid
+    var(--border);
+
   --sticky-height: 48px;
 }
 
@@ -835,7 +1644,6 @@ watch(
   gap: 10px;
 }
 
-/* reset */
 .reset-button {
   padding: 2px 20px;
   border-radius: 999px;
@@ -883,7 +1691,7 @@ watch(
 }
 
 /* =========================================================
-   4️⃣ INPUTS
+   INPUTS
 ========================================================= */
 
 .filter-row input:not(.hidden-date-input) {
@@ -900,6 +1708,7 @@ watch(
   font-weight: 600;
   font-family: inherit;
 }
+
 .filter-row.with-label .filter-content {
   min-width: 0;
   margin-left: -14px;
@@ -920,10 +1729,10 @@ watch(
   box-shadow: 0 0 0 2px var(--primary-soft);
 }
 
-
 /* =========================================================
-   7️⃣ ACCOUNT HEADER
+   ACCOUNT HEADER
 ========================================================= */
+
 .spending-view {
   padding-bottom: 1rem;
 }
@@ -943,14 +1752,30 @@ watch(
   top: var(--sticky-height);
   z-index: 120;
 
-  /* 🔥 FIX dark */
-  background: color-mix(in srgb, var(--surface-soft) 90%, transparent);
+  background:
+    color-mix(
+      in srgb,
+      var(--surface-soft) 90%,
+      transparent
+    );
 
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-top:
+    1px solid
+    var(--border);
+
+  border-bottom:
+    1px solid
+    var(--border);
 
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) 110px 100px 50px 120px;
+  grid-template-columns:
+    110px
+    minmax(0, 1fr)
+    110px
+    100px
+    50px
+    120px;
+
   column-gap: 0.5rem;
 
   padding: 0.25rem 0;
@@ -987,8 +1812,9 @@ watch(
 }
 
 /* =========================================================
-   8️⃣ TABLE
+   TABLE
 ========================================================= */
+
 .spending-table {
   width: 100%;
   border-collapse: collapse;
@@ -996,12 +1822,29 @@ watch(
   font-size: var(--font-size-md);
 }
 
-.spending-table col.col-date   { width: 110px; }
-.spending-table col.col-party  { width: auto; }
-.spending-table col.col-owner  { width: 110px; }
-.spending-table col.col-status { width: 100px; }
-.spending-table col.col-currency { width: 50px; }
-.spending-table col.col-amount { width: 100px; }
+.spending-table col.col-date {
+  width: 110px;
+}
+
+.spending-table col.col-party {
+  width: auto;
+}
+
+.spending-table col.col-owner {
+  width: 110px;
+}
+
+.spending-table col.col-status {
+  width: 100px;
+}
+
+.spending-table col.col-currency {
+  width: 50px;
+}
+
+.spending-table col.col-amount {
+  width: 100px;
+}
 
 .spending-table th,
 .spending-table td {
@@ -1016,23 +1859,37 @@ watch(
   background: var(--surface-soft);
 }
 
-/* alignements */
 .spending-table th:nth-child(1),
-.spending-table td:nth-child(1) { text-align: center; }
+.spending-table td:nth-child(1) {
+  text-align: center;
+}
+
 .spending-table th:nth-child(2),
-.spending-table td:nth-child(2) { text-align: left; }
+.spending-table td:nth-child(2) {
+  text-align: left;
+}
+
 .spending-table th:nth-child(3),
 .spending-table td:nth-child(3),
 .spending-table th:nth-child(4),
-.spending-table td:nth-child(4) { text-align: center; }
+.spending-table td:nth-child(4) {
+  text-align: center;
+}
+
 .spending-table th:nth-child(5),
-.spending-table td:nth-child(5) { text-align: left; }
+.spending-table td:nth-child(5) {
+  text-align: left;
+}
+
 .spending-table th:nth-child(6),
-.spending-table td:nth-child(6) { text-align: right; }
+.spending-table td:nth-child(6) {
+  text-align: right;
+}
 
 /* =========================================================
-   STATUS PILL
+   STATUS
 ========================================================= */
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -1053,7 +1910,13 @@ watch(
 }
 
 .status-pill.partial {
-  background: color-mix(in srgb, var(--warning) 15%, transparent);
+  background:
+    color-mix(
+      in srgb,
+      var(--warning) 15%,
+      transparent
+    );
+
   color: var(--warning);
   border-color: var(--warning);
 }
@@ -1065,7 +1928,13 @@ watch(
 }
 
 .status-pill.released {
-  background: color-mix(in srgb, var(--positive) 15%, transparent);
+  background:
+    color-mix(
+      in srgb,
+      var(--positive) 15%,
+      transparent
+    );
+
   color: var(--positive);
   border-color: var(--positive);
 }
@@ -1073,6 +1942,7 @@ watch(
 /* =========================================================
    FX
 ========================================================= */
+
 .currency-cell {
   text-align: left;
   padding-left: 0;
@@ -1115,7 +1985,7 @@ watch(
   font-size: var(--font-size-xs);
   font-weight: 600;
   white-space: nowrap;
-  box-shadow: var(--shadow-md); /* 🔥 FIX */
+  box-shadow: var(--shadow-md);
   animation: fxFade 0.15s ease-out;
   z-index: 1000;
 }
@@ -1123,12 +1993,22 @@ watch(
 @keyframes fxFade {
   from {
     opacity: 0;
-    transform: translate(-100%, -90%) scale(0.95);
+    transform:
+      translate(
+        -100%,
+        -90%
+      )
+      scale(0.95);
   }
+
   to {
     opacity: 1;
-    transform: translate(-100%, -100%) scale(1);
+    transform:
+      translate(
+        -100%,
+        -100%
+      )
+      scale(1);
   }
 }
-
 </style>

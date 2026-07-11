@@ -7,24 +7,39 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 
+import {
+  publishStoragePullRequest,
+  shouldRequestStoragePull,
+} from "@/services/s3/storagePullRequest";
+
 /* =========================
    Configuration
 ========================= */
 
 const endpoint =
-  import.meta.env.VITE_S3_ENDPOINT as string | undefined;
+  import.meta.env.VITE_S3_ENDPOINT as
+    | string
+    | undefined;
 
 const region =
-  import.meta.env.VITE_S3_REGION as string | undefined;
+  import.meta.env.VITE_S3_REGION as
+    | string
+    | undefined;
 
 const bucket =
-  import.meta.env.VITE_S3_BUCKET as string | undefined;
+  import.meta.env.VITE_S3_BUCKET as
+    | string
+    | undefined;
 
 const accessKeyId =
-  import.meta.env.VITE_S3_ACCESS_KEY_ID as string | undefined;
+  import.meta.env.VITE_S3_ACCESS_KEY_ID as
+    | string
+    | undefined;
 
 const secretAccessKey =
-  import.meta.env.VITE_S3_SECRET_ACCESS_KEY as string | undefined;
+  import.meta.env.VITE_S3_SECRET_ACCESS_KEY as
+    | string
+    | undefined;
 
 /* =========================
    Public types
@@ -40,29 +55,64 @@ export interface S3StorageItem {
   etag: string | null;
 }
 
+export type S3WriteJSONPrimitive = (
+  path: string,
+  data: unknown
+) => Promise<void>;
+
+export interface S3WriteJSONOptions {
+  /*
+    undefined:
+      automatic behavior according to path
+
+    true:
+      force creation of a pull request
+
+    false:
+      prevent creation of a pull request
+  */
+  requestPull?: boolean;
+
+  /*
+    Optional business/technical reason written
+    into STORAGE_PULL_REQUESTED.
+  */
+  reason?: string;
+}
+
 /* =========================
    Configuration validation
 ========================= */
 
 function assertConfig(): void {
   if (!endpoint) {
-    throw new Error("Missing VITE_S3_ENDPOINT");
+    throw new Error(
+      "Missing VITE_S3_ENDPOINT"
+    );
   }
 
   if (!region) {
-    throw new Error("Missing VITE_S3_REGION");
+    throw new Error(
+      "Missing VITE_S3_REGION"
+    );
   }
 
   if (!bucket) {
-    throw new Error("Missing VITE_S3_BUCKET");
+    throw new Error(
+      "Missing VITE_S3_BUCKET"
+    );
   }
 
   if (!accessKeyId) {
-    throw new Error("Missing VITE_S3_ACCESS_KEY_ID");
+    throw new Error(
+      "Missing VITE_S3_ACCESS_KEY_ID"
+    );
   }
 
   if (!secretAccessKey) {
-    throw new Error("Missing VITE_S3_SECRET_ACCESS_KEY");
+    throw new Error(
+      "Missing VITE_S3_SECRET_ACCESS_KEY"
+    );
   }
 }
 
@@ -74,9 +124,13 @@ const s3 = new S3Client({
   region,
   endpoint,
   forcePathStyle: true,
+
   credentials: {
-    accessKeyId: accessKeyId ?? "",
-    secretAccessKey: secretAccessKey ?? "",
+    accessKeyId:
+      accessKeyId ?? "",
+
+    secretAccessKey:
+      secretAccessKey ?? "",
   },
 });
 
@@ -84,7 +138,9 @@ const s3 = new S3Client({
    Path helpers
 ========================= */
 
-export function normalizeS3Path(path: string): string {
+export function normalizeS3Path(
+  path: string
+): string {
   return path
     .replace(/^\/+/, "")
     .replace(/\/+/g, "/");
@@ -94,10 +150,12 @@ export function buildS3Key(
   folderPath: string,
   fileName: string
 ): string {
-  const folder = normalizeS3Path(folderPath)
-    .replace(/\/+$/, "");
+  const folder =
+    normalizeS3Path(folderPath)
+      .replace(/\/+$/, "");
 
-  const file = normalizeS3Path(fileName);
+  const file =
+    normalizeS3Path(fileName);
 
   return folder
     ? `${folder}/${file}`
@@ -119,7 +177,9 @@ function buildFolderPrefix(
 function getFileNameFromKey(
   key: string
 ): string {
-  const parts = key.split("/");
+  const parts =
+    key.split("/");
+
   return parts.at(-1) ?? key;
 }
 
@@ -127,24 +187,37 @@ function getFileNameFromKey(
    Error helpers
 ========================= */
 
-function isNotFoundError(err: unknown): boolean {
-  if (!err || typeof err !== "object") {
+function isNotFoundError(
+  err: unknown
+): boolean {
+  if (
+    !err ||
+    typeof err !== "object"
+  ) {
     return false;
   }
 
   const candidate = err as {
     name?: string;
     Code?: string;
+
     $metadata?: {
       httpStatusCode?: number;
     };
   };
 
   return (
-    candidate.name === "NoSuchKey" ||
-    candidate.name === "NotFound" ||
-    candidate.Code === "NoSuchKey" ||
-    candidate.$metadata?.httpStatusCode === 404
+    candidate.name ===
+      "NoSuchKey" ||
+
+    candidate.name ===
+      "NotFound" ||
+
+    candidate.Code ===
+      "NoSuchKey" ||
+
+    candidate.$metadata
+      ?.httpStatusCode === 404
   );
 }
 
@@ -155,21 +228,27 @@ function isNotFoundError(err: unknown): boolean {
 async function streamToText(
   body: unknown
 ): Promise<string> {
-  if (!body) return "";
+  if (!body) {
+    return "";
+  }
 
-  const transformable = body as {
-    transformToString?: (
-      encoding?: string
-    ) => Promise<string>;
-  };
+  const transformable =
+    body as {
+      transformToString?: (
+        encoding?: string
+      ) => Promise<string>;
+    };
 
   if (
-    typeof transformable.transformToString ===
+    typeof
+      transformable
+        .transformToString ===
     "function"
   ) {
-    return await transformable.transformToString(
-      "utf-8"
-    );
+    return await transformable
+      .transformToString(
+        "utf-8"
+      );
   }
 
   return await new Response(
@@ -186,17 +265,21 @@ export async function readS3Text(
 ): Promise<string | null> {
   assertConfig();
 
-  const key = normalizeS3Path(path);
+  const key =
+    normalizeS3Path(path);
 
   try {
-    const response = await s3.send(
-      new GetObjectCommand({
-        Bucket: bucket,
-        Key: key,
-      })
-    );
+    const response =
+      await s3.send(
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        })
+      );
 
-    return await streamToText(response.Body);
+    return await streamToText(
+      response.Body
+    );
 
   } catch (err) {
     if (isNotFoundError(err)) {
@@ -211,10 +294,13 @@ export async function readS3Text(
    Read JSON
 ========================= */
 
-export async function readS3JSON<T = unknown>(
+export async function readS3JSON<
+  T = unknown
+>(
   path: string
 ): Promise<T | null> {
-  const text = await readS3Text(path);
+  const text =
+    await readS3Text(path);
 
   if (text === null) {
     return null;
@@ -241,11 +327,13 @@ export async function readS3JSON<T = unknown>(
 export async function writeS3Text(
   path: string,
   content: string,
-  contentType = "text/plain; charset=utf-8"
+  contentType =
+    "text/plain; charset=utf-8"
 ): Promise<void> {
   assertConfig();
 
-  const key = normalizeS3Path(path);
+  const key =
+    normalizeS3Path(path);
 
   await s3.send(
     new PutObjectCommand({
@@ -258,17 +346,94 @@ export async function writeS3Text(
 }
 
 /* =========================
+   Raw JSON write primitive
+========================= */
+
+/*
+  This primitive writes JSON without producing
+  any secondary event.
+
+  It is intentionally used for:
+  - the main business object;
+  - STORAGE_PULL_REQUESTED itself;
+  - avoiding recursive event creation.
+*/
+
+const putS3JSON:
+  S3WriteJSONPrimitive =
+async (
+  path: string,
+  data: unknown
+): Promise<void> => {
+  const normalizedPath =
+    normalizeS3Path(path);
+
+  await writeS3Text(
+    normalizedPath,
+    JSON.stringify(
+      data,
+      null,
+      2
+    ),
+    "application/json; charset=utf-8"
+  );
+};
+
+/* =========================
    Write JSON
 ========================= */
 
 export async function writeS3JSON(
   path: string,
-  data: unknown
+  data: unknown,
+  options:
+    S3WriteJSONOptions = {}
 ): Promise<void> {
-  await writeS3Text(
-    path,
-    JSON.stringify(data, null, 2),
-    "application/json; charset=utf-8"
+  const normalizedPath =
+    normalizeS3Path(path);
+
+  /*
+    Step 1:
+    Write the requested object first.
+
+    The control event must never be created
+    before the business file is available.
+  */
+  await putS3JSON(
+    normalizedPath,
+    data
+  );
+
+  /*
+    Step 2:
+    Determine whether this path requires
+    an immediate targeted pull on the Mac.
+  */
+  const requestPull =
+    options.requestPull ??
+    shouldRequestStoragePull(
+      normalizedPath
+    );
+
+  if (!requestPull) {
+    return;
+  }
+
+  /*
+    Step 3:
+    Publish a targeted control event.
+
+    putS3JSON is passed as the raw primitive,
+    so writing the event cannot recursively
+    create another pull event.
+  */
+  await publishStoragePullRequest(
+    [normalizedPath],
+
+    options.reason ??
+      "S3_FILE_WRITTEN",
+
+    putS3JSON
   );
 }
 
@@ -282,34 +447,45 @@ export async function findS3FileByName(
 ): Promise<S3StorageItem | null> {
   assertConfig();
 
-  const key = buildS3Key(
-    folderPath,
-    fileName
-  );
+  const key =
+    buildS3Key(
+      folderPath,
+      fileName
+    );
 
   try {
-    const response = await s3.send(
-      new HeadObjectCommand({
-        Bucket: bucket,
-        Key: key,
-      })
-    );
+    const response =
+      await s3.send(
+        new HeadObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        })
+      );
 
     return {
       id: key,
       key,
       name: fileName,
+
       mimeType:
         response.ContentType ??
         "application/octet-stream",
+
       modifiedTime:
-        response.LastModified?.toISOString() ??
+        response.LastModified
+          ?.toISOString() ??
         null,
+
       size:
         response.ContentLength ??
         null,
+
       etag:
-        response.ETag?.replaceAll('"', "") ??
+        response.ETag
+          ?.replaceAll(
+            '"',
+            ""
+          ) ??
         null,
     };
 
@@ -329,7 +505,8 @@ export async function findS3FileByName(
 export async function downloadS3File(
   key: string
 ): Promise<string> {
-  const content = await readS3Text(key);
+  const content =
+    await readS3Text(key);
 
   if (content === null) {
     throw new Error(
@@ -350,59 +527,93 @@ export async function listS3FilesInFolder(
   assertConfig();
 
   const prefix =
-    buildFolderPrefix(folderPath);
+    buildFolderPrefix(
+      folderPath
+    );
 
-  const items: S3StorageItem[] = [];
+  const items:
+    S3StorageItem[] = [];
+
   let continuationToken:
     | string
     | undefined;
 
   do {
-    const response = await s3.send(
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        Prefix: prefix,
-        Delimiter: "/",
-        ContinuationToken:
-          continuationToken,
-      })
-    );
+    const response =
+      await s3.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: prefix,
+          Delimiter: "/",
 
-    for (const object of response.Contents ?? []) {
-      const key = object.Key;
+          ContinuationToken:
+            continuationToken,
+        })
+      );
 
-      if (!key) continue;
+    for (
+      const object
+      of response.Contents ?? []
+    ) {
+      const key =
+        object.Key;
 
-      // Ignore un éventuel objet représentant
-      // uniquement le dossier.
-      if (key === prefix) continue;
+      if (!key) {
+        continue;
+      }
+
+      /*
+        Ignore a possible zero-byte object
+        representing only the folder prefix.
+      */
+      if (key === prefix) {
+        continue;
+      }
 
       items.push({
         id: key,
         key,
-        name: getFileNameFromKey(key),
+
+        name:
+          getFileNameFromKey(
+            key
+          ),
+
         mimeType:
-          key.toLowerCase().endsWith(".json")
+          key
+            .toLowerCase()
+            .endsWith(".json")
             ? "application/json"
             : "application/octet-stream",
+
         modifiedTime:
-          object.LastModified?.toISOString() ??
+          object.LastModified
+            ?.toISOString() ??
           null,
+
         size:
           object.Size ??
           null,
+
         etag:
-          object.ETag?.replaceAll('"', "") ??
+          object.ETag
+            ?.replaceAll(
+              '"',
+              ""
+            ) ??
           null,
       });
     }
 
     continuationToken =
       response.IsTruncated
-        ? response.NextContinuationToken
+        ? response
+            .NextContinuationToken
         : undefined;
 
-  } while (continuationToken);
+  } while (
+    continuationToken
+  );
 
   return items;
 }
@@ -417,10 +628,11 @@ export async function deleteS3File(
 ): Promise<void> {
   assertConfig();
 
-  const key = buildS3Key(
-    folderPath,
-    fileName
-  );
+  const key =
+    buildS3Key(
+      folderPath,
+      fileName
+    );
 
   await s3.send(
     new DeleteObjectCommand({
@@ -438,10 +650,14 @@ export async function getS3FileModifiedTime(
   folderPath: string,
   fileName: string
 ): Promise<string | null> {
-  const file = await findS3FileByName(
-    folderPath,
-    fileName
-  );
+  const file =
+    await findS3FileByName(
+      folderPath,
+      fileName
+    );
 
-  return file?.modifiedTime ?? null;
+  return (
+    file?.modifiedTime ??
+    null
+  );
 }

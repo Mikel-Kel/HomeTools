@@ -1,17 +1,24 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 
-import { useAppBootstrap } from "@/composables/useAppBootstrap"
-const { loadSettings } = useAppBootstrap()
-
-import { loadJSONFromFolder } from "@/services/driveAdapter";
-import { useDriveJsonFile } from "@/composables/useDriveJsonFile"
-import { useDriveWatcher } from "@/composables/useDriveWatcher"
-import { formatDate } from "@/utils/dateFormat";
+import { useStorageAccess } from "@/composables/useStorageAccess";
+import { useAppBootstrap } from "@/composables/useAppBootstrap";
+import { useDriveJsonFile } from "@/composables/useDriveJsonFile";
+import { useDriveWatcher } from "@/composables/useDriveWatcher";
 
 import { useCategories } from "@/composables/useCategories";
-import { useAllocationTags } from "@/composables/allocations/useAllocationTags"
-import { useParties } from "@/composables/useParties"
+import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
+import { useParties } from "@/composables/useParties";
+
+import { loadJSONFromFolder } from "@/services/driveAdapter";
+
+import { formatDate } from "@/utils/dateFormat";
 
 /* =========================================================
    TYPES
@@ -21,10 +28,10 @@ interface FollowUpDetailItem {
   allocationId: string;
   categoryId: number;
   subCategoryId: number;
-  allocationDate: string; // YYYY-MM-DD
+  allocationDate: string;
   amount: number;
   amountCcy: number;
-  currency:string;
+  currency: string;
   description: string;
   bankDescription: string;
   partyId: number | null;
@@ -61,650 +68,1416 @@ const props = defineProps<{
 }>();
 
 /* =========================================================
+   STORAGE ACCESS
+========================================================= */
+
+const {
+  storageReady,
+  storageUnavailableMessage,
+  ensureStorageReady,
+} = useStorageAccess();
+
+/* =========================================================
+   BOOTSTRAP
+========================================================= */
+
+const {
+  loadSettings,
+} = useAppBootstrap();
+
+/* =========================================================
+   STORES
+========================================================= */
+
+const categoriesStore = useCategories();
+const tagsStore = useAllocationTags();
+const partiesStore = useParties();
+
+/* =========================================================
    STATE
 ========================================================= */
 
-const activeRowFitid = ref<string | null>(null)
-const raw = ref<FollowUpDetailsFile | null>(null);
+const activeRowFitid =
+  ref<string | null>(null);
+
+const raw =
+  ref<FollowUpDetailsFile | null>(null);
 
 const pendingReallocationIds =
-  ref<Map<string, number>>(loadPending());
+  ref<Map<string, number>>(
+    loadPending()
+  );
 
-const categoriesStore = useCategories();
-const tagsStore = useAllocationTags()
-const partiesStore = useParties()
-const detailsRemoteState = ref<string | null>(null)
+const detailsRemoteState =
+  ref<string | null>(null);
 
-const loading = ref(false);
-const error = ref<string | null>(null);
+const loading =
+  ref(false);
+
+const error =
+  ref<string | null>(null);
+
+const initialized =
+  ref(false);
 
 const isTouchDevice =
-  window.matchMedia("(hover: none)").matches
+  window.matchMedia(
+    "(hover: none)"
+  ).matches;
 
-const fxPopover = ref<{
+const fxPopover =
+  ref<{
     item: FollowUpDetailItem;
-  x: number;
-  y: number;
-} | null>(null);
+    x: number;
+    y: number;
+  } | null>(null);
 
-  
-let fxTimer: number | null = null;
+let fxTimer:
+  number | null = null;
 
-function toggleRowAction(fitid: string) {
-  if (!isTouchDevice) return
-  activeRowFitid.value =
-    activeRowFitid.value === fitid
-      ? null
-      : fitid
-}
+/* =========================================================
+   LOCAL PENDING STATE
+========================================================= */
 
-const PENDING_KEY = "pendingReallocations"
+const PENDING_KEY =
+  "pendingReallocations";
 
-function loadPending(): Map<string, number> {
+function loadPending():
+  Map<string, number> {
+
   try {
     return new Map(
-      JSON.parse(localStorage.getItem(PENDING_KEY) || "[]")
+      JSON.parse(
+        localStorage.getItem(
+          PENDING_KEY
+        ) || "[]"
+      )
     );
+
   } catch {
     return new Map();
   }
 }
 
-function savePending(map: Map<string, number>) {
+function savePending(
+  map: Map<string, number>
+) {
   localStorage.setItem(
     PENDING_KEY,
-    JSON.stringify([...map.entries()])
+    JSON.stringify(
+      [...map.entries()]
+    )
   );
 }
 
-/* ========
-   HANDLER
-=========== */
+/* =========================================================
+   ROW ACTIONS
+========================================================= */
 
-function buildEventFileName(fitid: string): string {
-  const now = new Date()
-
-  const YYYY = now.getFullYear()
-  const MM = String(now.getMonth() + 1).padStart(2, "0")
-  const DD = String(now.getDate()).padStart(2, "0")
-  const HH = String(now.getHours()).padStart(2, "0")
-  const mm = String(now.getMinutes()).padStart(2, "0")
-  const ss = String(now.getSeconds()).padStart(2, "0")
-  const shortFitid = fitid.slice(0, 12)
-
-  return `REA_${YYYY}${MM}${DD}${HH}${mm}${ss}_${shortFitid}.json`
-}
-
-async function requestReallocation(item: FollowUpDetailItem) {
-  if (pendingReallocationIds.value.has(item.allocationId)) return
-
-  const ok = confirm(
-    "Request allocation change for this transaction?\n" +
-    "(back to Spending Drafts)"
-  )
-  if (!ok) return
-
-  try {
-    const event = {
-      eventType: "REALLOCATION_REQUEST",
-      version: 1,
-      timestamp: new Date().toISOString(),
-      allocationMetadata: {
-        allocationId: item.allocationId
-      }
-    }
-
-    const fileName =
-      buildEventFileName(item.allocationId)
-    const { save } =
-      useDriveJsonFile("events", fileName)
-    
-      await save(event)
-    
-      pendingReallocationIds.value.set(
-        item.allocationId,
-        Date.now());
-      savePending(pendingReallocationIds.value)
-
-      activeRowFitid.value = null
-
-  } catch (e) {
-    console.error(
-      "Failed to request reallocation",
-      e
-    )
-  }
-}
-
-/* ========
-   LOAD
-=========== */
-
-async function loadDetails() {
-  if (props.subCategoryId === null) {
-    raw.value = null;
+function toggleRowAction(
+  fitid: string
+) {
+  if (!isTouchDevice) {
     return;
   }
 
-  loading.value = true;
-  error.value = null;
+  activeRowFitid.value =
+    activeRowFitid.value === fitid
+      ? null
+      : fitid;
+}
+
+/* =========================================================
+   EVENT HELPERS
+========================================================= */
+
+function buildEventFileName(
+  fitid: string
+): string {
+  const now =
+    new Date();
+
+  const YYYY =
+    now.getFullYear();
+
+  const MM =
+    String(
+      now.getMonth() + 1
+    ).padStart(2, "0");
+
+  const DD =
+    String(
+      now.getDate()
+    ).padStart(2, "0");
+
+  const HH =
+    String(
+      now.getHours()
+    ).padStart(2, "0");
+
+  const mm =
+    String(
+      now.getMinutes()
+    ).padStart(2, "0");
+
+  const ss =
+    String(
+      now.getSeconds()
+    ).padStart(2, "0");
+
+  const shortFitid =
+    fitid.slice(0, 12);
+
+  return (
+    `REA_${YYYY}${MM}${DD}` +
+    `${HH}${mm}${ss}_` +
+    `${shortFitid}.json`
+  );
+}
+
+/* =========================================================
+   REQUEST REALLOCATION
+========================================================= */
+
+async function requestReallocation(
+  item: FollowUpDetailItem
+) {
+  if (
+    pendingReallocationIds.value.has(
+      item.allocationId
+    )
+  ) {
+    return;
+  }
+
+  if (!storageReady.value) {
+    error.value =
+      storageUnavailableMessage.value ||
+      "Storage not available.";
+
+    return;
+  }
+
+  const confirmed =
+    confirm(
+      "Request allocation change for this transaction?\n" +
+      "(back to Spending Drafts)"
+    );
+
+  if (!confirmed) {
+    return;
+  }
 
   try {
-    const folderId = "allocations/budget";
-    const filename = `FollowUpDetails-${props.year}.json`;
-    const data =
-      await loadJSONFromFolder<FollowUpDetailsFile>(
-        folderId,
-        filename
+    const event = {
+      eventType:
+        "REALLOCATION_REQUEST",
+
+      version:
+        1,
+
+      timestamp:
+        new Date().toISOString(),
+
+      allocationMetadata: {
+        allocationId:
+          item.allocationId,
+      },
+    };
+
+    const fileName =
+      buildEventFileName(
+        item.allocationId
       );
-    if (!data) {
-      throw new Error(`${filename} not found`);
-    }
 
-    raw.value = data;
-    if (pendingReallocationIds.value.size) {
-      reconcilePending();
-    }
-  }
+    /*
+      useDriveJsonFile doit utiliser saveJSONToFolder()
+      de la façade multi-backend.
 
-  catch (e: any) {
+      En mode Object Storage :
+      1. l'événement métier est écrit dans events/
+      2. writeS3JSON crée automatiquement un
+         STORAGE_PULL_REQUESTED ciblant ce fichier.
+    */
+    const {
+      save,
+    } = useDriveJsonFile(
+      "events",
+      fileName
+    );
+
+    await save(event);
+
+    pendingReallocationIds.value.set(
+      item.allocationId,
+      Date.now()
+    );
+
+    savePending(
+      pendingReallocationIds.value
+    );
+
+    activeRowFitid.value =
+      null;
+
+  } catch (err) {
+    console.error(
+      "Failed to request reallocation",
+      err
+    );
+
     error.value =
-      e?.message ??
-      "Unable to load FollowUpDetails";
-    raw.value = null;
-  }
-
-  finally {
-    loading.value = false;
+      err instanceof Error
+        ? err.message
+        : String(err);
   }
 }
+
+/* =========================================================
+   LOAD DETAILS
+========================================================= */
+
+async function loadDetails() {
+  if (
+    props.subCategoryId === null
+  ) {
+    raw.value =
+      null;
+
+    error.value =
+      null;
+
+    return;
+  }
+
+  if (!storageReady.value) {
+    raw.value =
+      null;
+
+    error.value =
+      storageUnavailableMessage.value ||
+      "Storage not available.";
+
+    return;
+  }
+
+  loading.value =
+    true;
+
+  error.value =
+    null;
+
+  try {
+    const filename =
+      `FollowUpDetails-${props.year}.json`;
+
+    const data =
+      await loadJSONFromFolder<
+        FollowUpDetailsFile
+      >(
+        "allocations/budget",
+        filename
+      );
+
+    if (!data) {
+      throw new Error(
+        `${filename} not found`
+      );
+    }
+
+    raw.value =
+      data;
+
+    if (
+      pendingReallocationIds.value.size
+    ) {
+      reconcilePending();
+    }
+
+  } catch (err) {
+    error.value =
+      err instanceof Error
+        ? err.message
+        : "Unable to load FollowUpDetails";
+
+    raw.value =
+      null;
+
+  } finally {
+    loading.value =
+      false;
+  }
+}
+
+/* =========================================================
+   PROPS WATCHERS
+========================================================= */
 
 watch(
   () => props.year,
+
   async () => {
-    activeRowFitid.value = null
-    detailsRemoteState.value = null
-    await loadDetails()
-  },
-  { immediate: true }
-)
+    activeRowFitid.value =
+      null;
+
+    detailsRemoteState.value =
+      null;
+
+    if (
+      storageReady.value &&
+      props.subCategoryId !== null
+    ) {
+      await loadDetails();
+    }
+  }
+);
 
 watch(
   () => props.subCategoryId,
-  async (v) => {
-    activeRowFitid.value = null
-    if (v !== null && raw.value === null) {
-      await loadDetails()
+
+  async value => {
+    activeRowFitid.value =
+      null;
+
+    if (value === null) {
+      raw.value =
+        null;
+
+      error.value =
+        null;
+
+      return;
+    }
+
+    if (storageReady.value) {
+      await loadDetails();
     }
   }
-)
-
-useDriveWatcher({
-  folderId: "allocations/budget",
-  fileName: `FollowUpDetails-${props.year}.json`,
-  lastKnownState: detailsRemoteState,
-  onChanged: async () => {
-    await loadDetails()
-    activeRowFitid.value = null
-  },
-})
+);
 
 /* =========================================================
-   HELPERS
+   STORAGE WATCHER
 ========================================================= */
-function fmt(n: number) {
-  return n.toLocaleString(
-    "en-GB",
-    {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+
+watch(
+  storageReady,
+
+  async ready => {
+    if (!ready) {
+      initialized.value =
+        false;
+
+      raw.value =
+        null;
+
+      error.value =
+        null;
+
+      return;
     }
-  );
-}
 
-function fmtInt(n: number) {
-  return Math.round(n)
-    .toLocaleString("en-GB");
-}
-
-function fmtForeign(it: FollowUpDetailItem) {
-  if (!it.amountCcy) return "";
-  const val = it.amountCcy.toLocaleString(
-    "en-GB",
-    {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+    if (
+      props.subCategoryId !== null
+    ) {
+      await loadDetails();
     }
-  );
-  return it.currency
-    ? `${val} ${it.currency}`
-    : val;
-}
+  }
+);
 
-function monthKey(date: string) {
-  return date.slice(0, 7);
-}
+/* =========================================================
+   REMOTE WATCHER
+========================================================= */
 
-function monthLabel(key: string) {
-  const [y, m] =
-    key.split("-").map(Number);
-  return new Date(y, m - 1)
-    .toLocaleDateString(
-      "en-GB",
-      {
-        month: "long",
-        year: "numeric"
+/*
+  On observe volontairement le dossier allocations/budget
+  plutôt qu'un nom de fichier calculé une seule fois.
+
+  Cela permet de supporter correctement le changement
+  de props.year sans conserver un watcher figé sur
+  FollowUpDetails-<ancienne année>.json.
+*/
+useDriveWatcher({
+  folderId:
+    "allocations/budget",
+
+  lastKnownState:
+    detailsRemoteState,
+
+  onChanged:
+    async () => {
+      if (
+        !storageReady.value ||
+        props.subCategoryId === null
+      ) {
+        return;
       }
+
+      await loadDetails();
+
+      activeRowFitid.value =
+        null;
+    },
+});
+
+/* =========================================================
+   FORMAT HELPERS
+========================================================= */
+
+function fmt(
+  value: number
+): string {
+  return value.toLocaleString(
+    "en-GB",
+    {
+      minimumFractionDigits:
+        2,
+
+      maximumFractionDigits:
+        2,
+    }
+  );
+}
+
+function fmtInt(
+  value: number
+): string {
+  return Math
+    .round(value)
+    .toLocaleString(
+      "en-GB"
     );
 }
 
-function subCategoryLabel(
-  catId: number,
-  subId: number
-) {
-  const cat =
-    categoriesStore.getCategory(catId);
-  return (
-    cat?.subcategories
-      .find(s => s.id === subId)
-      ?.label ??
-    `#${subId}`
+function fmtForeign(
+  item: FollowUpDetailItem
+): string {
+  if (!item.amountCcy) {
+    return "";
+  }
+
+  const value =
+    item.amountCcy.toLocaleString(
+      "en-GB",
+      {
+        minimumFractionDigits:
+          2,
+
+        maximumFractionDigits:
+          2,
+      }
+    );
+
+  return item.currency
+    ? `${value} ${item.currency}`
+    : value;
+}
+
+function monthKey(
+  date: string
+): string {
+  return date.slice(0, 7);
+}
+
+function monthLabel(
+  key: string
+): string {
+  const [
+    year,
+    month,
+  ] =
+    key
+      .split("-")
+      .map(Number);
+
+  return new Date(
+    year,
+    month - 1
+  ).toLocaleDateString(
+    "en-GB",
+    {
+      month:
+        "long",
+
+      year:
+        "numeric",
+    }
   );
 }
 
-function partyLabel(partyId: number | null) {
-  if (partyId == null) return ""
-  return partiesStore.getParty(partyId)?.label ?? `#${partyId}`
-}
-
-function getTag(tagId: number | null) {
-  if (tagId === null) return null
-  return tagsStore.getTag(tagId)
-}
-
-function tagLabel(tagId: number | null) {
-  return getTag(tagId)?.tagName ?? ""
-}
-
-function isForeign(it: FollowUpDetailItem) {
-  return it.amountCcy !== 0;
-}
-
-function showFxPopover(event: MouseEvent, item: FollowUpDetailItem) {
-  if (!isForeign(item)) return;
-  const rect =
-    (event.currentTarget as HTMLElement)
-      .getBoundingClientRect();
-  fxPopover.value = {
-    item,
-    x: rect.right - 10,
-    y: rect.top - 8,
-  };
-  if (fxTimer) clearTimeout(fxTimer);
-  fxTimer = window.setTimeout(() => {
-    fxPopover.value = null;
-  }, 2000);
-}
-
-function closeFxPopover() {
-  fxPopover.value = null;
-  if (fxTimer) clearTimeout(fxTimer);
-}
-
-function reconcilePending() {
-  if (!raw.value) return;
-  if (pendingReallocationIds.value.size === 0) return;
-
-  const fileTime = new Date(raw.value.updatedAt ?? 0).getTime();
-
-  let changed = false;
-
-  for (const [id, ts] of [...pendingReallocationIds.value]) {
-    // 🔥 uniquement si le fichier est plus récent que la demande
-    if (fileTime > ts) {
-      pendingReallocationIds.value.delete(id);
-      changed = true;
-    }
+function partyLabel(
+  partyId: number | null
+): string {
+  if (partyId == null) {
+    return "";
   }
 
-  if (changed) {
-    savePending(pendingReallocationIds.value);
-  }
+  return (
+    partiesStore
+      .getParty(partyId)
+      ?.label ??
+    `#${partyId}`
+  );
 }
 
-function normalizeText(s: string): string {
-  return s
+function getTag(
+  tagId: number | null
+) {
+  if (tagId === null) {
+    return null;
+  }
+
+  return tagsStore
+    .getTag(tagId);
+}
+
+function tagLabel(
+  tagId: number | null
+): string {
+  return (
+    getTag(tagId)
+      ?.tagName ??
+    ""
+  );
+}
+
+function isForeign(
+  item: FollowUpDetailItem
+): boolean {
+  return (
+    item.amountCcy !== 0
+  );
+}
+
+function normalizeText(
+  value: string
+): string {
+  return value
     .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
+    .replace(
+      /\p{Diacritic}/gu,
+      ""
+    )
     .toLowerCase()
     .trim();
 }
 
 /* =========================================================
-   FILTERED ITEMS
+   FX POPOVER
 ========================================================= */
-const filteredItems = computed<FollowUpDetailItem[]>(() => {
-  if (!raw.value || props.subCategoryId === null) {
-    return [];
+
+function showFxPopover(
+  event: MouseEvent,
+  item: FollowUpDetailItem
+) {
+  if (!isForeign(item)) {
+    return;
   }
 
-  const selectedCategoryIds = new Set(props.categoryIds);
-  const selectedSubCategoryId = props.subCategoryId;
-  const maxMonth = props.maxMonth;
-  const includeOffBudget = props.includeOffBudget;
+  const target =
+    event.currentTarget as
+      HTMLElement;
 
-  return raw.value.items
-    .filter((it) => {
-      const matchesCategory =
-        selectedCategoryIds.size === 0 ||
-        selectedCategoryIds.has(it.categoryId);
+  const rect =
+    target.getBoundingClientRect();
 
-      if (!matchesCategory) return false;
+  fxPopover.value = {
+    item,
+    x:
+      rect.right - 10,
 
-      const matchesSubCategory =
-        it.subCategoryId === selectedSubCategoryId;
+    y:
+      rect.top - 8,
+  };
 
-      if (!matchesSubCategory) return false;
-
-      const matchesMonth =
-        maxMonth == null ||
-        Number(it.allocationDate.slice(5, 7)) <= maxMonth;
-
-      if (!matchesMonth) return false;
-
-      const isOffBudget =
-        getTag(it.tagId)?.offBudget === true;
-
-      if (!includeOffBudget && isOffBudget) return false;
-
-      const q = normalizeText(props.labelFilter ?? "");
-      if (q) {
-        const haystack = normalizeText([
-          it.description,
-          partyLabel(it.partyId),
-          it.bankDescription,
-          tagLabel(it.tagId)
-        ].join(" "));
-
-        if (!haystack.includes(q)) return false;
-      }
-
-      return true;
-    })
-    .sort((a, b) =>
-      b.allocationDate.localeCompare(a.allocationDate)
+  if (fxTimer !== null) {
+    window.clearTimeout(
+      fxTimer
     );
-});
+  }
+
+  fxTimer =
+    window.setTimeout(
+      () => {
+        fxPopover.value =
+          null;
+
+        fxTimer =
+          null;
+      },
+
+      2000
+    );
+}
+
+function closeFxPopover() {
+  fxPopover.value =
+    null;
+
+  if (fxTimer !== null) {
+    window.clearTimeout(
+      fxTimer
+    );
+
+    fxTimer =
+      null;
+  }
+}
+
+/* =========================================================
+   RECONCILE PENDING
+========================================================= */
+
+function reconcilePending() {
+  if (!raw.value) {
+    return;
+  }
+
+  if (
+    pendingReallocationIds.value.size ===
+    0
+  ) {
+    return;
+  }
+
+  const fileTime =
+    new Date(
+      raw.value.updatedAt ?? 0
+    ).getTime();
+
+  let changed =
+    false;
+
+  for (
+    const [
+      id,
+      requestTime,
+    ]
+    of [
+      ...pendingReallocationIds
+        .value
+        .entries(),
+    ]
+  ) {
+    /*
+      La demande reste pending jusqu'à ce que
+      FollowUpDetails soit réellement republié
+      après la date de la demande.
+    */
+    if (
+      fileTime >
+      requestTime
+    ) {
+      pendingReallocationIds
+        .value
+        .delete(id);
+
+      changed =
+        true;
+    }
+  }
+
+  if (changed) {
+    savePending(
+      pendingReallocationIds.value
+    );
+  }
+}
+
+/* =========================================================
+   FILTERED ITEMS
+========================================================= */
+
+const filteredItems =
+  computed<
+    FollowUpDetailItem[]
+  >(() => {
+    if (
+      !raw.value ||
+      props.subCategoryId === null
+    ) {
+      return [];
+    }
+
+    const selectedCategoryIds =
+      new Set(
+        props.categoryIds
+      );
+
+    const selectedSubCategoryId =
+      props.subCategoryId;
+
+    const maxMonth =
+      props.maxMonth;
+
+    const includeOffBudget =
+      props.includeOffBudget;
+
+    const query =
+      normalizeText(
+        props.labelFilter ?? ""
+      );
+
+    return raw.value.items
+      .filter(item => {
+        const matchesCategory =
+          selectedCategoryIds.size ===
+            0 ||
+          selectedCategoryIds.has(
+            item.categoryId
+          );
+
+        if (!matchesCategory) {
+          return false;
+        }
+
+        if (
+          item.subCategoryId !==
+          selectedSubCategoryId
+        ) {
+          return false;
+        }
+
+        const matchesMonth =
+          maxMonth == null ||
+          Number(
+            item.allocationDate.slice(
+              5,
+              7
+            )
+          ) <= maxMonth;
+
+        if (!matchesMonth) {
+          return false;
+        }
+
+        const isOffBudget =
+          getTag(item.tagId)
+            ?.offBudget === true;
+
+        if (
+          !includeOffBudget &&
+          isOffBudget
+        ) {
+          return false;
+        }
+
+        if (query) {
+          const haystack =
+            normalizeText(
+              [
+                item.description,
+                partyLabel(
+                  item.partyId
+                ),
+                item.bankDescription,
+                tagLabel(
+                  item.tagId
+                ),
+              ].join(" ")
+            );
+
+          if (
+            !haystack.includes(
+              query
+            )
+          ) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          b.allocationDate
+            .localeCompare(
+              a.allocationDate
+            )
+      );
+  });
 
 /* =========================================================
    MONTHLY GROUPS
 ========================================================= */
 
 const monthlyGroups =
-computed<MonthGroup[]>(() => {
+  computed<MonthGroup[]>(
+    () => {
+      const map =
+        new Map<
+          string,
+          FollowUpDetailItem[]
+        >();
 
-  const map =
-    new Map<string,
-      FollowUpDetailItem[]
-    >();
+      for (
+        const item
+        of filteredItems.value
+      ) {
+        const key =
+          monthKey(
+            item.allocationDate
+          );
 
-  for (const it of filteredItems.value) {
-    const key =
-      monthKey(it.allocationDate);
+        if (!map.has(key)) {
+          map.set(
+            key,
+            []
+          );
+        }
 
-    if (!map.has(key))
-      map.set(key, []);
+        map.get(key)!
+          .push(item);
+      }
 
-    map.get(key)!.push(it);
-  }
-
-  return Array
-    .from(map.entries())
-    .map(([key, list]) => ({
-      key,
-      label:
-        monthLabel(key),
-      total:
-        list.reduce(
-          (s, i) =>
-            s + i.amount,
-          0
-        ),
-
-      items:
-        list.sort((a, b) =>
-          b.allocationDate
-            .localeCompare(a.allocationDate)
+      return Array
+        .from(
+          map.entries()
         )
-    }))
-    .sort((a, b) =>
-      b.key.localeCompare(a.key)
-    );
-});
+        .map(
+          ([
+            key,
+            list,
+          ]) => ({
+            key,
+
+            label:
+              monthLabel(key),
+
+            total:
+              list.reduce(
+                (
+                  total,
+                  item
+                ) =>
+                  total +
+                  item.amount,
+
+                0
+              ),
+
+            items:
+              list.sort(
+                (a, b) =>
+                  b.allocationDate
+                    .localeCompare(
+                      a.allocationDate
+                    )
+              ),
+          })
+        )
+        .sort(
+          (a, b) =>
+            b.key.localeCompare(
+              a.key
+            )
+        );
+    }
+  );
 
 /* =========================================================
    COLLAPSE
 ========================================================= */
 
 const openMonths =
-ref<Set<string>>(new Set());
+  ref<Set<string>>(
+    new Set()
+  );
 
-watch(monthlyGroups, groups => {
-  if (groups.length) {
+watch(
+  monthlyGroups,
+
+  groups => {
+    if (!groups.length) {
+      openMonths.value =
+        new Set();
+
+      return;
+    }
+
+    /*
+      Conserve les mois encore présents et ouvre
+      le premier mois lorsque rien n'est ouvert.
+    */
+    const availableKeys =
+      new Set(
+        groups.map(
+          group => group.key
+        )
+      );
+
+    const retained =
+      new Set(
+        [...openMonths.value]
+          .filter(key =>
+            availableKeys.has(key)
+          )
+      );
+
+    if (
+      retained.size === 0
+    ) {
+      retained.add(
+        groups[0].key
+      );
+    }
+
     openMonths.value =
-      new Set([groups[0].key]);
+      retained;
+  },
+  {
+    immediate:
+      true,
   }
-});
+);
 
-function toggleMonth(key: string) {
-  if (openMonths.value.has(key)) {
-    openMonths.value.delete(key);
+function toggleMonth(
+  key: string
+) {
+  const next =
+    new Set(
+      openMonths.value
+    );
+
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
   }
-  else {
-    openMonths.value.add(key);
-  }
+
+  openMonths.value =
+    next;
 }
 
 /* =========================================================
-   STATUS
+   MONTH STATUS
 ========================================================= */
 
 function monthStatusClass(
   key: string,
   total: number
-) {
+): string {
   if (
     !props.monthlyBudgetMap ||
     !props.nature
-  )
+  ) {
     return "neutral";
+  }
 
   const budget =
     props.monthlyBudgetMap[key];
 
-  if (budget == null)
-    return "neutral";
-
-  if (props.nature === "E") {
-    if (total > budget)
-      return "over";
-    if (total < budget)
-      return "under";
+  if (budget == null) {
     return "neutral";
   }
 
-  if (props.nature === "I") {
-    if (total < budget)
+  if (
+    props.nature === "E"
+  ) {
+    if (total > budget) {
       return "over";
-    if (total > budget)
+    }
+
+    if (total < budget) {
       return "under";
+    }
+
     return "neutral";
   }
+
+  if (
+    props.nature === "I"
+  ) {
+    if (total < budget) {
+      return "over";
+    }
+
+    if (total > budget) {
+      return "under";
+    }
+
+    return "neutral";
+  }
+
   return "neutral";
 }
 
+/* =========================================================
+   INITIALIZATION
+========================================================= */
+
+async function initializeDetails() {
+  if (initialized.value) {
+    return;
+  }
+
+  const ready =
+    await ensureStorageReady();
+
+  if (!ready) {
+    return;
+  }
+
+  try {
+    await loadSettings();
+
+    initialized.value =
+      true;
+
+    if (
+      props.subCategoryId !== null
+    ) {
+      await loadDetails();
+    }
+
+  } catch (err) {
+    console.error(
+      "FollowUpDetails initialization failed",
+      err
+    );
+
+    error.value =
+      err instanceof Error
+        ? err.message
+        : String(err);
+  }
+}
+
 onMounted(async () => {
-  await loadSettings();
+  await initializeDetails();
+});
+
+onBeforeUnmount(() => {
+  closeFxPopover();
 });
 </script>
 
 <template>
-<section v-if="props.subCategoryId !== null" class="details">
-  <div v-if="loading" class="muted">Loading…</div>
-  <div v-else-if="error" class="error">{{ error }}</div>
-
-  <div v-else>
+  <section
+    v-if="
+      props.subCategoryId !==
+      null
+    "
+    class="details"
+  >
     <div
-      v-for="group in monthlyGroups"
-      :key="group.key"
-      class="month-block"
+      v-if="!storageReady"
+      class="muted storage-state"
     >
+      {{
+        storageUnavailableMessage ||
+        "Storage not available."
+      }}
+    </div>
 
-      <!-- Month header -->
+    <div
+      v-else-if="loading"
+      class="muted storage-state"
+    >
+      Loading…
+    </div>
+
+    <div
+      v-else-if="error"
+      class="error storage-state"
+    >
+      {{ error }}
+    </div>
+
+    <div v-else>
       <div
-        class="grid month-header"
-        @click="toggleMonth(group.key)"
+        v-for="
+          group
+          in monthlyGroups
+        "
+        :key="group.key"
+        class="month-block"
       >
-        <div class="col-label month-toggle">
-          <span>{{ openMonths.has(group.key) ? "▼" : "►" }}</span>
-          {{ group.label }}
-        </div>
-
-        <div></div>
+        <!-- Month header -->
 
         <div
-          class="col-spent amount"
-          :class="monthStatusClass(group.key, group.total)"
+          class="grid month-header"
+          @click="
+            toggleMonth(
+              group.key
+            )
+          "
         >
-          {{ fmt(group.total) }}
-        </div>
-
-        <div class="col-budget amount">
-          <span v-if="props.monthlyBudgetMap?.[group.key] != null">
-            {{ fmtInt(props.monthlyBudgetMap[group.key]) }}
-          </span>
-          <span v-else>—</span>
-        </div>
-      </div>
-
-      <!-- Month rows -->
-      <div v-if="openMonths.has(group.key)">
-        <div
-          v-for="(it, idx) in group.items"
-          :key="`${it.allocationId}-${idx}`"
-          class="grid row"
-          :class="{
-            active: activeRowFitid === it.allocationId,
-            pending: pendingReallocationIds.has(it.allocationId)
-          }"
-            @click="!pendingReallocationIds.has(it.allocationId) && toggleRowAction(it.allocationId)"
-          >
-
-          <div class="col-label date-cell">
-            <span
-              v-if="pendingReallocationIds.has(it.allocationId)"
-              class="pending-inline"
-            >
-              Pending 
-            </span>
-            <button
-              v-else
-              class="reallocate-btn"
-              :class="{ visible: activeRowFitid === it.allocationId }"
-              @click.stop="requestReallocation(it)"
-              title="Request allocation change"
-            >
-              🔄
-            </button>
-            <span class="date">
-              {{ formatDate(it.allocationDate,"text") }}
-            </span>
-          </div>
-
-          <div class="desc-block">
-
-            <div class="desc-text">
-              <div class="desc">
-                {{ it.description || "—" }}
-              </div>
-
-              <div class="sub muted">
-                {{ partyLabel(it.partyId) }}
-                <span v-if="it.bankDescription">
-                  · {{ it.bankDescription }}
-                </span>
-              </div>
-            </div>
-
-            <div class="tag-container">
-
-              <span
-                v-if="it.tagId !== null"
-                class="tag-chip"
-                :class="{ off: getTag(it.tagId)?.offBudget }"
-              >
-                {{ tagLabel(it.tagId) }}
-              </span>
-
-            </div>
-
-          </div>
-
-          <div
-            class="col-spent amount amount-cell"
-            @mouseenter="showFxPopover($event, it)"
-            @mouseleave="closeFxPopover"
-            @click.stop="showFxPopover($event, it)"
-          >
-            <span class="amount-value">
-              {{ fmt(it.amount) }}
+          <div class="col-label month-toggle">
+            <span>
+              {{
+                openMonths.has(
+                  group.key
+                )
+                  ? "▼"
+                  : "►"
+              }}
             </span>
 
-            <span
-              v-if="isForeign(it)"
-              class="ccy-dot"
-            ></span>
+            {{ group.label }}
           </div>
 
           <div></div>
 
+          <div
+            class="col-spent amount"
+            :class="
+              monthStatusClass(
+                group.key,
+                group.total
+              )
+            "
+          >
+            {{ fmt(group.total) }}
+          </div>
+
+          <div class="col-budget amount">
+            <span
+              v-if="
+                props.monthlyBudgetMap
+                  ?.[group.key] != null
+              "
+            >
+              {{
+                fmtInt(
+                  props
+                    .monthlyBudgetMap![
+                      group.key
+                    ]
+                )
+              }}
+            </span>
+
+            <span v-else>
+              —
+            </span>
+          </div>
         </div>
+
+        <!-- Month rows -->
+
+        <div
+          v-if="
+            openMonths.has(
+              group.key
+            )
+          "
+        >
+          <div
+            v-for="
+              (
+                item,
+                index
+              )
+              in group.items
+            "
+            :key="
+              `${item.allocationId}-${index}`
+            "
+            class="grid row"
+            :class="{
+              active:
+                activeRowFitid ===
+                item.allocationId,
+
+              pending:
+                pendingReallocationIds.has(
+                  item.allocationId
+                )
+            }"
+            @click="
+              !pendingReallocationIds.has(
+                item.allocationId
+              ) &&
+              toggleRowAction(
+                item.allocationId
+              )
+            "
+          >
+            <div class="col-label date-cell">
+              <span
+                v-if="
+                  pendingReallocationIds.has(
+                    item.allocationId
+                  )
+                "
+                class="pending-inline"
+              >
+                Pending
+              </span>
+
+              <button
+                v-else
+                type="button"
+                class="reallocate-btn"
+                :class="{
+                  visible:
+                    activeRowFitid ===
+                    item.allocationId
+                }"
+                title="Request allocation change"
+                @click.stop="
+                  requestReallocation(
+                    item
+                  )
+                "
+              >
+                🔄
+              </button>
+
+              <span class="date">
+                {{
+                  formatDate(
+                    item.allocationDate,
+                    "text"
+                  )
+                }}
+              </span>
+            </div>
+
+            <div class="desc-block">
+              <div class="desc-text">
+                <div class="desc">
+                  {{
+                    item.description ||
+                    "—"
+                  }}
+                </div>
+
+                <div class="sub muted">
+                  {{
+                    partyLabel(
+                      item.partyId
+                    )
+                  }}
+
+                  <span
+                    v-if="
+                      item.bankDescription
+                    "
+                  >
+                    ·
+                    {{
+                      item.bankDescription
+                    }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="tag-container">
+                <span
+                  v-if="
+                    item.tagId !==
+                    null
+                  "
+                  class="tag-chip"
+                  :class="{
+                    off:
+                      getTag(
+                        item.tagId
+                      )?.offBudget
+                  }"
+                >
+                  {{
+                    tagLabel(
+                      item.tagId
+                    )
+                  }}
+                </span>
+              </div>
+            </div>
+
+            <div
+              class="col-spent amount amount-cell"
+              @mouseenter="
+                showFxPopover(
+                  $event,
+                  item
+                )
+              "
+              @mouseleave="
+                closeFxPopover
+              "
+              @click.stop="
+                showFxPopover(
+                  $event,
+                  item
+                )
+              "
+            >
+              <span class="amount-value">
+                {{ fmt(item.amount) }}
+              </span>
+
+              <span
+                v-if="
+                  isForeign(item)
+                "
+                class="ccy-dot"
+              ></span>
+            </div>
+
+            <div></div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="
+          !filteredItems.length
+        "
+        class="muted empty"
+      >
+        No allocations for this selection
       </div>
     </div>
 
-    <div v-if="!filteredItems.length" class="muted empty">
-      No allocations for this selection
+    <div
+      v-if="fxPopover"
+      class="fx-popover"
+      :style="{
+        left:
+          fxPopover.x +
+          'px',
+
+        top:
+          fxPopover.y +
+          'px'
+      }"
+    >
+      {{
+        fmtForeign(
+          fxPopover.item
+        )
+      }}
     </div>
-  </div>
-
-  <div
-    v-if="fxPopover"
-    class="fx-popover"
-    :style="{
-      left: fxPopover.x + 'px',
-      top: fxPopover.y + 'px'
-    }"
-  >
-    {{ fmtForeign(fxPopover.item) }}
-  </div>
-
-</section>
+  </section>
 </template>
 
 <style scoped>
 /* =========================================================
    Container
 ========================================================= */
+
 .details {
   padding-top: 2px;
+}
+
+.storage-state {
+  padding: 12px 0;
 }
 
 /* =========================================================
    Grid layout
 ========================================================= */
+
 .grid {
   display: grid;
-  grid-template-columns: 220px 1fr 100px 80px;
+  grid-template-columns:
+    220px
+    1fr
+    100px
+    80px;
+
   column-gap: 16px;
   align-items: center;
 }
@@ -712,6 +1485,7 @@ onMounted(async () => {
 /* =========================================================
    Month header
 ========================================================= */
+
 .month-header {
   cursor: pointer;
   font-weight: 600;
@@ -721,8 +1495,7 @@ onMounted(async () => {
   font-style: italic;
   color: var(--text-soft);
   opacity: 0.85;
-
-  transition: background 0.15s ease; /* 🔥 smooth */
+  transition: background 0.15s ease;
 }
 
 .month-header:hover {
@@ -736,7 +1509,7 @@ onMounted(async () => {
 }
 
 /* =========================================================
-   Month header – budget status override
+   Month status
 ========================================================= */
 
 .month-header .col-spent.amount.over {
@@ -754,6 +1527,7 @@ onMounted(async () => {
 /* =========================================================
    Rows
 ========================================================= */
+
 .row {
   padding: 3px 0;
   transition: background 0.15s ease;
@@ -766,6 +1540,11 @@ onMounted(async () => {
 .row.pending {
   opacity: 0.45;
 }
+
+.row:hover {
+  background: var(--primary-soft);
+}
+
 .pending-inline {
   font-size: 0.85rem;
   font-style: italic;
@@ -774,11 +1553,6 @@ onMounted(async () => {
   white-space: nowrap;
   min-width: 48px;
   text-align: right;
-}
-
-/* Hover visuel desktop */
-.row:hover {
-  background: var(--primary-soft);
 }
 
 .reallocate-btn {
@@ -800,14 +1574,12 @@ onMounted(async () => {
   transform: scale(0.9);
 }
 
-/* Hover desktop */
 .row:hover .reallocate-btn {
   opacity: 0.75;
   pointer-events: auto;
   transform: scale(1);
 }
 
-/* Active mobile/touch */
 .row.active .reallocate-btn {
   opacity: 0.75;
   pointer-events: auto;
@@ -822,6 +1594,7 @@ onMounted(async () => {
 /* =========================================================
    Date
 ========================================================= */
+
 .date-cell {
   display: inline-flex;
   align-items: center;
@@ -837,10 +1610,10 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-
 /* =========================================================
-   Description + tag layout
+   Description + tags
 ========================================================= */
+
 .desc-block {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -852,9 +1625,6 @@ onMounted(async () => {
   min-width: 0;
 }
 
-/* =========================================================
-   Tag chip
-========================================================= */
 .tag-container {
   display: flex;
   align-items: center;
@@ -874,9 +1644,8 @@ onMounted(async () => {
   color: var(--text-soft);
 }
 
-/* 🔥 FIX DARK MODE */
 .tag-chip.off {
-  background: var(--primary-soft); /* fallback cohérent */
+  background: var(--primary-soft);
   border-color: var(--negative);
   color: var(--negative);
 }
@@ -891,8 +1660,12 @@ onMounted(async () => {
 
 .sub {
   font-size: 0.75rem;
-  color: var(--text-soft); /* 🔥 FIX cohérence */
+  color: var(--text-soft);
 }
+
+/* =========================================================
+   Amount
+========================================================= */
 
 .amount {
   text-align: right;
@@ -901,9 +1674,6 @@ onMounted(async () => {
   font-variant-numeric: tabular-nums;
 }
 
-/* =========================================================
-   Amount cell
-========================================================= */
 .amount-cell {
   position: relative;
   text-align: right;
@@ -916,10 +1686,12 @@ onMounted(async () => {
 /* =========================================================
    Currency indicator
 ========================================================= */
+
 .ccy-dot {
   position: absolute;
   right: -12px;
   top: 50%;
+
   transform: translateY(-50%);
 
   width: 6px;
@@ -928,13 +1700,15 @@ onMounted(async () => {
 
   background: var(--primary);
 
-  /* 🔥 améliore visibilité dark */
-  box-shadow: 0 0 0 1px var(--surface);
+  box-shadow:
+    0 0 0 1px
+    var(--surface);
 }
 
 /* =========================================================
    FX popover
 ========================================================= */
+
 .fx-popover {
   position: fixed;
 
@@ -948,7 +1722,8 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--text);
 
-  box-shadow: var(--shadow-md); /* 🔥 FIX */
+  box-shadow: var(--shadow-md);
+
   pointer-events: none;
   z-index: 1000;
 }
@@ -956,6 +1731,7 @@ onMounted(async () => {
 /* =========================================================
    States
 ========================================================= */
+
 .muted {
   opacity: 0.4;
 }
