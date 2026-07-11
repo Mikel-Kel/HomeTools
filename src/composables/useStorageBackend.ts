@@ -1,9 +1,56 @@
-import { ref } from "vue";
-import { detectStorageBackend, type StorageBackend } from "@/utils/storageBackend";
+import { readonly, ref } from "vue";
 
-const backend = ref<StorageBackend>(detectStorageBackend());
-/*const backend = "GOOGLE_DRIVE"*/
+import {
+  detectStorageBackend,
+  storeStorageBackend,
+  clearStoredStorageBackend,
+} from "@/utils/storageBackend";
+
+import type {
+  StorageBackend,
+} from "@/utils/storageBackend";
+
+/* =========================
+   Shared state
+========================= */
+
+const backend = ref<StorageBackend>(
+  detectStorageBackend()
+);
+
+/* =========================
+   Composable
+========================= */
 
 export function useStorageBackend() {
-  return { backend };
+
+  function setBackend(
+    value: StorageBackend
+  ): void {
+
+    backend.value = value;
+    storeStorageBackend(value);
+  }
+
+  function resetBackend(): void {
+
+    clearStoredStorageBackend();
+
+    backend.value =
+      detectStorageBackend();
+  }
+
+  function isBackend(
+    value: StorageBackend
+  ): boolean {
+
+    return backend.value === value;
+  }
+
+  return {
+    backend: readonly(backend),
+    setBackend,
+    resetBackend,
+    isBackend,
+  };
 }

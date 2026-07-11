@@ -1,0 +1,369 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-07-09T15:00:00Z",
+  "eventFormat": {
+    "required": [
+      "eventId",
+      "type",
+      "typeVersion",
+      "source",
+      "createdAt",
+      "schemaVersion",
+      "payload"
+    ]
+  },
+  "domains": {
+    "allocation": {
+      "events": {
+        "ALLOCATION_DRAFT_SAVED": {
+          "version": 1,
+          "publisher": ["PWA"],
+          "consumer": ["AllocationProcessor"],
+          "description": "Create or update an allocation draft.",
+          "payloadRequired": ["spendingId", "partyID", "allocations"]
+        },
+        "ALLOCATION_DRAFT_DELETED": {
+          "version": 1,
+          "publisher": ["PWA"],
+          "consumer": ["AllocationProcessor"],
+          "description": "Delete an allocation draft.",
+          "payloadRequired": ["spendingId"]
+        },
+        "ALLOCATION_RELEASE_REQUESTED": {
+          "version": 1,
+          "publisher": ["PWA"],
+          "consumer": ["AllocationProcessor"],
+          "description": "Request import of an allocation into MySQL.",
+          "payloadRequired": ["spendingId", "partyID", "allocations"]
+        },
+        "ALLOCATION_RELEASE_ACCEPTED": {
+          "version": 1,
+          "publisher": ["AllocationProcessor"],
+          "consumer": ["Audit"],
+          "description": "Allocation release was successfully imported.",
+          "payloadRequired": ["spendingId", "importedAt"]
+        },
+        "ALLOCATION_RELEASE_REJECTED": {
+          "version": 1,
+          "publisher": ["AllocationProcessor"],
+          "consumer": ["Audit"],
+          "description": "Allocation release was rejected.",
+          "payloadRequired": ["spendingId", "reason"]
+        }
+      }
+    },
+    "spending": {
+      "events": {
+        "SPENDING_EXPORT_REQUESTED": {
+          "version": 1,
+          "publisher": ["Manual", "Scheduler"],
+          "consumer": ["SpendingProcessor"],
+          "description": "Request regeneration of spending.json.",
+          "payloadRequired": []
+        },
+        "SPENDING_EXPORTED": {
+          "version": 1,
+          "publisher": ["SpendingProcessor"],
+          "consumer": ["PublisherProcessor"],
+          "description": "spending.json was regenerated locally.",
+          "payloadRequired": ["path", "recordCount"]
+        },
+        "SPENDING_PUBLISHED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit"],
+          "description": "spending.json was published to S3.",
+          "payloadRequired": ["path", "publishedAt"]
+        }
+      }
+    },
+    "categories": {
+      "events": {
+        "CATEGORIES_EXPORT_REQUESTED": {
+          "version": 1,
+          "publisher": ["Manual", "Scheduler"],
+          "consumer": ["CategoriesProcessor"],
+          "description": "Request regeneration of categories.json.",
+          "payloadRequired": []
+        },
+        "CATEGORIES_EXPORTED": {
+          "version": 1,
+          "publisher": ["CategoriesProcessor"],
+          "consumer": ["PublisherProcessor"],
+          "description": "categories.json was regenerated locally.",
+          "payloadRequired": ["path", "recordCount"]
+        },
+        "CATEGORIES_PUBLISHED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit"],
+          "description": "categories.json was published to S3.",
+          "payloadRequired": ["path", "publishedAt"]
+        }
+      }
+    },
+    "banks": {
+      "events": {
+        "BANKS_EXPORT_REQUESTED": {
+          "version": 1,
+          "publisher": ["Manual", "Scheduler"],
+          "consumer": ["BanksProcessor"],
+          "description": "Request regeneration of banks.json.",
+          "payloadRequired": []
+        },
+        "BANKS_EXPORTED": {
+          "version": 1,
+          "publisher": ["BanksProcessor"],
+          "consumer": ["PublisherProcessor"],
+          "description": "banks.json was regenerated locally.",
+          "payloadRequired": ["path", "recordCount"]
+        },
+        "BANKS_PUBLISHED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit"],
+          "description": "banks.json was published to S3.",
+          "payloadRequired": ["path", "publishedAt"]
+        }
+      }
+    },
+    "parties": {
+      "events": {
+        "PARTIES_EXPORT_REQUESTED": {
+          "version": 1,
+          "publisher": ["Manual", "Scheduler"],
+          "consumer": ["PartiesProcessor"],
+          "description": "Request regeneration of parties.json.",
+          "payloadRequired": []
+        },
+        "PARTIES_EXPORTED": {
+          "version": 1,
+          "publisher": ["PartiesProcessor"],
+          "consumer": ["PublisherProcessor"],
+          "description": "parties.json was regenerated locally.",
+          "payloadRequired": ["path", "recordCount"]
+        },
+        "PARTIES_PUBLISHED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit"],
+          "description": "parties.json was published to S3.",
+          "payloadRequired": ["path", "publishedAt"]
+        }
+      }
+    },
+    "tags": {
+      "events": {
+        "TAGS_EXPORT_REQUESTED": {
+          "version": 1,
+          "publisher": ["Manual", "Scheduler"],
+          "consumer": ["TagsProcessor"],
+          "description": "Request regeneration of tags.json.",
+          "payloadRequired": []
+        },
+        "TAGS_EXPORTED": {
+          "version": 1,
+          "publisher": ["TagsProcessor"],
+          "consumer": ["PublisherProcessor"],
+          "description": "tags.json was regenerated locally.",
+          "payloadRequired": ["path", "recordCount"]
+        },
+        "TAGS_PUBLISHED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit"],
+          "description": "tags.json was published to S3.",
+          "payloadRequired": ["path", "publishedAt"]
+        }
+      }
+    },
+    "fxRates": {
+      "events": {
+        "FX_RATES_REFRESH_REQUESTED": {
+          "version": 1,
+          "publisher": ["Manual", "Scheduler"],
+          "consumer": ["FxRatesProcessor"],
+          "description": "Request download/update of FX rates.",
+          "payloadRequired": []
+        },
+        "FX_RATES_REFRESHED": {
+          "version": 1,
+          "publisher": ["FxRatesProcessor"],
+          "consumer": ["PublisherProcessor"],
+          "description": "FX rates were refreshed locally.",
+          "payloadRequired": ["path", "rateCount"]
+        },
+        "FX_RATES_PUBLISHED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit"],
+          "description": "FX rates were published to S3.",
+          "payloadRequired": ["path", "publishedAt"]
+        }
+      }
+    },
+    "marketIndices": {
+      "events": {
+        "MARKET_INDICES_REFRESH_REQUESTED": {
+          "version": 1,
+          "publisher": ["Manual", "Scheduler"],
+          "consumer": ["MarketIndicesProcessor"],
+          "description": "Request download/update of market indices.",
+          "payloadRequired": []
+        },
+        "MARKET_INDICES_REFRESHED": {
+          "version": 1,
+          "publisher": ["MarketIndicesProcessor"],
+          "consumer": ["PublisherProcessor"],
+          "description": "Market indices were refreshed locally.",
+          "payloadRequired": ["path", "indexCount"]
+        },
+        "MARKET_INDICES_PUBLISHED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit"],
+          "description": "Market indices were published to S3.",
+          "payloadRequired": ["path", "publishedAt"]
+        }
+      }
+    },
+    "archive": {
+      "events": {
+        "ARCHIVE_INDEX_REFRESH_REQUESTED": {
+          "version": 1,
+          "publisher": ["PWA", "Manual"],
+          "consumer": ["ArchiveProcessor"],
+          "description": "Request refresh of archive index.json and related year/toFile files.",
+          "payloadRequired": []
+        },
+        "ARCHIVE_INDEX_REFRESHED": {
+          "version": 1,
+          "publisher": ["ArchiveProcessor"],
+          "consumer": ["PublisherProcessor", "PWA"],
+          "description": "Archive index was refreshed.",
+          "payloadRequired": ["path", "foldersUpdated", "refreshedAt"]
+        },
+        "ARCHIVE_DOCUMENT_UPDATE_REQUESTED": {
+          "version": 1,
+          "publisher": ["PWA"],
+          "consumer": ["ArchiveProcessor"],
+          "description": "Request update/reclassification of an archived document.",
+          "payloadRequired": ["tocid", "processedFile", "archiveMetadata"]
+        },
+        "ARCHIVE_DOCUMENT_UPDATED": {
+          "version": 1,
+          "publisher": ["ArchiveProcessor"],
+          "consumer": ["Audit", "PublisherProcessor"],
+          "description": "Archived document metadata and/or physical name were updated.",
+          "payloadRequired": ["tocid", "oldPhysicalName", "newPhysicalName", "updatedAt"]
+        },
+        "ARCHIVE_DOCUMENT_UPDATE_REJECTED": {
+          "version": 1,
+          "publisher": ["ArchiveProcessor"],
+          "consumer": ["Audit"],
+          "description": "Archive document update was rejected.",
+          "payloadRequired": ["tocid", "reason"]
+        },
+        "ARCHIVE_DOCUMENT_DELETE_REQUESTED": {
+          "version": 1,
+          "publisher": ["PWA"],
+          "consumer": ["ArchiveProcessor"],
+          "description": "Request deletion/removal of an archived document.",
+          "payloadRequired": ["tocid"]
+        },
+        "ARCHIVE_DOCUMENT_DELETED": {
+          "version": 1,
+          "publisher": ["ArchiveProcessor"],
+          "consumer": ["Audit", "PublisherProcessor"],
+          "description": "Archived document was deleted or removed from archive index.",
+          "payloadRequired": ["tocid", "deletedAt"]
+        },
+        "ARCHIVE_DOCUMENT_DELETE_REJECTED": {
+          "version": 1,
+          "publisher": ["ArchiveProcessor"],
+          "consumer": ["Audit"],
+          "description": "Archive document deletion was rejected.",
+          "payloadRequired": ["tocid", "reason"]
+        },
+        "ARCHIVE_TOFILE_EXPORTED": {
+          "version": 1,
+          "publisher": ["ArchiveProcessor"],
+          "consumer": ["PublisherProcessor"],
+          "description": "archive/toFile.json was regenerated locally.",
+          "payloadRequired": ["path", "recordCount"]
+        },
+        "ARCHIVE_YEAR_EXPORTED": {
+          "version": 1,
+          "publisher": ["ArchiveProcessor"],
+          "consumer": ["PublisherProcessor"],
+          "description": "A yearly archive JSON file was regenerated locally.",
+          "payloadRequired": ["year", "path", "recordCount"]
+        },
+        "ARCHIVE_PUBLISHED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit", "PWA"],
+          "description": "One or more archive files were published to S3.",
+          "payloadRequired": ["paths", "foldersUpdated", "publishedAt"]
+        }
+      }
+    },
+    "publication": {
+      "events": {
+        "PUBLISH_REQUESTED": {
+          "version": 1,
+          "publisher": ["Manual", "Processor"],
+          "consumer": ["PublisherProcessor"],
+          "description": "Request publication of one or more local files to S3.",
+          "payloadRequired": ["scope", "paths"]
+        },
+        "PUBLISH_STARTED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit"],
+          "description": "Publication started.",
+          "payloadRequired": ["scope", "paths", "startedAt"]
+        },
+        "PUBLISH_COMPLETED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit"],
+          "description": "Publication completed.",
+          "payloadRequired": ["scope", "paths", "publishedAt"]
+        },
+        "PUBLISH_FAILED": {
+          "version": 1,
+          "publisher": ["PublisherProcessor"],
+          "consumer": ["Audit"],
+          "description": "Publication failed.",
+          "payloadRequired": ["scope", "paths", "reason"]
+        }
+      }
+    },
+    "system": {
+      "events": {
+        "HOUSEKEEPING_STARTED": {
+          "version": 1,
+          "publisher": ["Scheduler"],
+          "consumer": ["Audit"],
+          "description": "Housekeeping started.",
+          "payloadRequired": ["startedAt"]
+        },
+        "HOUSEKEEPING_COMPLETED": {
+          "version": 1,
+          "publisher": ["Scheduler"],
+          "consumer": ["Audit"],
+          "description": "Housekeeping completed.",
+          "payloadRequired": ["completedAt"]
+        },
+        "HOUSEKEEPING_FAILED": {
+          "version": 1,
+          "publisher": ["Scheduler"],
+          "consumer": ["Audit"],
+          "description": "Housekeeping failed.",
+          "payloadRequired": ["reason"]
+        }
+      }
+    }
+  }
+}
