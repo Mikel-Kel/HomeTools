@@ -1,7 +1,18 @@
-import { useStorageBackend } from "@/composables/useStorageBackend";
-import { getLocalDirectory } from "@/services/local/localDirectory";
-import { resolveFolderId } from "@/config/driveResolver";
-import type { DriveItem } from "@/services/google/googleDrive";
+import {
+  useStorageBackend
+} from "@/composables/useStorageBackend";
+
+import {
+  getLocalDirectory
+} from "@/services/local/localDirectory";
+
+import {
+  resolveFolderId
+} from "@/config/driveResolver";
+
+import type {
+  DriveItem
+} from "@/services/google/googleDrive";
 
 import {
   saveGoogleJSON,
@@ -9,7 +20,7 @@ import {
   listGoogleFilesInFolder,
   findGoogleFileByName,
   downloadGoogleFile,
-  getFileMetadataByName
+  getFileMetadataByName,
 } from "@/services/google/googleDrive";
 
 import {
@@ -19,69 +30,122 @@ import {
   listLocalFilesInFolder,
   findLocalFileByName,
   downloadLocalFile,
-  resolveDirectory
+  resolveDirectory,
 } from "@/services/local/localDrive";
 
-import { googleAuthenticated } from "@/services/google/googleInit";
+import {
+  buildS3Key,
+  deleteS3File,
+  downloadS3File,
+  findS3FileByName,
+  getS3FileModifiedTime,
+  listS3FilesInFolder,
+  readS3JSON,
+  writeS3JSON,
+} from "@/services/s3/s3StorageAdapter";
 
+import {
+  googleAuthenticated
+} from "@/services/google/googleInit";
 
 /* =========================
    Helpers
 ========================= */
 
-function handleDriveError(err: any): never {
-  if (err?.message === "DRIVE_UNAUTHORIZED") {
+function handleDriveError(
+  err: any
+): never {
+  if (
+    err?.message ===
+    "DRIVE_UNAUTHORIZED"
+  ) {
     googleAuthenticated.value = false;
-    console.warn("🔐 Google Drive session expired");
+
+    console.warn(
+      "🔐 Google Drive session expired"
+    );
+
     throw err;
   }
+
   throw err;
 }
 
 /* =========================
-   Resolve folder helper
+   Resolve Google folder
 ========================= */
 
-async function resolveFolder(
+async function resolveGoogleFolder(
   folderPathOrId: string
 ): Promise<string> {
-
   const isLikelyId =
     folderPathOrId.length > 20 &&
     !folderPathOrId.includes("/");
 
-  if (isLikelyId) return folderPathOrId;
+  if (isLikelyId) {
+    return folderPathOrId;
+  }
 
-  return await resolveFolderId(folderPathOrId);
+  return await resolveFolderId(
+    folderPathOrId
+  );
 }
 
 /* =========================
    Load JSON
 ========================= */
 
-export async function loadJSONFromFolder<T = any>(
+export async function loadJSONFromFolder<
+  T = any
+>(
   folderPathOrId: string,
   fileName: string
 ): Promise<T | null> {
+  const { backend } =
+    useStorageBackend();
 
-  const { backend } = useStorageBackend();
-
-  if (backend.value === "LOCAL_DRIVE") {
-    return await readLocalJSON(folderPathOrId, fileName);
+  if (
+    backend.value ===
+    "LOCAL_DRIVE"
+  ) {
+    return await readLocalJSON<T>(
+      folderPathOrId,
+      fileName
+    );
   }
 
-  const folderId = await resolveFolder(folderPathOrId);
+  if (
+    backend.value ===
+    "OBJECT_STORAGE"
+  ) {
+    return await readS3JSON<T>(
+      buildS3Key(
+        folderPathOrId,
+        fileName
+      )
+    );
+  }
+
+  const folderId =
+    await resolveGoogleFolder(
+      folderPathOrId
+    );
 
   try {
     const file =
-      await findGoogleFileByName(folderId, fileName);
+      await findGoogleFileByName(
+        folderId,
+        fileName
+      );
 
     if (!file) return null;
 
     const content =
-      await downloadGoogleFile(file.id);
+      await downloadGoogleFile(
+        file.id
+      );
 
-    return JSON.parse(content);
+    return JSON.parse(content) as T;
 
   } catch (err) {
     handleDriveError(err);
@@ -96,16 +160,38 @@ export async function findFileByName(
   folderPathOrId: string,
   fileName: string
 ) {
+  const { backend } =
+    useStorageBackend();
 
-  const { backend } = useStorageBackend();
-
-  if (backend.value === "LOCAL_DRIVE") {
-    return await findLocalFileByName(folderPathOrId, fileName);
+  if (
+    backend.value ===
+    "LOCAL_DRIVE"
+  ) {
+    return await findLocalFileByName(
+      folderPathOrId,
+      fileName
+    );
   }
 
-  const folderId = await resolveFolder(folderPathOrId);
+  if (
+    backend.value ===
+    "OBJECT_STORAGE"
+  ) {
+    return await findS3FileByName(
+      folderPathOrId,
+      fileName
+    );
+  }
 
-  return await findGoogleFileByName(folderId, fileName);
+  const folderId =
+    await resolveGoogleFolder(
+      folderPathOrId
+    );
+
+  return await findGoogleFileByName(
+    folderId,
+    fileName
+  );
 }
 
 /* =========================
@@ -115,14 +201,30 @@ export async function findFileByName(
 export async function downloadFile(
   fileIdOrPath: string
 ): Promise<string> {
+  const { backend } =
+    useStorageBackend();
 
-  const { backend } = useStorageBackend();
-
-  if (backend.value === "LOCAL_DRIVE") {
-    return await downloadLocalFile(fileIdOrPath);
+  if (
+    backend.value ===
+    "LOCAL_DRIVE"
+  ) {
+    return await downloadLocalFile(
+      fileIdOrPath
+    );
   }
 
-  return await downloadGoogleFile(fileIdOrPath);
+  if (
+    backend.value ===
+    "OBJECT_STORAGE"
+  ) {
+    return await downloadS3File(
+      fileIdOrPath
+    );
+  }
+
+  return await downloadGoogleFile(
+    fileIdOrPath
+  );
 }
 
 /* =========================
@@ -134,22 +236,53 @@ export async function saveJSONToFolder(
   filename: string,
   data: any
 ): Promise<void> {
+  const { backend } =
+    useStorageBackend();
 
-  const { backend } = useStorageBackend();
+  if (
+    backend.value ===
+    "LOCAL_DRIVE"
+  ) {
+    await saveLocalJSON(
+      folderPathOrId,
+      filename,
+      data
+    );
 
-  if (backend.value === "LOCAL_DRIVE") {
-    await saveLocalJSON(folderPathOrId, filename, data);
     return;
   }
 
-  const folderId = await resolveFolder(folderPathOrId);
+  if (
+    backend.value ===
+    "OBJECT_STORAGE"
+  ) {
+    await writeS3JSON(
+      buildS3Key(
+        folderPathOrId,
+        filename
+      ),
+      data
+    );
+
+    return;
+  }
+
+  const folderId =
+    await resolveGoogleFolder(
+      folderPathOrId
+    );
 
   try {
     const files =
-      await listGoogleFilesInFolder(folderId);
+      await listGoogleFilesInFolder(
+        folderId
+      );
 
     const existing =
-      files.find(f => f.name === filename);
+      files.find(
+        file =>
+          file.name === filename
+      );
 
     await saveGoogleJSON(
       folderId,
@@ -170,17 +303,57 @@ export async function saveJSONToFolder(
 export async function listFiles(
   folderPathOrId: string
 ): Promise<DriveItem[]> {
+  const { backend } =
+    useStorageBackend();
 
-  const { backend } = useStorageBackend();
-
-  if (backend.value === "LOCAL_DRIVE") {
-    return await listLocalFilesInFolder(folderPathOrId);
+  if (
+    backend.value ===
+    "LOCAL_DRIVE"
+  ) {
+    return await listLocalFilesInFolder(
+      folderPathOrId
+    );
   }
 
-  const folderId = await resolveFolder(folderPathOrId);
+  if (
+    backend.value ===
+    "OBJECT_STORAGE"
+  ) {
+    const files =
+      await listS3FilesInFolder(
+        folderPathOrId
+      );
+
+    /*
+      Compatibilité temporaire avec DriveItem.
+
+      Pour S3 :
+      - id = clé complète de l'objet
+      - name = nom du fichier
+      - modifiedTime = LastModified
+    */
+    return files.map(file => ({
+      id: file.id,
+      name: file.name,
+      mimeType: file.mimeType,
+      modifiedTime:
+        file.modifiedTime ?? undefined,
+      size:
+        file.size !== null
+          ? String(file.size)
+          : undefined,
+    })) as DriveItem[];
+  }
+
+  const folderId =
+    await resolveGoogleFolder(
+      folderPathOrId
+    );
 
   try {
-    return await listGoogleFilesInFolder(folderId);
+    return await listGoogleFilesInFolder(
+      folderId
+    );
 
   } catch (err) {
     handleDriveError(err);
@@ -194,24 +367,51 @@ export async function listFiles(
 export async function deleteFileFromFolder(
   folderPathOrId: string,
   filename: string
-) {
+): Promise<void> {
+  const { backend } =
+    useStorageBackend();
 
-  const { backend } = useStorageBackend();
+  if (
+    backend.value ===
+    "LOCAL_DRIVE"
+  ) {
+    await deleteLocalFile(
+      folderPathOrId,
+      filename
+    );
 
-  if (backend.value === "LOCAL_DRIVE") {
-    await deleteLocalFile(folderPathOrId, filename);
     return;
   }
 
-  const folderId = await resolveFolder(folderPathOrId);
+  if (
+    backend.value ===
+    "OBJECT_STORAGE"
+  ) {
+    await deleteS3File(
+      folderPathOrId,
+      filename
+    );
+
+    return;
+  }
+
+  const folderId =
+    await resolveGoogleFolder(
+      folderPathOrId
+    );
 
   try {
     const file =
-      await findGoogleFileByName(folderId, filename);
+      await findGoogleFileByName(
+        folderId,
+        filename
+      );
 
     if (!file) return;
 
-    await deleteGoogleFile(file.id);
+    await deleteGoogleFile(
+      file.id
+    );
 
   } catch (err) {
     handleDriveError(err);
@@ -219,30 +419,40 @@ export async function deleteFileFromFolder(
 }
 
 /* =========================
-   Metadata
+   File metadata
 ========================= */
 
 export async function getFileModifiedTime(
   folderPathOrId: string,
   filename: string
 ): Promise<string | null> {
+  const { backend } =
+    useStorageBackend();
 
-  const { backend } = useStorageBackend();
-
-  if (backend.value === "LOCAL_DRIVE") {
-
-    const root = getLocalDirectory();
+  if (
+    backend.value ===
+    "LOCAL_DRIVE"
+  ) {
+    const root =
+      getLocalDirectory();
 
     if (!root) {
-      throw new Error("LOCAL_DIRECTORY_NOT_SELECTED");
+      throw new Error(
+        "LOCAL_DIRECTORY_NOT_SELECTED"
+      );
     }
 
     const dir =
-      await resolveDirectory(root, folderPathOrId);
+      await resolveDirectory(
+        root,
+        folderPathOrId
+      );
 
     try {
       const fileHandle =
-        await dir.getFileHandle(filename);
+        await dir.getFileHandle(
+          filename
+        );
 
       const file =
         await fileHandle.getFile();
@@ -256,26 +466,57 @@ export async function getFileModifiedTime(
     }
   }
 
-  const folderId = await resolveFolder(folderPathOrId);
+  if (
+    backend.value ===
+    "OBJECT_STORAGE"
+  ) {
+    return await getS3FileModifiedTime(
+      folderPathOrId,
+      filename
+    );
+  }
+
+  const folderId =
+    await resolveGoogleFolder(
+      folderPathOrId
+    );
 
   const meta =
-    await getFileMetadataByName(folderId, filename);
+    await getFileMetadataByName(
+      folderId,
+      filename
+    );
 
   return meta?.modifiedTime ?? null;
 }
 
+/* =========================
+   Folder metadata
+========================= */
+
 export async function getFolderModifiedTime(
   folderPathOrId: string
 ): Promise<string | null> {
-
   const files =
-    await listFiles(folderPathOrId);
+    await listFiles(
+      folderPathOrId
+    );
 
   const modifiedTimes = files
-    .map(f => f.modifiedTime)
-    .filter((t): t is string => !!t);
+    .map(file => file.modifiedTime)
+    .filter(
+      (time): time is string =>
+        !!time
+    );
 
-  if (!modifiedTimes.length) return null;
+  if (!modifiedTimes.length) {
+    return null;
+  }
 
-  return modifiedTimes.sort().at(-1) ?? null;
+  return (
+    modifiedTimes
+      .sort()
+      .at(-1) ??
+    null
+  );
 }
