@@ -17,29 +17,37 @@ import {
 ========================= */
 
 const endpoint =
-  import.meta.env.VITE_S3_ENDPOINT as
-    | string
-    | undefined;
+  import.meta.env.VITE_S3_ENDPOINT as string | undefined;
 
 const region =
-  import.meta.env.VITE_S3_REGION as
-    | string
-    | undefined;
+  import.meta.env.VITE_S3_REGION as string | undefined;
 
 const bucket =
-  import.meta.env.VITE_S3_BUCKET as
-    | string
-    | undefined;
+  import.meta.env.VITE_S3_BUCKET as string | undefined;
 
 const accessKeyId =
-  import.meta.env.VITE_S3_ACCESS_KEY_ID as
-    | string
-    | undefined;
+  import.meta.env.VITE_S3_ACCESS_KEY_ID as string | undefined;
 
 const secretAccessKey =
-  import.meta.env.VITE_S3_SECRET_ACCESS_KEY as
-    | string
-    | undefined;
+  import.meta.env.VITE_S3_SECRET_ACCESS_KEY as string | undefined;
+
+/* =========================
+   Cache policy
+========================= */
+
+/*
+  Les fichiers JSON HomeTools sont dynamiques.
+
+  Chrome peut conserver une ancienne réponse S3,
+  même après redémarrage de la PWA.
+
+  Cette politique est donc appliquée :
+  - lors de l'écriture de l'objet ;
+  - lors de la lecture GetObject.
+*/
+
+const DYNAMIC_JSON_CACHE_CONTROL =
+  "no-store, no-cache, must-revalidate";
 
 /* =========================
    Public types
@@ -62,21 +70,17 @@ export type S3WriteJSONPrimitive = (
 
 export interface S3WriteJSONOptions {
   /*
-    undefined:
-      automatic behavior according to path
+    undefined :
+      comportement automatique selon le chemin
 
-    true:
-      force creation of a pull request
+    true :
+      force la demande de pull
 
-    false:
-      prevent creation of a pull request
+    false :
+      interdit la demande de pull
   */
   requestPull?: boolean;
 
-  /*
-    Optional business/technical reason written
-    into STORAGE_PULL_REQUESTED.
-  */
   reason?: string;
 }
 
@@ -86,33 +90,23 @@ export interface S3WriteJSONOptions {
 
 function assertConfig(): void {
   if (!endpoint) {
-    throw new Error(
-      "Missing VITE_S3_ENDPOINT"
-    );
+    throw new Error("Missing VITE_S3_ENDPOINT");
   }
 
   if (!region) {
-    throw new Error(
-      "Missing VITE_S3_REGION"
-    );
+    throw new Error("Missing VITE_S3_REGION");
   }
 
   if (!bucket) {
-    throw new Error(
-      "Missing VITE_S3_BUCKET"
-    );
+    throw new Error("Missing VITE_S3_BUCKET");
   }
 
   if (!accessKeyId) {
-    throw new Error(
-      "Missing VITE_S3_ACCESS_KEY_ID"
-    );
+    throw new Error("Missing VITE_S3_ACCESS_KEY_ID");
   }
 
   if (!secretAccessKey) {
-    throw new Error(
-      "Missing VITE_S3_SECRET_ACCESS_KEY"
-    );
+    throw new Error("Missing VITE_S3_SECRET_ACCESS_KEY");
   }
 }
 
@@ -180,7 +174,18 @@ function getFileNameFromKey(
   const parts =
     key.split("/");
 
-  return parts.at(-1) ?? key;
+  return (
+    parts.at(-1) ??
+    key
+  );
+}
+
+function isJSONPath(
+  path: string
+): boolean {
+  return path
+    .toLowerCase()
+    .endsWith(".json");
 }
 
 /* =========================
@@ -197,25 +202,20 @@ function isNotFoundError(
     return false;
   }
 
-  const candidate = err as {
-    name?: string;
-    Code?: string;
+  const candidate =
+    err as {
+      name?: string;
+      Code?: string;
 
-    $metadata?: {
-      httpStatusCode?: number;
+      $metadata?: {
+        httpStatusCode?: number;
+      };
     };
-  };
 
   return (
-    candidate.name ===
-      "NoSuchKey" ||
-
-    candidate.name ===
-      "NotFound" ||
-
-    candidate.Code ===
-      "NoSuchKey" ||
-
+    candidate.name === "NoSuchKey" ||
+    candidate.name === "NotFound" ||
+    candidate.Code === "NoSuchKey" ||
     candidate.$metadata
       ?.httpStatusCode === 404
   );
@@ -240,9 +240,8 @@ async function streamToText(
     };
 
   if (
-    typeof
-      transformable
-        .transformToString ===
+    typeof transformable
+      .transformToString ===
     "function"
   ) {
     return await transformable
@@ -272,8 +271,21 @@ export async function readS3Text(
     const response =
       await s3.send(
         new GetObjectCommand({
-          Bucket: bucket,
-          Key: key,
+          Bucket:
+            bucket,
+
+          Key:
+            key,
+
+          /*
+            Force la réponse S3 à annoncer
+            que cette ressource ne doit pas
+            être conservée par le navigateur.
+          */
+          ResponseCacheControl:
+            isJSONPath(key)
+              ? DYNAMIC_JSON_CACHE_CONTROL
+              : undefined,
         })
       );
 
@@ -282,7 +294,9 @@ export async function readS3Text(
     );
 
   } catch (err) {
-    if (isNotFoundError(err)) {
+    if (
+      isNotFoundError(err)
+    ) {
       return null;
     }
 
@@ -307,7 +321,9 @@ export async function readS3JSON<
   }
 
   try {
-    return JSON.parse(text) as T;
+    return JSON.parse(
+      text
+    ) as T;
 
   } catch (err) {
     throw new Error(
@@ -335,49 +351,60 @@ export async function writeS3Text(
   const key =
     normalizeS3Path(path);
 
+  const jsonObject =
+    isJSONPath(key) ||
+    contentType
+      .toLowerCase()
+      .includes(
+        "application/json"
+      );
+
   await s3.send(
     new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: content,
-      ContentType: contentType,
+      Bucket:
+        bucket,
+
+      Key:
+        key,
+
+      Body:
+        content,
+
+      ContentType:
+        contentType,
+
+      /*
+        Les JSON écrits directement par la PWA
+        ne doivent pas être mis en cache.
+      */
+      CacheControl:
+        jsonObject
+          ? DYNAMIC_JSON_CACHE_CONTROL
+          : undefined,
     })
   );
 }
 
 /* =========================
-   Raw JSON write primitive
+   Primitive JSON writer
 ========================= */
 
-/*
-  This primitive writes JSON without producing
-  any secondary event.
-
-  It is intentionally used for:
-  - the main business object;
-  - STORAGE_PULL_REQUESTED itself;
-  - avoiding recursive event creation.
-*/
-
-const putS3JSON:
+const writeS3JSONPrimitive:
   S3WriteJSONPrimitive =
-async (
-  path: string,
-  data: unknown
-): Promise<void> => {
-  const normalizedPath =
-    normalizeS3Path(path);
-
-  await writeS3Text(
-    normalizedPath,
-    JSON.stringify(
-      data,
-      null,
-      2
-    ),
-    "application/json; charset=utf-8"
-  );
-};
+  async (
+    path,
+    data
+  ): Promise<void> => {
+    await writeS3Text(
+      path,
+      JSON.stringify(
+        data,
+        null,
+        2
+      ),
+      "application/json; charset=utf-8"
+    );
+  };
 
 /* =========================
    Write JSON
@@ -389,51 +416,39 @@ export async function writeS3JSON(
   options:
     S3WriteJSONOptions = {}
 ): Promise<void> {
-  const normalizedPath =
+  const key =
     normalizeS3Path(path);
 
   /*
-    Step 1:
-    Write the requested object first.
-
-    The control event must never be created
-    before the business file is available.
+    1. Écriture de l'objet métier.
   */
-  await putS3JSON(
-    normalizedPath,
+  await writeS3JSONPrimitive(
+    key,
     data
   );
 
   /*
-    Step 2:
-    Determine whether this path requires
-    an immediate targeted pull on the Mac.
+    2. Publication éventuelle d'une demande
+       de pull ciblée pour le Mac.
+
+    Les événements de contrôle eux-mêmes
+    ne doivent évidemment pas générer une
+    nouvelle demande de pull.
   */
   const requestPull =
     options.requestPull ??
     shouldRequestStoragePull(
-      normalizedPath
+      key
     );
 
   if (!requestPull) {
     return;
   }
 
-  /*
-    Step 3:
-    Publish a targeted control event.
-
-    putS3JSON is passed as the raw primitive,
-    so writing the event cannot recursively
-    create another pull event.
-  */
   await publishStoragePullRequest(
-    [normalizedPath],
-
-    options.reason ??
-      "S3_FILE_WRITTEN",
-
-    putS3JSON
+    [key],
+    options.reason ?? "S3_FILE_WRITTEN",
+    writeS3JSONPrimitive
   );
 }
 
@@ -457,15 +472,22 @@ export async function findS3FileByName(
     const response =
       await s3.send(
         new HeadObjectCommand({
-          Bucket: bucket,
-          Key: key,
+          Bucket:
+            bucket,
+
+          Key:
+            key,
         })
       );
 
     return {
-      id: key,
+      id:
+        key,
+
       key,
-      name: fileName,
+
+      name:
+        fileName,
 
       mimeType:
         response.ContentType ??
@@ -490,7 +512,9 @@ export async function findS3FileByName(
     };
 
   } catch (err) {
-    if (isNotFoundError(err)) {
+    if (
+      isNotFoundError(err)
+    ) {
       return null;
     }
 
@@ -535,16 +559,20 @@ export async function listS3FilesInFolder(
     S3StorageItem[] = [];
 
   let continuationToken:
-    | string
-    | undefined;
+    string | undefined;
 
   do {
     const response =
       await s3.send(
         new ListObjectsV2Command({
-          Bucket: bucket,
-          Prefix: prefix,
-          Delimiter: "/",
+          Bucket:
+            bucket,
+
+          Prefix:
+            prefix,
+
+          Delimiter:
+            "/",
 
           ContinuationToken:
             continuationToken,
@@ -553,7 +581,8 @@ export async function listS3FilesInFolder(
 
     for (
       const object
-      of response.Contents ?? []
+      of response.Contents ??
+      []
     ) {
       const key =
         object.Key;
@@ -563,15 +592,19 @@ export async function listS3FilesInFolder(
       }
 
       /*
-        Ignore a possible zero-byte object
-        representing only the folder prefix.
+        Ignore un éventuel objet
+        représentant uniquement le dossier.
       */
-      if (key === prefix) {
+      if (
+        key === prefix
+      ) {
         continue;
       }
 
       items.push({
-        id: key,
+        id:
+          key,
+
         key,
 
         name:
@@ -580,9 +613,7 @@ export async function listS3FilesInFolder(
           ),
 
         mimeType:
-          key
-            .toLowerCase()
-            .endsWith(".json")
+          isJSONPath(key)
             ? "application/json"
             : "application/octet-stream",
 
@@ -636,8 +667,11 @@ export async function deleteS3File(
 
   await s3.send(
     new DeleteObjectCommand({
-      Bucket: bucket,
-      Key: key,
+      Bucket:
+        bucket,
+
+      Key:
+        key,
     })
   );
 }
