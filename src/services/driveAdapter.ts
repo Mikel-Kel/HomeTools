@@ -1,17 +1,17 @@
 import {
-  useStorageBackend
+  useStorageBackend,
 } from "@/composables/useStorageBackend";
 
 import {
-  getLocalDirectory
+  getLocalDirectory,
 } from "@/services/local/localDirectory";
 
 import {
-  resolveFolderId
+  resolveFolderId,
 } from "@/config/driveResolver";
 
 import type {
-  DriveItem
+  DriveItem,
 } from "@/services/google/googleDrive";
 
 import {
@@ -44,9 +44,40 @@ import {
   writeS3JSON,
 } from "@/services/s3/s3StorageAdapter";
 
+import type {
+  S3WriteJSONOptions,
+} from "@/services/s3/s3StorageAdapter";
+
 import {
-  googleAuthenticated
+  googleAuthenticated,
 } from "@/services/google/googleInit";
+
+/* =========================
+   Public mutation options
+========================= */
+
+/*
+  Options communes aux mutations de stockage.
+
+  requestPull:
+    undefined
+      comportement automatique du backend ;
+
+    true
+      force une demande de Pull, lorsque le backend
+      sait la produire ;
+
+    false
+      interdit la création automatique d'une demande
+      de Pull.
+
+  reason:
+    raison métier placée dans l'événement de contrôle.
+*/
+export interface StorageMutationOptions {
+  requestPull?: boolean;
+  reason?: string;
+}
 
 /* =========================
    Helpers
@@ -59,7 +90,8 @@ function handleDriveError(
     err?.message ===
     "DRIVE_UNAUTHORIZED"
   ) {
-    googleAuthenticated.value = false;
+    googleAuthenticated.value =
+      false;
 
     console.warn(
       "🔐 Google Drive session expired"
@@ -101,8 +133,9 @@ export async function loadJSONFromFolder<
   folderPathOrId: string,
   fileName: string
 ): Promise<T | null> {
-  const { backend } =
-    useStorageBackend();
+  const {
+    backend,
+  } = useStorageBackend();
 
   if (
     backend.value ===
@@ -138,14 +171,18 @@ export async function loadJSONFromFolder<
         fileName
       );
 
-    if (!file) return null;
+    if (!file) {
+      return null;
+    }
 
     const content =
       await downloadGoogleFile(
         file.id
       );
 
-    return JSON.parse(content) as T;
+    return JSON.parse(
+      content
+    ) as T;
 
   } catch (err) {
     handleDriveError(err);
@@ -160,8 +197,9 @@ export async function findFileByName(
   folderPathOrId: string,
   fileName: string
 ) {
-  const { backend } =
-    useStorageBackend();
+  const {
+    backend,
+  } = useStorageBackend();
 
   if (
     backend.value ===
@@ -201,8 +239,9 @@ export async function findFileByName(
 export async function downloadFile(
   fileIdOrPath: string
 ): Promise<string> {
-  const { backend } =
-    useStorageBackend();
+  const {
+    backend,
+  } = useStorageBackend();
 
   if (
     backend.value ===
@@ -234,10 +273,13 @@ export async function downloadFile(
 export async function saveJSONToFolder(
   folderPathOrId: string,
   filename: string,
-  data: any
+  data: any,
+  options:
+    StorageMutationOptions = {}
 ): Promise<void> {
-  const { backend } =
-    useStorageBackend();
+  const {
+    backend,
+  } = useStorageBackend();
 
   if (
     backend.value ===
@@ -256,12 +298,22 @@ export async function saveJSONToFolder(
     backend.value ===
     "OBJECT_STORAGE"
   ) {
+    const s3Options:
+      S3WriteJSONOptions = {
+        requestPull:
+          options.requestPull,
+
+        reason:
+          options.reason,
+      };
+
     await writeS3JSON(
       buildS3Key(
         folderPathOrId,
         filename
       ),
-      data
+      data,
+      s3Options
     );
 
     return;
@@ -303,8 +355,9 @@ export async function saveJSONToFolder(
 export async function listFiles(
   folderPathOrId: string
 ): Promise<DriveItem[]> {
-  const { backend } =
-    useStorageBackend();
+  const {
+    backend,
+  } = useStorageBackend();
 
   if (
     backend.value ===
@@ -328,21 +381,31 @@ export async function listFiles(
       Compatibilité temporaire avec DriveItem.
 
       Pour S3 :
-      - id = clé complète de l'objet
-      - name = nom du fichier
-      - modifiedTime = LastModified
+      - id = clé complète de l'objet ;
+      - name = nom du fichier ;
+      - modifiedTime = LastModified.
     */
-    return files.map(file => ({
-      id: file.id,
-      name: file.name,
-      mimeType: file.mimeType,
-      modifiedTime:
-        file.modifiedTime ?? undefined,
-      size:
-        file.size !== null
-          ? String(file.size)
-          : undefined,
-    })) as DriveItem[];
+    return files.map(
+      file => ({
+        id:
+          file.id,
+
+        name:
+          file.name,
+
+        mimeType:
+          file.mimeType,
+
+        modifiedTime:
+          file.modifiedTime ??
+          undefined,
+
+        size:
+          file.size !== null
+            ? String(file.size)
+            : undefined,
+      })
+    ) as DriveItem[];
   }
 
   const folderId =
@@ -366,10 +429,13 @@ export async function listFiles(
 
 export async function deleteFileFromFolder(
   folderPathOrId: string,
-  filename: string
+  filename: string,
+  _options:
+    StorageMutationOptions = {}
 ): Promise<void> {
-  const { backend } =
-    useStorageBackend();
+  const {
+    backend,
+  } = useStorageBackend();
 
   if (
     backend.value ===
@@ -387,6 +453,13 @@ export async function deleteFileFromFolder(
     backend.value ===
     "OBJECT_STORAGE"
   ) {
+    /*
+      La suppression S3 est effectuée ici.
+
+      La publication d'un deletePath sera gérée
+      par l'opération métier composée, afin d'éviter
+      deux événements indépendants pour une release.
+    */
     await deleteS3File(
       folderPathOrId,
       filename
@@ -407,7 +480,9 @@ export async function deleteFileFromFolder(
         filename
       );
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     await deleteGoogleFile(
       file.id
@@ -426,8 +501,9 @@ export async function getFileModifiedTime(
   folderPathOrId: string,
   filename: string
 ): Promise<string | null> {
-  const { backend } =
-    useStorageBackend();
+  const {
+    backend,
+  } = useStorageBackend();
 
   if (
     backend.value ===
@@ -442,7 +518,7 @@ export async function getFileModifiedTime(
       );
     }
 
-    const dir =
+    const directory =
       await resolveDirectory(
         root,
         folderPathOrId
@@ -450,7 +526,7 @@ export async function getFileModifiedTime(
 
     try {
       const fileHandle =
-        await dir.getFileHandle(
+        await directory.getFileHandle(
           filename
         );
 
@@ -481,13 +557,16 @@ export async function getFileModifiedTime(
       folderPathOrId
     );
 
-  const meta =
+  const metadata =
     await getFileMetadataByName(
       folderId,
       filename
     );
 
-  return meta?.modifiedTime ?? null;
+  return (
+    metadata?.modifiedTime ??
+    null
+  );
 }
 
 /* =========================
@@ -502,14 +581,22 @@ export async function getFolderModifiedTime(
       folderPathOrId
     );
 
-  const modifiedTimes = files
-    .map(file => file.modifiedTime)
-    .filter(
-      (time): time is string =>
-        !!time
-    );
+  const modifiedTimes =
+    files
+      .map(
+        file =>
+          file.modifiedTime
+      )
+      .filter(
+        (
+          time
+        ): time is string =>
+          Boolean(time)
+      );
 
-  if (!modifiedTimes.length) {
+  if (
+    !modifiedTimes.length
+  ) {
     return null;
   }
 

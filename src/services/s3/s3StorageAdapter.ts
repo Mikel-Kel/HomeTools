@@ -10,7 +10,10 @@ import {
 import {
   publishStoragePullRequest,
   shouldRequestStoragePull,
+  type StoragePullRequestDefinition,
+  type StoragePullRequestEvent,
 } from "@/services/s3/storagePullRequest";
+
 
 /* =========================
    Configuration
@@ -82,6 +85,29 @@ export interface S3WriteJSONOptions {
   requestPull?: boolean;
 
   reason?: string;
+}
+
+/* =========================
+   Publish explicit pull request
+========================= */
+/*
+  Permet à une opération métier composée de publier
+  un seul événement de synchronisation après avoir
+  effectué plusieurs écritures et suppressions S3.
+
+  La primitive interne est utilisée directement afin
+  que l'écriture dans events/control ne génère jamais
+  récursivement une nouvelle demande de Pull.
+*/
+export async function publishS3StoragePullRequest(
+  definition: StoragePullRequestDefinition
+): Promise<StoragePullRequestEvent> {
+  assertConfig();
+
+  return await publishStoragePullRequest(
+    definition,
+    writeS3JSONPrimitive
+  );
 }
 
 /* =========================
