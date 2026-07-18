@@ -114,17 +114,25 @@ const appVersion =
   __APP_VERSION__;
 
 /* =========================
+   Shared types
+========================= */
+
+interface SummaryPerformance {
+  change: number | null;
+  ytd: number | null;
+  y1: number | null;
+  asOf: string | null;
+}
+
+/* =========================
    Markets indices
 ========================= */
 
-interface MarketIndex {
+interface MarketIndex
+  extends SummaryPerformance {
   id: number;
   code: string;
   value: number;
-  change: number;
-  ytd: number;
-  y1: number | null;
-  asOf: string | null;
 }
 
 const markets =
@@ -134,18 +142,40 @@ const markets =
    FX rates
 ========================= */
 
-interface FXRate {
+interface FXRate
+  extends SummaryPerformance {
   id: number;
   code: string;
   rate: number;
-  change: number;
-  ytd: number;
-  y1: number | null;
-  asOf: string | null;
 }
 
 const fxRates =
   ref<FXRate[]>([]);
+
+/* =========================
+   Securities
+========================= */
+
+interface SecurityParameter {
+  code: string;
+  description: string;
+  isin: string | null;
+  currency: string | null;
+  enabled: boolean;
+}
+
+interface SecuritySummary
+  extends SummaryPerformance {
+  id: number;
+  code: string;
+  description: string;
+  isin: string | null;
+  currency: string | null;
+  value: number;
+}
+
+const securities =
+  ref<SecuritySummary[]>([]);
 
 /* =========================
    Status
@@ -159,16 +189,76 @@ const loadError =
 
 const asOf =
   computed(() => {
-    if (markets.value.length) {
-      return markets.value[0].asOf;
+    const dates = [
+      ...markets.value.map(
+        (item) => item.asOf
+      ),
+
+      ...fxRates.value.map(
+        (item) => item.asOf
+      ),
+
+      ...securities.value.map(
+        (item) => item.asOf
+      ),
+    ].filter(
+      (value): value is string =>
+        Boolean(value)
+    );
+
+    if (!dates.length) {
+      return null;
     }
 
-    if (fxRates.value.length) {
-      return fxRates.value[0].asOf;
-    }
-
-    return null;
+    /*
+      ISO dates sort naturally.
+      This also avoids depending on the
+      first item of one specific section.
+    */
+    return dates.sort().at(-1) ?? null;
   });
+
+/* =========================
+   Data normalization
+========================= */
+
+function toNullableNumber(
+  value: unknown
+): number | null {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  const result =
+    Number(value);
+
+  return Number.isFinite(result)
+    ? result
+    : null;
+}
+
+function toRequiredNumber(
+  value: unknown,
+  fallback = 0
+): number {
+  const result =
+    toNullableNumber(value);
+
+  return result ?? fallback;
+}
+
+function normalizeAsOf(
+  value: unknown
+): string | null {
+  return typeof value === "string" &&
+    value.length > 0
+    ? value
+    : null;
+}
 
 /* =========================
    Load home summary
@@ -176,11 +266,20 @@ const asOf =
 
 async function loadHomeSummary() {
   try {
-    const data =
-      await loadJSONFromFolder<any>(
+    const [
+      data,
+      settings,
+    ] = await Promise.all([
+      loadJSONFromFolder<any>(
         "settings",
         "homeSummary.json"
-      );
+      ),
+
+      loadJSONFromFolder<any>(
+        "settings",
+        "AppParameters.json"
+      ),
+    ]);
 
     if (!data?.markets) {
       console.warn(
@@ -189,40 +288,66 @@ async function loadHomeSummary() {
 
       markets.value = [];
       fxRates.value = [];
+      securities.value = [];
 
       return;
     }
+
+    /* =========================
+       Markets
+    ========================= */
 
     markets.value =
       (
         data.markets.indices ??
         []
-      ).map((market: any) => ({
-        id:
-          Number(market.id),
+      ).map(
+        (
+          market: any,
+          index: number
+        ) => ({
+          id:
+            toRequiredNumber(
+              market.id,
+              index
+            ),
 
-        code:
-          String(market.code),
+          code:
+            String(
+              market.code ?? ""
+            ),
 
-        value:
-          Number(market.close),
+          value:
+            toRequiredNumber(
+              market.close ??
+              market.value
+            ),
 
-        change:
-          Number(market.delta),
+          change:
+            toNullableNumber(
+              market.delta
+            ),
 
-        ytd:
-          Number(market.ytd),
+          ytd:
+            toNullableNumber(
+              market.ytd
+            ),
 
-        y1:
-          market.y1 === null ||
-          market.y1 === undefined
-            ? null
-            : Number(market.y1),
+          y1:
+            toNullableNumber(
+              market.y1
+            ),
 
-        asOf:
-          market.asOf ??
-          null,
-      }));
+          asOf:
+            normalizeAsOf(
+              market.asOf
+            ),
+        })
+      );
+
+    /* =========================
+       FX
+    ========================= */
 
     fxRates.value =
       (
@@ -234,32 +359,213 @@ async function loadHomeSummary() {
             rate.tag === "S"
         )
         .map(
-          (rate: any) => ({
+          (
+            rate: any,
+            index: number
+          ) => ({
             id:
-              Number(rate.id),
+              toRequiredNumber(
+                rate.id,
+                index
+              ),
 
             code:
-              String(rate.code),
+              String(
+                rate.code ?? ""
+              ),
 
             rate:
-              Number(rate.rate),
+              toRequiredNumber(
+                rate.rate
+              ),
 
             change:
-              Number(rate.delta),
+              toNullableNumber(
+                rate.delta
+              ),
 
             ytd:
-              Number(rate.ytd),
+              toNullableNumber(
+                rate.ytd
+              ),
 
             y1:
-              rate.y1 === null ||
-              rate.y1 === undefined
-                ? null
-                : Number(rate.y1),
+              toNullableNumber(
+                rate.y1
+              ),
 
             asOf:
-              rate.asOf ??
-              null,
+              normalizeAsOf(
+                rate.asOf
+              ),
           })
+        );
+
+    /* =========================
+       Securities parameters
+    ========================= */
+
+    const configuredSecurities:
+      SecurityParameter[] =
+      (
+        settings
+          ?.securities
+          ?.list ??
+        []
+      )
+        .filter(
+          (security: any) =>
+            security.enabled === true
+        )
+        .map(
+          (security: any) => ({
+            code:
+              String(
+                security.code ?? ""
+              ),
+
+            description:
+              String(
+                security.description ??
+                security.code ??
+                ""
+              ),
+
+            isin:
+              security.isin
+                ? String(
+                    security.isin
+                  )
+                : null,
+
+            currency:
+              security.currency
+                ? String(
+                    security.currency
+                  )
+                : null,
+
+            enabled:
+              true,
+          })
+        );
+
+    /*
+      Main expected location:
+        markets.securities
+
+      The fallback to data.securities
+      makes the view tolerant if the
+      section is temporarily placed at
+      the root of homeSummary.json.
+    */
+    const rawSecurities =
+      data.markets.securities ??
+      data.securities ??
+      [];
+
+    const securitiesByCode =
+      new Map<string, any>(
+        rawSecurities.map(
+          (security: any) => [
+            String(
+              security.code ?? ""
+            ),
+            security,
+          ]
+        )
+      );
+
+    /*
+      Mapping from parameters preserves
+      the order of securities.list and
+      automatically excludes any title
+      that is not enabled.
+    */
+    securities.value =
+      configuredSecurities
+        .map(
+          (
+            parameter,
+            index
+          ) => {
+            const raw =
+              securitiesByCode.get(
+                parameter.code
+              );
+
+            if (!raw) {
+              console.warn(
+                `No summary data found for security ${parameter.code}`
+              );
+
+              return null;
+            }
+
+            const value =
+              toNullableNumber(
+                raw.close ??
+                raw.value ??
+                raw.rate ??
+                raw.price
+              );
+
+            if (value === null) {
+              console.warn(
+                `No valid value found for security ${parameter.code}`
+              );
+
+              return null;
+            }
+
+            return {
+              id:
+                toRequiredNumber(
+                  raw.id,
+                  index
+                ),
+
+              code:
+                parameter.code,
+
+              description:
+                parameter.description,
+
+              isin:
+                parameter.isin,
+
+              currency:
+                parameter.currency,
+
+              value,
+
+              change:
+                toNullableNumber(
+                  raw.delta
+                ),
+
+              ytd:
+                toNullableNumber(
+                  raw.ytd
+                ),
+
+              y1:
+                toNullableNumber(
+                  raw.y1
+                ),
+
+              asOf:
+                normalizeAsOf(
+                  raw.asOf
+                ),
+            };
+          }
+        )
+        .filter(
+          (
+            security
+          ): security is SecuritySummary =>
+            security !== null
         );
 
   } catch (err) {
@@ -270,6 +576,7 @@ async function loadHomeSummary() {
 
     markets.value = [];
     fxRates.value = [];
+    securities.value = [];
 
     throw err;
   }
@@ -331,6 +638,35 @@ function formatPercent(
   return (
     `${value >= 0 ? "+" : ""}` +
     `${value.toFixed(decimals)}%`
+  );
+}
+
+function performanceClass(
+  value: number | null
+): {
+  positive: boolean;
+  negative: boolean;
+} {
+  return {
+    positive:
+      value !== null &&
+      value >= 0,
+
+    negative:
+      value !== null &&
+      value < 0,
+  };
+}
+
+function formatSecurityValue(
+  value: number
+): string {
+  return value.toLocaleString(
+    undefined,
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }
   );
 }
 </script>
@@ -491,7 +827,10 @@ function formatPercent(
       <div class="home-right">
         <!-- MARKETS -->
 
-        <div class="markets">
+        <div
+          v-if="markets.length"
+          class="summary-section markets"
+        >
           <div class="summary-header-grid">
             <span class="col-title-left">
               Markets
@@ -523,13 +862,11 @@ function formatPercent(
 
               <span
                 class="summary-change"
-                :class="{
-                  positive:
-                    market.change >= 0,
-
-                  negative:
-                    market.change < 0
-                }"
+                :class="
+                  performanceClass(
+                    market.change
+                  )
+                "
               >
                 {{
                   formatPercent(
@@ -541,13 +878,11 @@ function formatPercent(
 
               <span
                 class="summary-ytd"
-                :class="{
-                  positive:
-                    market.ytd >= 0,
-
-                  negative:
-                    market.ytd < 0
-                }"
+                :class="
+                  performanceClass(
+                    market.ytd
+                  )
+                "
               >
                 {{
                   formatPercent(
@@ -559,13 +894,11 @@ function formatPercent(
 
               <span
                 class="summary-y1"
-                :class="{
-                  positive:
-                    (market.y1 ?? 0) >= 0,
-
-                  negative:
-                    (market.y1 ?? 0) < 0
-                }"
+                :class="
+                  performanceClass(
+                    market.y1
+                  )
+                "
               >
                 {{
                   formatPercent(
@@ -582,7 +915,7 @@ function formatPercent(
 
         <div
           v-if="fxRates.length"
-          class="fx"
+          class="summary-section fx"
         >
           <div class="summary-header-grid">
             <span class="col-title-left">
@@ -611,13 +944,11 @@ function formatPercent(
 
               <span
                 class="summary-change"
-                :class="{
-                  positive:
-                    rate.change >= 0,
-
-                  negative:
-                    rate.change < 0
-                }"
+                :class="
+                  performanceClass(
+                    rate.change
+                  )
+                "
               >
                 {{
                   formatPercent(
@@ -629,13 +960,11 @@ function formatPercent(
 
               <span
                 class="summary-ytd"
-                :class="{
-                  positive:
-                    rate.ytd >= 0,
-
-                  negative:
-                    rate.ytd < 0
-                }"
+                :class="
+                  performanceClass(
+                    rate.ytd
+                  )
+                "
               >
                 {{
                   formatPercent(
@@ -647,17 +976,111 @@ function formatPercent(
 
               <span
                 class="summary-y1"
-                :class="{
-                  positive:
-                    (rate.y1 ?? 0) >= 0,
-
-                  negative:
-                    (rate.y1 ?? 0) < 0
-                }"
+                :class="
+                  performanceClass(
+                    rate.y1
+                  )
+                "
               >
                 {{
                   formatPercent(
                     rate.y1,
+                    1
+                  )
+                }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECURITIES -->
+
+        <div
+          v-if="securities.length"
+          class="summary-section securities"
+        >
+          <div class="summary-header-grid">
+            <span class="col-title-left">
+              Securities
+            </span>
+
+            <span>Closing</span>
+            <span>Δ D</span>
+            <span>YTD</span>
+            <span>1 Y</span>
+          </div>
+
+          <div class="summary-list">
+            <div
+              v-for="security in securities"
+              :key="security.code"
+              class="summary-item"
+            >
+              <span
+                class="summary-code security-code"
+                :title="
+                  security.description
+                "
+              >
+                {{ security.code }}
+              </span>
+
+              <span
+                class="summary-value"
+                :title="
+                  security.currency ?? ''
+                "
+              >
+                {{
+                  formatSecurityValue(
+                    security.value
+                  )
+                }}
+              </span>
+
+              <span
+                class="summary-change"
+                :class="
+                  performanceClass(
+                    security.change
+                  )
+                "
+              >
+                {{
+                  formatPercent(
+                    security.change,
+                    2
+                  )
+                }}
+              </span>
+
+              <span
+                class="summary-ytd"
+                :class="
+                  performanceClass(
+                    security.ytd
+                  )
+                "
+              >
+                {{
+                  formatPercent(
+                    security.ytd,
+                    1
+                  )
+                }}
+              </span>
+
+              <span
+                class="summary-y1"
+                :class="
+                  performanceClass(
+                    security.y1
+                  )
+                "
+              >
+                {{
+                  formatPercent(
+                    security.y1,
                     1
                   )
                 }}
@@ -860,21 +1283,22 @@ function formatPercent(
 }
 
 /* =========================
-   Markets + FX
+   Summary
 ========================= */
 
-.markets,
-.fx {
+.summary-section {
   max-width: 420px;
 }
 
-.fx {
+.summary-section +
+.summary-section {
   margin-top: 18px;
 }
 
 .summary-header-grid,
 .summary-item {
   display: grid;
+
   grid-template-columns:
     70px
     1fr
@@ -925,7 +1349,15 @@ span:not(:first-child) {
 }
 
 .summary-code {
+  overflow: hidden;
+
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-code {
+  cursor: help;
 }
 
 .summary-value,
