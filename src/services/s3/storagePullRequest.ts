@@ -256,12 +256,9 @@ function buildEventId(
   const uuid =
     crypto.randomUUID();
 
-  return (
-    `${timestamp}-` +
-    `${source}-` +
-    `${uuid}`
-  );
+  return `PWA-${timestamp}-${source}-${uuid}`;
 }
+
 
 /* =========================
    Public path decision

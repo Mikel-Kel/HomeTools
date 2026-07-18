@@ -446,7 +446,7 @@ export async function writeS3JSON(
     normalizeS3Path(path);
 
   /*
-    1. Écriture de l'objet métier.
+    1. Écriture de l’objet métier.
   */
   await writeS3JSONPrimitive(
     key,
@@ -454,12 +454,11 @@ export async function writeS3JSON(
   );
 
   /*
-    2. Publication éventuelle d'une demande
-       de pull ciblée pour le Mac.
+    2. Publication éventuelle d’une demande
+       de Pull ciblée pour le Mac.
 
     Les événements de contrôle eux-mêmes
-    ne doivent évidemment pas générer une
-    nouvelle demande de pull.
+    sont exclus par shouldRequestStoragePull().
   */
   const requestPull =
     options.requestPull ??
@@ -472,8 +471,17 @@ export async function writeS3JSON(
   }
 
   await publishStoragePullRequest(
-    [key],
-    options.reason ?? "S3_FILE_WRITTEN",
+    {
+      downloadPaths: [
+        key
+      ],
+
+      deletePaths: [],
+
+      reason:
+        options.reason ??
+        "S3_FILE_WRITTEN",
+    },
     writeS3JSONPrimitive
   );
 }

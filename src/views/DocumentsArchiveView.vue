@@ -14,6 +14,7 @@ import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useDriveJsonFile } from "@/composables/useDriveJsonFile";
 import { useDriveWatcher } from "@/composables/useDriveWatcher";
+import { prefixEventFileName } from "@/utils/eventFileName";
 
 import { useParties } from "@/composables/useParties";
 import { useArchiveFolders } from "@/composables/archives/useArchiveFolders";
@@ -1314,41 +1315,32 @@ function closeClassification() {
 function buildEventFileName(
   tocid: number
 ): string {
-  const now =
-    new Date();
+  const now = new Date();
 
   const YYYY =
     now.getFullYear();
 
   const MM =
-    String(
-      now.getMonth() + 1
-    ).padStart(2, "0");
+    String(now.getMonth() + 1)
+      .padStart(2, "0");
 
   const DD =
-    String(
-      now.getDate()
-    ).padStart(2, "0");
+    String(now.getDate())
+      .padStart(2, "0");
 
   const HH =
-    String(
-      now.getHours()
-    ).padStart(2, "0");
+    String(now.getHours())
+      .padStart(2, "0");
 
   const mm =
-    String(
-      now.getMinutes()
-    ).padStart(2, "0");
+    String(now.getMinutes())
+      .padStart(2, "0");
 
-  const ss =
-    String(
-      now.getSeconds()
-    ).padStart(2, "0");
+  const baseFileName =
+    `TOC_${YYYY}${MM}${DD}${HH}${mm}_${tocid}.json`;
 
-  return (
-    `TOC_${YYYY}${MM}${DD}` +
-    `${HH}${mm}${ss}_` +
-    `${tocid}.json`
+  return prefixEventFileName(
+    baseFileName
   );
 }
 

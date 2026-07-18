@@ -11,6 +11,7 @@ import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useDriveJsonFile } from "@/composables/useDriveJsonFile";
 import { useDriveWatcher } from "@/composables/useDriveWatcher";
+import { prefixEventFileName } from "@/utils/eventFileName";
 
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
@@ -192,48 +193,44 @@ function toggleRowAction(
 ========================================================= */
 
 function buildEventFileName(
-  fitid: string
+  allocationId: string
 ): string {
-  const now =
-    new Date();
+  const now = new Date();
 
   const YYYY =
     now.getFullYear();
 
   const MM =
-    String(
-      now.getMonth() + 1
-    ).padStart(2, "0");
+    String(now.getMonth() + 1)
+      .padStart(2, "0");
 
   const DD =
-    String(
-      now.getDate()
-    ).padStart(2, "0");
+    String(now.getDate())
+      .padStart(2, "0");
 
   const HH =
-    String(
-      now.getHours()
-    ).padStart(2, "0");
+    String(now.getHours())
+      .padStart(2, "0");
 
   const mm =
-    String(
-      now.getMinutes()
-    ).padStart(2, "0");
+    String(now.getMinutes())
+      .padStart(2, "0");
 
   const ss =
-    String(
-      now.getSeconds()
-    ).padStart(2, "0");
+    String(now.getSeconds())
+      .padStart(2, "0");
 
-  const shortFitid =
-    fitid.slice(0, 12);
+  const shortAllocationId =
+    allocationId.slice(0, 12);
 
-  return (
-    `REA_${YYYY}${MM}${DD}` +
-    `${HH}${mm}${ss}_` +
-    `${shortFitid}.json`
+  const baseFileName =
+    `REA_${YYYY}${MM}${DD}${HH}${mm}${ss}_${shortAllocationId}.json`;
+
+  return prefixEventFileName(
+    baseFileName
   );
 }
+
 
 /* =========================================================
    REQUEST REALLOCATION
