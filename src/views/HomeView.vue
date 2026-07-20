@@ -1287,7 +1287,8 @@ function formatSecurityValue(
 ========================= */
 
 .summary-section {
-  max-width: 420px;
+  width: 100%;
+  max-width: 460px;
 }
 
 .summary-section +
@@ -1300,7 +1301,7 @@ function formatSecurityValue(
   display: grid;
 
   grid-template-columns:
-    70px
+    120px
     1fr
     70px
     70px
