@@ -7,19 +7,41 @@ import {
   watch,
 } from "vue";
 
-import { useStorageAccess } from "@/composables/useStorageAccess";
-import { useAppBootstrap } from "@/composables/useAppBootstrap";
-import { useDriveJsonFile } from "@/composables/useDriveJsonFile";
-import { useDriveWatcher } from "@/composables/useDriveWatcher";
-import { prefixEventFileName } from "@/utils/eventFileName";
+import {
+  useStorageAccess,
+} from "@/composables/useStorageAccess";
 
-import { useCategories } from "@/composables/useCategories";
-import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
-import { useParties } from "@/composables/useParties";
+import {
+  useAppBootstrap,
+} from "@/composables/useAppBootstrap";
 
-import { loadJSONFromFolder } from "@/services/driveAdapter";
+import {
+  useDriveJsonFile,
+} from "@/composables/useDriveJsonFile";
 
-import { formatDate } from "@/utils/dateFormat";
+import {
+  useDriveWatcher,
+} from "@/composables/useDriveWatcher";
+
+import {
+  prefixEventFileName,
+} from "@/utils/eventFileName";
+
+import {
+  useAllocationTags,
+} from "@/composables/allocations/useAllocationTags";
+
+import {
+  useParties,
+} from "@/composables/useParties";
+
+import {
+  loadJSONFromFolder,
+} from "@/services/driveAdapter";
+
+import {
+  formatDate,
+} from "@/utils/dateFormat";
 
 /* =========================================================
    TYPES
@@ -46,6 +68,18 @@ interface FollowUpDetailsFile {
   items: FollowUpDetailItem[];
 }
 
+interface SpendingItem {
+  id?: string;
+  fitid?: string;
+}
+
+interface SpendingFile {
+  version?: number;
+  generatedAt?: string;
+  count?: number;
+  items: SpendingItem[];
+}
+
 interface MonthGroup {
   key: string;
   label: string;
@@ -57,16 +91,20 @@ interface MonthGroup {
    PROPS
 ========================================================= */
 
-const props = defineProps<{
-  year: number;
-  categoryIds: number[];
-  subCategoryId: number | null;
-  monthlyBudgetMap?: Record<string, number>;
-  nature?: "E" | "I" | null;
-  maxMonth?: number | null;
-  includeOffBudget?: boolean;
-  labelFilter?: string;
-}>();
+const props =
+  defineProps<{
+    year: number;
+    categoryIds: number[];
+    subCategoryId: number | null;
+    monthlyBudgetMap?: Record<
+      string,
+      number
+    >;
+    nature?: "E" | "I" | null;
+    maxMonth?: number | null;
+    includeOffBudget?: boolean;
+    labelFilter?: string;
+  }>();
 
 /* =========================================================
    STORAGE ACCESS
@@ -76,7 +114,8 @@ const {
   storageReady,
   storageUnavailableMessage,
   ensureStorageReady,
-} = useStorageAccess();
+} =
+  useStorageAccess();
 
 /* =========================================================
    BOOTSTRAP
@@ -84,39 +123,50 @@ const {
 
 const {
   loadSettings,
-} = useAppBootstrap();
+} =
+  useAppBootstrap();
 
 /* =========================================================
    STORES
 ========================================================= */
 
-const categoriesStore = useCategories();
-const tagsStore = useAllocationTags();
-const partiesStore = useParties();
+const tagsStore =
+  useAllocationTags();
+
+const partiesStore =
+  useParties();
 
 /* =========================================================
    STATE
 ========================================================= */
 
 const activeRowFitid =
-  ref<string | null>(null);
+  ref<string | null>(
+    null
+  );
 
 const raw =
-  ref<FollowUpDetailsFile | null>(null);
-
-const pendingReallocationIds =
-  ref<Map<string, number>>(
-    loadPending()
+  ref<FollowUpDetailsFile | null>(
+    null
   );
 
 const detailsRemoteState =
-  ref<string | null>(null);
+  ref<string | null>(
+    null
+  );
+
+const spendingRemoteState =
+  ref<string | null>(
+    null
+  );
 
 const loading =
   ref(false);
 
 const error =
-  ref<string | null>(null);
+  ref<string | null>(
+    null
+  );
 
 const initialized =
   ref(false);
@@ -131,28 +181,112 @@ const fxPopover =
     item: FollowUpDetailItem;
     x: number;
     y: number;
-  } | null>(null);
+  } | null>(
+    null
+  );
 
 let fxTimer:
-  number | null = null;
+  number | null =
+    null;
 
 /* =========================================================
-   LOCAL PENDING STATE
+   PENDING REALLOCATIONS
 ========================================================= */
 
 const PENDING_KEY =
   "pendingReallocations";
 
+/*
+  État local transitoire.
+
+  Il est créé immédiatement après l’écriture de l’événement
+  REA afin d’afficher Pending sans attendre le traitement
+  backend.
+
+  Dès que le FITID apparaît dans spending.json, cette entrée
+  locale est supprimée car spending.json devient la source
+  de vérité.
+*/
+const localPendingReallocationIds =
+  ref<Map<string, number>>(
+    loadPending()
+  );
+
+/*
+  FITID présents dans spending.json.
+
+  Un mouvement présent dans spending.json est non alloué
+  ou revenu dans le workflow Spending après une demande
+  de réallocation.
+*/
+const spendingPendingIds =
+  ref<Set<string>>(
+    new Set()
+  );
+
+/*
+  État final utilisé dans le template.
+
+  Il combine :
+  - les demandes locales encore en transit ;
+  - les FITID réellement présents dans spending.json.
+*/
+const pendingReallocationIds =
+  computed<Set<string>>(
+    () => {
+      const ids =
+        new Set<string>(
+          spendingPendingIds.value
+        );
+
+      for (
+        const id
+        of localPendingReallocationIds
+          .value
+          .keys()
+      ) {
+        ids.add(id);
+      }
+
+      return ids;
+    }
+  );
+
 function loadPending():
   Map<string, number> {
 
   try {
-    return new Map(
+    const storedValue =
+      localStorage.getItem(
+        PENDING_KEY
+      );
+
+    if (!storedValue) {
+      return new Map();
+    }
+
+    const parsed =
       JSON.parse(
-        localStorage.getItem(
-          PENDING_KEY
-        ) || "[]"
-      )
+        storedValue
+      );
+
+    if (!Array.isArray(parsed)) {
+      return new Map();
+    }
+
+    return new Map(
+      parsed
+        .filter(
+          entry =>
+            Array.isArray(entry) &&
+            entry.length >= 2
+        )
+        .map(
+          entry => [
+            String(entry[0]),
+            Number(entry[1]),
+          ]
+        )
     );
 
   } catch {
@@ -183,7 +317,8 @@ function toggleRowAction(
   }
 
   activeRowFitid.value =
-    activeRowFitid.value === fitid
+    activeRowFitid.value ===
+      fitid
       ? null
       : fitid;
 }
@@ -195,33 +330,57 @@ function toggleRowAction(
 function buildEventFileName(
   allocationId: string
 ): string {
-  const now = new Date();
+  const now =
+    new Date();
 
   const YYYY =
     now.getFullYear();
 
   const MM =
-    String(now.getMonth() + 1)
-      .padStart(2, "0");
+    String(
+      now.getMonth() + 1
+    ).padStart(
+      2,
+      "0"
+    );
 
   const DD =
-    String(now.getDate())
-      .padStart(2, "0");
+    String(
+      now.getDate()
+    ).padStart(
+      2,
+      "0"
+    );
 
   const HH =
-    String(now.getHours())
-      .padStart(2, "0");
+    String(
+      now.getHours()
+    ).padStart(
+      2,
+      "0"
+    );
 
   const mm =
-    String(now.getMinutes())
-      .padStart(2, "0");
+    String(
+      now.getMinutes()
+    ).padStart(
+      2,
+      "0"
+    );
 
   const ss =
-    String(now.getSeconds())
-      .padStart(2, "0");
+    String(
+      now.getSeconds()
+    ).padStart(
+      2,
+      "0"
+    );
 
   const shortAllocationId =
-    allocationId.slice(0, 12);
+    allocationId.slice(
+      0,
+      12
+    );
 
   const baseFileName =
     `REA_${YYYY}${MM}${DD}${HH}${mm}${ss}_${shortAllocationId}.json`;
@@ -230,7 +389,6 @@ function buildEventFileName(
     baseFileName
   );
 }
-
 
 /* =========================================================
    REQUEST REALLOCATION
@@ -274,7 +432,8 @@ async function requestReallocation(
         1,
 
       timestamp:
-        new Date().toISOString(),
+        new Date()
+          .toISOString(),
 
       allocationMetadata: {
         allocationId:
@@ -288,30 +447,36 @@ async function requestReallocation(
       );
 
     /*
-      useDriveJsonFile doit utiliser saveJSONToFolder()
-      de la façade multi-backend.
-
       En mode Object Storage :
-      1. l'événement métier est écrit dans events/
+
+      1. L’événement métier est écrit dans events/.
       2. writeS3JSON crée automatiquement un
          STORAGE_PULL_REQUESTED ciblant ce fichier.
     */
     const {
       save,
-    } = useDriveJsonFile(
-      "events",
-      fileName
-    );
+    } =
+      useDriveJsonFile(
+        "events",
+        fileName
+      );
 
     await save(event);
 
-    pendingReallocationIds.value.set(
-      item.allocationId,
-      Date.now()
-    );
+    /*
+      Pending immédiat, sans attendre que le backend
+      crée le draft et republie spending.json.
+    */
+    localPendingReallocationIds
+      .value
+      .set(
+        item.allocationId,
+        Date.now()
+      );
 
     savePending(
-      pendingReallocationIds.value
+      localPendingReallocationIds
+        .value
     );
 
     activeRowFitid.value =
@@ -331,12 +496,113 @@ async function requestReallocation(
 }
 
 /* =========================================================
+   SPENDING PENDING STATE
+========================================================= */
+
+function spendingItemId(
+  item: SpendingItem
+): string {
+  return String(
+    item.id ??
+    item.fitid ??
+    ""
+  ).trim();
+}
+
+async function loadSpendingPending() {
+  if (!storageReady.value) {
+    spendingPendingIds.value =
+      new Set();
+
+    return;
+  }
+
+  try {
+    const data =
+      await loadJSONFromFolder<
+        SpendingFile
+      >(
+        "spending",
+        "spending.json"
+      );
+
+    const nextIds =
+      new Set<string>();
+
+    for (
+      const item
+      of data?.items ?? []
+    ) {
+      const id =
+        spendingItemId(
+          item
+        );
+
+      if (id) {
+        nextIds.add(id);
+      }
+    }
+
+    spendingPendingIds.value =
+      nextIds;
+
+    /*
+      Lorsque le FITID apparaît dans spending.json,
+      le backend a traité le REA.
+
+      Le pending local transitoire peut être retiré :
+      le pending reste alors porté par spending.json.
+    */
+    let localStateChanged =
+      false;
+
+    for (
+      const id
+      of [
+        ...localPendingReallocationIds
+          .value
+          .keys(),
+      ]
+    ) {
+      if (
+        nextIds.has(id)
+      ) {
+        localPendingReallocationIds
+          .value
+          .delete(id);
+
+        localStateChanged =
+          true;
+      }
+    }
+
+    if (localStateChanged) {
+      savePending(
+        localPendingReallocationIds
+          .value
+      );
+    }
+
+  } catch (err) {
+    /*
+      Une erreur temporaire de lecture ne doit pas
+      supprimer les pending locaux existants.
+    */
+    console.error(
+      "Unable to load spending pending state",
+      err
+    );
+  }
+}
+
+/* =========================================================
    LOAD DETAILS
 ========================================================= */
 
 async function loadDetails() {
   if (
-    props.subCategoryId === null
+    props.subCategoryId ===
+    null
   ) {
     raw.value =
       null;
@@ -385,12 +651,6 @@ async function loadDetails() {
     raw.value =
       data;
 
-    if (
-      pendingReallocationIds.value.size
-    ) {
-      reconcilePending();
-    }
-
   } catch (err) {
     error.value =
       err instanceof Error
@@ -411,7 +671,8 @@ async function loadDetails() {
 ========================================================= */
 
 watch(
-  () => props.year,
+  () =>
+    props.year,
 
   async () => {
     activeRowFitid.value =
@@ -422,7 +683,8 @@ watch(
 
     if (
       storageReady.value &&
-      props.subCategoryId !== null
+      props.subCategoryId !==
+        null
     ) {
       await loadDetails();
     }
@@ -430,7 +692,8 @@ watch(
 );
 
 watch(
-  () => props.subCategoryId,
+  () =>
+    props.subCategoryId,
 
   async value => {
     activeRowFitid.value =
@@ -467,14 +730,26 @@ watch(
       raw.value =
         null;
 
+      spendingPendingIds.value =
+        new Set();
+
+      detailsRemoteState.value =
+        null;
+
+      spendingRemoteState.value =
+        null;
+
       error.value =
         null;
 
       return;
     }
 
+    await loadSpendingPending();
+
     if (
-      props.subCategoryId !== null
+      props.subCategoryId !==
+      null
     ) {
       await loadDetails();
     }
@@ -482,16 +757,15 @@ watch(
 );
 
 /* =========================================================
-   REMOTE WATCHER
+   REMOTE WATCHERS
 ========================================================= */
 
 /*
-  On observe volontairement le dossier allocations/budget
-  plutôt qu'un nom de fichier calculé une seule fois.
+  FollowUpDetails watcher.
 
-  Cela permet de supporter correctement le changement
-  de props.year sans conserver un watcher figé sur
-  FollowUpDetails-<ancienne année>.json.
+  On observe le dossier allocations/budget plutôt qu’un nom
+  de fichier calculé une seule fois afin de supporter les
+  changements d’année.
 */
 useDriveWatcher({
   folderId:
@@ -504,7 +778,8 @@ useDriveWatcher({
     async () => {
       if (
         !storageReady.value ||
-        props.subCategoryId === null
+        props.subCategoryId ===
+          null
       ) {
         return;
       }
@@ -513,6 +788,34 @@ useDriveWatcher({
 
       activeRowFitid.value =
         null;
+    },
+});
+
+/*
+  spending.json watcher.
+
+  Après traitement REA :
+  - le FITID apparaît dans spending.json ;
+  - le pending reste affiché.
+
+  Après release de la nouvelle allocation :
+  - le FITID disparaît de spending.json ;
+  - le pending disparaît.
+*/
+useDriveWatcher({
+  folderId:
+    "spending",
+
+  lastKnownState:
+    spendingRemoteState,
+
+  onChanged:
+    async () => {
+      if (!storageReady.value) {
+        return;
+      }
+
+      await loadSpendingPending();
     },
 });
 
@@ -553,16 +856,17 @@ function fmtForeign(
   }
 
   const value =
-    item.amountCcy.toLocaleString(
-      "en-GB",
-      {
-        minimumFractionDigits:
-          2,
+    item.amountCcy
+      .toLocaleString(
+        "en-GB",
+        {
+          minimumFractionDigits:
+            2,
 
-        maximumFractionDigits:
-          2,
-      }
-    );
+          maximumFractionDigits:
+            2,
+        }
+      );
 
   return item.currency
     ? `${value} ${item.currency}`
@@ -572,7 +876,10 @@ function fmtForeign(
 function monthKey(
   date: string
 ): string {
-  return date.slice(0, 7);
+  return date.slice(
+    0,
+    7
+  );
 }
 
 function monthLabel(
@@ -610,7 +917,9 @@ function partyLabel(
 
   return (
     partiesStore
-      .getParty(partyId)
+      .getParty(
+        partyId
+      )
       ?.label ??
     `#${partyId}`
   );
@@ -624,14 +933,18 @@ function getTag(
   }
 
   return tagsStore
-    .getTag(tagId);
+    .getTag(
+      tagId
+    );
 }
 
 function tagLabel(
   tagId: number | null
 ): string {
   return (
-    getTag(tagId)
+    getTag(
+      tagId
+    )
       ?.tagName ??
     ""
   );
@@ -641,7 +954,8 @@ function isForeign(
   item: FollowUpDetailItem
 ): boolean {
   return (
-    item.amountCcy !== 0
+    item.amountCcy !==
+    0
   );
 }
 
@@ -679,6 +993,7 @@ function showFxPopover(
 
   fxPopover.value = {
     item,
+
     x:
       rect.right - 10,
 
@@ -721,177 +1036,130 @@ function closeFxPopover() {
 }
 
 /* =========================================================
-   RECONCILE PENDING
-========================================================= */
-
-function reconcilePending() {
-  if (!raw.value) {
-    return;
-  }
-
-  if (
-    pendingReallocationIds.value.size ===
-    0
-  ) {
-    return;
-  }
-
-  const fileTime =
-    new Date(
-      raw.value.updatedAt ?? 0
-    ).getTime();
-
-  let changed =
-    false;
-
-  for (
-    const [
-      id,
-      requestTime,
-    ]
-    of [
-      ...pendingReallocationIds
-        .value
-        .entries(),
-    ]
-  ) {
-    /*
-      La demande reste pending jusqu'à ce que
-      FollowUpDetails soit réellement republié
-      après la date de la demande.
-    */
-    if (
-      fileTime >
-      requestTime
-    ) {
-      pendingReallocationIds
-        .value
-        .delete(id);
-
-      changed =
-        true;
-    }
-  }
-
-  if (changed) {
-    savePending(
-      pendingReallocationIds.value
-    );
-  }
-}
-
-/* =========================================================
    FILTERED ITEMS
 ========================================================= */
 
 const filteredItems =
   computed<
     FollowUpDetailItem[]
-  >(() => {
-    if (
-      !raw.value ||
-      props.subCategoryId === null
-    ) {
-      return [];
-    }
+  >(
+    () => {
+      if (
+        !raw.value ||
+        props.subCategoryId ===
+          null
+      ) {
+        return [];
+      }
 
-    const selectedCategoryIds =
-      new Set(
-        props.categoryIds
-      );
+      const selectedCategoryIds =
+        new Set(
+          props.categoryIds
+        );
 
-    const selectedSubCategoryId =
-      props.subCategoryId;
+      const selectedSubCategoryId =
+        props.subCategoryId;
 
-    const maxMonth =
-      props.maxMonth;
+      const maxMonth =
+        props.maxMonth;
 
-    const includeOffBudget =
-      props.includeOffBudget;
+      const includeOffBudget =
+        props.includeOffBudget;
 
-    const query =
-      normalizeText(
-        props.labelFilter ?? ""
-      );
+      const query =
+        normalizeText(
+          props.labelFilter ??
+          ""
+        );
 
-    return raw.value.items
-      .filter(item => {
-        const matchesCategory =
-          selectedCategoryIds.size ===
-            0 ||
-          selectedCategoryIds.has(
-            item.categoryId
-          );
+      return raw.value.items
+        .filter(
+          item => {
+            const matchesCategory =
+              selectedCategoryIds.size ===
+                0 ||
+              selectedCategoryIds.has(
+                item.categoryId
+              );
 
-        if (!matchesCategory) {
-          return false;
-        }
+            if (!matchesCategory) {
+              return false;
+            }
 
-        if (
-          item.subCategoryId !==
-          selectedSubCategoryId
-        ) {
-          return false;
-        }
+            if (
+              item.subCategoryId !==
+              selectedSubCategoryId
+            ) {
+              return false;
+            }
 
-        const matchesMonth =
-          maxMonth == null ||
-          Number(
-            item.allocationDate.slice(
-              5,
-              7
-            )
-          ) <= maxMonth;
+            const matchesMonth =
+              maxMonth == null ||
+              Number(
+                item.allocationDate
+                  .slice(
+                    5,
+                    7
+                  )
+              ) <= maxMonth;
 
-        if (!matchesMonth) {
-          return false;
-        }
+            if (!matchesMonth) {
+              return false;
+            }
 
-        const isOffBudget =
-          getTag(item.tagId)
-            ?.offBudget === true;
+            const isOffBudget =
+              getTag(
+                item.tagId
+              )
+                ?.offBudget ===
+              true;
 
-        if (
-          !includeOffBudget &&
-          isOffBudget
-        ) {
-          return false;
-        }
+            if (
+              !includeOffBudget &&
+              isOffBudget
+            ) {
+              return false;
+            }
 
-        if (query) {
-          const haystack =
-            normalizeText(
-              [
-                item.description,
-                partyLabel(
-                  item.partyId
-                ),
-                item.bankDescription,
-                tagLabel(
-                  item.tagId
-                ),
-              ].join(" ")
-            );
+            if (query) {
+              const haystack =
+                normalizeText(
+                  [
+                    item.description,
 
-          if (
-            !haystack.includes(
-              query
-            )
-          ) {
-            return false;
+                    partyLabel(
+                      item.partyId
+                    ),
+
+                    item.bankDescription,
+
+                    tagLabel(
+                      item.tagId
+                    ),
+                  ].join(" ")
+                );
+
+              if (
+                !haystack.includes(
+                  query
+                )
+              ) {
+                return false;
+              }
+            }
+
+            return true;
           }
-        }
-
-        return true;
-      })
-      .sort(
-        (a, b) =>
-          b.allocationDate
-            .localeCompare(
-              a.allocationDate
-            )
-      );
-  });
+        )
+        .sort(
+          (a, b) =>
+            b.allocationDate
+              .localeCompare(
+                a.allocationDate
+              )
+        );
+    }
+  );
 
 /* =========================================================
    MONTHLY GROUPS
@@ -938,7 +1206,9 @@ const monthlyGroups =
             key,
 
             label:
-              monthLabel(key),
+              monthLabel(
+                key
+              ),
 
             total:
               list.reduce(
@@ -991,27 +1261,29 @@ watch(
       return;
     }
 
-    /*
-      Conserve les mois encore présents et ouvre
-      le premier mois lorsque rien n'est ouvert.
-    */
     const availableKeys =
       new Set(
         groups.map(
-          group => group.key
+          group =>
+            group.key
         )
       );
 
     const retained =
       new Set(
-        [...openMonths.value]
-          .filter(key =>
-            availableKeys.has(key)
-          )
+        [
+          ...openMonths.value,
+        ].filter(
+          key =>
+            availableKeys.has(
+              key
+            )
+        )
       );
 
     if (
-      retained.size === 0
+      retained.size ===
+      0
     ) {
       retained.add(
         groups[0].key
@@ -1021,6 +1293,7 @@ watch(
     openMonths.value =
       retained;
   },
+
   {
     immediate:
       true,
@@ -1061,14 +1334,17 @@ function monthStatusClass(
   }
 
   const budget =
-    props.monthlyBudgetMap[key];
+    props.monthlyBudgetMap[
+      key
+    ];
 
   if (budget == null) {
     return "neutral";
   }
 
   if (
-    props.nature === "E"
+    props.nature ===
+    "E"
   ) {
     if (total > budget) {
       return "over";
@@ -1082,7 +1358,8 @@ function monthStatusClass(
   }
 
   if (
-    props.nature === "I"
+    props.nature ===
+    "I"
   ) {
     if (total < budget) {
       return "over";
@@ -1117,11 +1394,14 @@ async function initializeDetails() {
   try {
     await loadSettings();
 
+    await loadSpendingPending();
+
     initialized.value =
       true;
 
     if (
-      props.subCategoryId !== null
+      props.subCategoryId !==
+      null
     ) {
       await loadDetails();
     }
@@ -1139,13 +1419,17 @@ async function initializeDetails() {
   }
 }
 
-onMounted(async () => {
-  await initializeDetails();
-});
+onMounted(
+  async () => {
+    await initializeDetails();
+  }
+);
 
-onBeforeUnmount(() => {
-  closeFxPopover();
-});
+onBeforeUnmount(
+  () => {
+    closeFxPopover();
+  }
+);
 </script>
 
 <template>
@@ -1199,7 +1483,12 @@ onBeforeUnmount(() => {
             )
           "
         >
-          <div class="col-label month-toggle">
+          <div
+            class="
+              col-label
+              month-toggle
+            "
+          >
             <span>
               {{
                 openMonths.has(
@@ -1216,7 +1505,10 @@ onBeforeUnmount(() => {
           <div></div>
 
           <div
-            class="col-spent amount"
+            class="
+              col-spent
+              amount
+            "
             :class="
               monthStatusClass(
                 group.key,
@@ -1224,10 +1516,19 @@ onBeforeUnmount(() => {
               )
             "
           >
-            {{ fmt(group.total) }}
+            {{
+              fmt(
+                group.total
+              )
+            }}
           </div>
 
-          <div class="col-budget amount">
+          <div
+            class="
+              col-budget
+              amount
+            "
+          >
             <span
               v-if="
                 props.monthlyBudgetMap
@@ -1290,7 +1591,12 @@ onBeforeUnmount(() => {
               )
             "
           >
-            <div class="col-label date-cell">
+            <div
+              class="
+                col-label
+                date-cell
+              "
+            >
               <span
                 v-if="
                   pendingReallocationIds.has(
@@ -1384,7 +1690,11 @@ onBeforeUnmount(() => {
             </div>
 
             <div
-              class="col-spent amount amount-cell"
+              class="
+                col-spent
+                amount
+                amount-cell
+              "
               @mouseenter="
                 showFxPopover(
                   $event,
@@ -1402,12 +1712,18 @@ onBeforeUnmount(() => {
               "
             >
               <span class="amount-value">
-                {{ fmt(item.amount) }}
+                {{
+                  fmt(
+                    item.amount
+                  )
+                }}
               </span>
 
               <span
                 v-if="
-                  isForeign(item)
+                  isForeign(
+                    item
+                  )
                 "
                 class="ccy-dot"
               ></span>
@@ -1469,6 +1785,7 @@ onBeforeUnmount(() => {
 
 .grid {
   display: grid;
+
   grid-template-columns:
     220px
     1fr
@@ -1509,15 +1826,18 @@ onBeforeUnmount(() => {
    Month status
 ========================================================= */
 
-.month-header .col-spent.amount.over {
+.month-header
+.col-spent.amount.over {
   color: var(--negative);
 }
 
-.month-header .col-spent.amount.under {
+.month-header
+.col-spent.amount.under {
   color: var(--positive);
 }
 
-.month-header .col-spent.amount.neutral {
+.month-header
+.col-spent.amount.neutral {
   color: inherit;
 }
 
@@ -1571,19 +1891,22 @@ onBeforeUnmount(() => {
   transform: scale(0.9);
 }
 
-.row:hover .reallocate-btn {
+.row:hover
+.reallocate-btn {
   opacity: 0.75;
   pointer-events: auto;
   transform: scale(1);
 }
 
-.row.active .reallocate-btn {
+.row.active
+.reallocate-btn {
   opacity: 0.75;
   pointer-events: auto;
   transform: scale(1);
 }
 
-.row.pending:hover .reallocate-btn {
+.row.pending:hover
+.reallocate-btn {
   opacity: 0;
   pointer-events: none;
 }
