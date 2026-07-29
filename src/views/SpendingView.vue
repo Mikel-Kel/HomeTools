@@ -16,6 +16,7 @@ import DateChip from "@/components/DateChip.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useDriveWatcher } from "@/composables/useDriveWatcher";
+import { useDriveJsonFile } from "@/composables/useDriveJsonFile";
 
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 
@@ -45,6 +46,8 @@ import {
 import {
   formatAmount,
 } from "@/utils/amountFormat";
+
+import { prefixEventFileName } from "@/utils/eventFileName";
 
 /* =========================
    Router / storage
@@ -607,6 +610,86 @@ async function openAllocation(
       id: record.id,
     },
   });
+}
+
+/* =========================
+   Card24 download
+========================= */
+
+const card24Downloading =
+  ref(false);
+
+function buildCard24EventFileName():
+  string {
+  const now  = new Date();
+  const YYYY = now.getFullYear();
+  const MM   = String(now.getMonth() + 1).padStart(2, "0");
+  const DD   = String(now.getDate()).padStart(2, "0");
+  const HH   = String(now.getHours()).padStart(2, "0");
+  const mm   = String(now.getMinutes()).padStart(2, "0");
+  const ss   = String(now.getSeconds()).padStart(2, "0");
+
+  const baseFileName =
+    `BAT_${YYYY}${MM}${DD}${HH}${mm}${ss}_Card24Download.json`;
+
+  return prefixEventFileName(
+    baseFileName
+  );
+}
+
+async function onDownloadCard24() {
+  if (!storageReady.value) {
+    loadError.value =
+      storageUnavailableMessage.value ||
+      "Storage not available.";
+
+    return;
+  }
+
+  if (card24Downloading.value) {
+    return;
+  }
+
+  card24Downloading.value =
+    true;
+
+  try {
+    const event = {
+      type:      "BATCH_REQUESTED",
+      version:   1,
+      timestamp: new Date().toISOString(),
+      payload: {
+        script: "Card24Download",
+        reason: "CARD24_DOWNLOAD_REQUESTED",
+      },
+    };
+
+    const fileName =
+      buildCard24EventFileName();
+
+    const { save } =
+      useDriveJsonFile(
+        "events",
+        fileName
+      );
+
+    await save(event);
+
+  } catch (err) {
+    console.error(
+      "Card24 event publish failed",
+      err
+    );
+
+    loadError.value =
+      err instanceof Error
+        ? err.message
+        : "Card24 event publish failed";
+
+  } finally {
+    card24Downloading.value =
+      false;
+  }
 }
 
 /* =========================
@@ -1306,62 +1389,40 @@ onBeforeUnmount(() => {
       >
         <div class="account-separator"></div>
 
-        <header
-          class="account-header clickable"
-          @click="
-            toggleAccount(
-              account.id
-            )
-          "
+    <header
+      class="account-header clickable"
+      @click="toggleAccount(account.id)"
+    >
+      <div class="account-title">
+        <span class="arrow">
+          {{ isCollapsed(account.id) ? "►" : "▼" }}
+        </span>
+
+        <h2>{{ account.label }}</h2>
+
+        <span class="ops-count">
+          {{ recordsFor(account.id).length }} ops
+        </span>
+        <!-- Bouton download Card24 — uniquement pour Global Card -->
+        <button
+          v-if="account.label.toLowerCase().includes('card')"
+          class="btn-download-card24"
+          :disabled="card24Downloading"
+          title="Télécharger les transactions Card24"
+          @click.stop="onDownloadCard24()"
         >
-          <div class="account-title">
-            <span class="arrow">
-              {{
-                isCollapsed(
-                  account.id
-                )
-                  ? "►"
-                  : "▼"
-              }}
-            </span>
+          {{ card24Downloading ? "⏳" : "⬇" }}
+        </button>
 
-            <h2>
-              {{ account.label }}
-            </h2>
+      </div>
 
-            <span class="ops-count">
-              {{
-                recordsFor(
-                  account.id
-                ).length
-              }}
-              ops
-            </span>
-          </div>
-
-          <div
-            class="total right"
-            :class="
-              totalFor(
-                account.id
-              ) >= 0
-                ? 'positive'
-                : 'negative'
-            "
-          >
-            {{
-              formatAmount(
-                totalFor(
-                  account.id
-                ),
-                {
-                  showPlus: true
-                }
-              )
-            }}
-          </div>
-        </header>
-
+      <div
+        class="total right"
+        :class="totalFor(account.id) >= 0 ? 'positive' : 'negative'"
+      >
+        {{ formatAmount(totalFor(account.id), { showPlus: true }) }}
+      </div>
+    </header>
         <table
           v-if="
             !isCollapsed(
@@ -1809,6 +1870,23 @@ onBeforeUnmount(() => {
   font-weight: 600;
   text-align: right;
   padding-right: 0.5rem;
+}
+
+.btn-download-card24 {
+  background: transparent;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0 4px;
+  margin-left: 6px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.btn-download-card24:hover {
+  opacity: 1;
+  color: #aaa;
 }
 
 /* =========================================================
