@@ -528,19 +528,49 @@ function openGoogleDocument(
   return true;
 }
 
+function openS3Document(
+  item: ArchiveItem
+): boolean {
+  if (!item.physicalName) {
+    return false;
+  }
+
+  const s3BaseUrl =
+    "https://archives-prod.fsn1.your-objectstorage.com";
+
+  const s3Url =
+    s3BaseUrl +
+    "/" +
+    item.physicalName
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/");
+
+  window.open(
+    s3Url,
+    "_blank",
+    "noopener"
+  );
+
+  return true;
+}
+
 function openDocument(
   item: ArchiveItem
 ) {
   /*
-    Transitional archive strategy:
+    Document opening strategy:
 
     - Mac desktop:
-      keep opening the physical local archive
+      open the physical local archive
       through the hometools:// protocol.
 
-    - iPad/browser:
-      keep opening the PDF through googleFileId
-      until physical PDFs are migrated to S3.
+    - Google Drive:
+      open the PDF through googleFileId.
+
+    - Object Storage (iPad / browser):
+      open the PDF directly from
+      archives-prod S3 bucket via public URL.
   */
 
   if (
@@ -551,12 +581,21 @@ function openDocument(
 
   if (
     backend.value ===
-      "GOOGLE_DRIVE" ||
-    backend.value ===
-      "OBJECT_STORAGE"
+    "GOOGLE_DRIVE"
   ) {
     if (
       openGoogleDocument(item)
+    ) {
+      return;
+    }
+  }
+
+  if (
+    backend.value ===
+    "OBJECT_STORAGE"
+  ) {
+    if (
+      openS3Document(item)
     ) {
       return;
     }
