@@ -1,13 +1,4 @@
 import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  HeadObjectCommand,
-  ListObjectsV2Command,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
-
-import {
   publishStoragePullRequest,
   shouldRequestStoragePull,
   type StoragePullRequestDefinition,
@@ -19,38 +10,34 @@ import {
    Configuration
 ========================= */
 
-const endpoint =
-  import.meta.env.VITE_S3_ENDPOINT as string | undefined;
-
-const region =
-  import.meta.env.VITE_S3_REGION as string | undefined;
-
-const bucket =
-  import.meta.env.VITE_S3_BUCKET as string | undefined;
-
-const accessKeyId =
-  import.meta.env.VITE_S3_ACCESS_KEY_ID as string | undefined;
-
-const secretAccessKey =
-  import.meta.env.VITE_S3_SECRET_ACCESS_KEY as string | undefined;
-
-/* =========================
-   Cache policy
-========================= */
-
 /*
-  Les fichiers JSON HomeTools sont dynamiques.
+  Depuis l'introduction du proxy Tailscale, la PWA ne
+  parle plus jamais directement a Hetzner : ni cles S3,
+  ni SDK AWS cote navigateur.
 
-  Chrome peut conserver une ancienne réponse S3,
-  même après redémarrage de la PWA.
-
-  Cette politique est donc appliquée :
-  - lors de l'écriture de l'objet ;
-  - lors de la lecture GetObject.
+  Le proxy (Python/Flask, sur le Mac, expose via
+  `tailscale serve`) signe les requetes S3 lui-meme.
+  La PWA n'a besoin que de son URL et d'une cle d'API
+  partagee pour s'authentifier aupres du proxy.
 */
 
-const DYNAMIC_JSON_CACHE_CONTROL =
-  "no-store, no-cache, must-revalidate";
+const proxyUrl =
+  import.meta.env.VITE_PROXY_URL as string | undefined;
+
+const proxyApiKey =
+  import.meta.env.VITE_PROXY_API_KEY as string | undefined;
+
+
+function assertConfig(): void {
+  if (!proxyUrl) {
+    throw new Error("Missing VITE_PROXY_URL");
+  }
+
+  if (!proxyApiKey) {
+    throw new Error("Missing VITE_PROXY_API_KEY");
+  }
+}
+
 
 /* =========================
    Public types
@@ -87,72 +74,56 @@ export interface S3WriteJSONOptions {
   reason?: string;
 }
 
-/* =========================
-   Publish explicit pull request
-========================= */
-/*
-  Permet à une opération métier composée de publier
-  un seul événement de synchronisation après avoir
-  effectué plusieurs écritures et suppressions S3.
 
-  La primitive interne est utilisée directement afin
-  que l'écriture dans events/control ne génère jamais
-  récursivement une nouvelle demande de Pull.
-*/
-export async function publishS3StoragePullRequest(
-  definition: StoragePullRequestDefinition
-): Promise<StoragePullRequestEvent> {
+/* =========================
+   Proxy fetch helper
+========================= */
+
+function buildProxyUrl(
+  path: string,
+  params?: Record<string, string>
+): string {
+  const base =
+    (proxyUrl ?? "").replace(
+      /\/+$/,
+      ""
+    );
+
+  const url =
+    new URL(base + path);
+
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
+  }
+
+  return url.toString();
+}
+
+
+async function proxyFetch(
+  path: string,
+  init: RequestInit = {},
+  params?: Record<string, string>
+): Promise<Response> {
   assertConfig();
 
-  return await publishStoragePullRequest(
-    definition,
-    writeS3JSONPrimitive
-  );
+  const url =
+    buildProxyUrl(path, params);
+
+  return await fetch(url, {
+    ...init,
+    cache: "no-store",
+    headers: {
+      "X-Proxy-Key":
+        proxyApiKey ?? "",
+
+      ...(init.headers ?? {}),
+    },
+  });
 }
 
-/* =========================
-   Configuration validation
-========================= */
-
-function assertConfig(): void {
-  if (!endpoint) {
-    throw new Error("Missing VITE_S3_ENDPOINT");
-  }
-
-  if (!region) {
-    throw new Error("Missing VITE_S3_REGION");
-  }
-
-  if (!bucket) {
-    throw new Error("Missing VITE_S3_BUCKET");
-  }
-
-  if (!accessKeyId) {
-    throw new Error("Missing VITE_S3_ACCESS_KEY_ID");
-  }
-
-  if (!secretAccessKey) {
-    throw new Error("Missing VITE_S3_SECRET_ACCESS_KEY");
-  }
-}
-
-/* =========================
-   S3 client
-========================= */
-
-const s3 = new S3Client({
-  region,
-  endpoint,
-  forcePathStyle: true,
-
-  credentials: {
-    accessKeyId:
-      accessKeyId ?? "",
-
-    secretAccessKey:
-      secretAccessKey ?? "",
-  },
-});
 
 /* =========================
    Path helpers
@@ -214,72 +185,31 @@ function isJSONPath(
     .endsWith(".json");
 }
 
+
 /* =========================
-   Error helpers
+   Publish explicit pull request
 ========================= */
 
-function isNotFoundError(
-  err: unknown
-): boolean {
-  if (
-    !err ||
-    typeof err !== "object"
-  ) {
-    return false;
-  }
+/*
+  Permet à une opération métier composée de publier
+  un seul événement de synchronisation après avoir
+  effectué plusieurs écritures et suppressions S3.
 
-  const candidate =
-    err as {
-      name?: string;
-      Code?: string;
+  La primitive interne est utilisée directement afin
+  que l'écriture dans events/control ne génère jamais
+  récursivement une nouvelle demande de Pull.
+*/
+export async function publishS3StoragePullRequest(
+  definition: StoragePullRequestDefinition
+): Promise<StoragePullRequestEvent> {
+  assertConfig();
 
-      $metadata?: {
-        httpStatusCode?: number;
-      };
-    };
-
-  return (
-    candidate.name === "NoSuchKey" ||
-    candidate.name === "NotFound" ||
-    candidate.Code === "NoSuchKey" ||
-    candidate.$metadata
-      ?.httpStatusCode === 404
+  return await publishStoragePullRequest(
+    definition,
+    writeS3JSONPrimitive
   );
 }
 
-/* =========================
-   Body conversion
-========================= */
-
-async function streamToText(
-  body: unknown
-): Promise<string> {
-  if (!body) {
-    return "";
-  }
-
-  const transformable =
-    body as {
-      transformToString?: (
-        encoding?: string
-      ) => Promise<string>;
-    };
-
-  if (
-    typeof transformable
-      .transformToString ===
-    "function"
-  ) {
-    return await transformable
-      .transformToString(
-        "utf-8"
-      );
-  }
-
-  return await new Response(
-    body as BodyInit
-  ).text();
-}
 
 /* =========================
    Read text
@@ -288,47 +218,29 @@ async function streamToText(
 export async function readS3Text(
   path: string
 ): Promise<string | null> {
-  assertConfig();
-
   const key =
     normalizeS3Path(path);
 
-  try {
-    const response =
-      await s3.send(
-        new GetObjectCommand({
-          Bucket:
-            bucket,
-
-          Key:
-            key,
-
-          /*
-            Force la réponse S3 à annoncer
-            que cette ressource ne doit pas
-            être conservée par le navigateur.
-          */
-          ResponseCacheControl:
-            isJSONPath(key)
-              ? DYNAMIC_JSON_CACHE_CONTROL
-              : undefined,
-        })
-      );
-
-    return await streamToText(
-      response.Body
+  const response =
+    await proxyFetch(
+      "/api/s3/read",
+      { method: "GET" },
+      { key }
     );
 
-  } catch (err) {
-    if (
-      isNotFoundError(err)
-    ) {
-      return null;
-    }
-
-    throw err;
+  if (response.status === 404) {
+    return null;
   }
+
+  if (!response.ok) {
+    throw new Error(
+      `S3 proxy read failed: HTTP ${response.status} for ${key}`
+    );
+  }
+
+  return await response.text();
 }
+
 
 /* =========================
    Read JSON
@@ -347,9 +259,7 @@ export async function readS3JSON<
   }
 
   try {
-    return JSON.parse(
-      text
-    ) as T;
+    return JSON.parse(text) as T;
 
   } catch (err) {
     throw new Error(
@@ -362,6 +272,7 @@ export async function readS3JSON<
   }
 }
 
+
 /* =========================
    Write text
 ========================= */
@@ -372,44 +283,33 @@ export async function writeS3Text(
   contentType =
     "text/plain; charset=utf-8"
 ): Promise<void> {
-  assertConfig();
-
   const key =
     normalizeS3Path(path);
 
-  const jsonObject =
-    isJSONPath(key) ||
-    contentType
-      .toLowerCase()
-      .includes(
-        "application/json"
-      );
+  const response =
+    await proxyFetch(
+      "/api/s3/write",
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body: JSON.stringify({
+          key,
+          content,
+          contentType,
+        }),
+      }
+    );
 
-  await s3.send(
-    new PutObjectCommand({
-      Bucket:
-        bucket,
-
-      Key:
-        key,
-
-      Body:
-        content,
-
-      ContentType:
-        contentType,
-
-      /*
-        Les JSON écrits directement par la PWA
-        ne doivent pas être mis en cache.
-      */
-      CacheControl:
-        jsonObject
-          ? DYNAMIC_JSON_CACHE_CONTROL
-          : undefined,
-    })
-  );
+  if (!response.ok) {
+    throw new Error(
+      `S3 proxy write failed: HTTP ${response.status} for ${key}`
+    );
+  }
 }
+
 
 /* =========================
    Primitive JSON writer
@@ -423,14 +323,11 @@ const writeS3JSONPrimitive:
   ): Promise<void> => {
     await writeS3Text(
       path,
-      JSON.stringify(
-        data,
-        null,
-        2
-      ),
+      JSON.stringify(data, null, 2),
       "application/json; charset=utf-8"
     );
   };
+
 
 /* =========================
    Write JSON
@@ -446,7 +343,7 @@ export async function writeS3JSON(
     normalizeS3Path(path);
 
   /*
-    1. Écriture de l’objet métier.
+    1. Écriture de l'objet métier.
   */
   await writeS3JSONPrimitive(
     key,
@@ -454,7 +351,7 @@ export async function writeS3JSON(
   );
 
   /*
-    2. Publication éventuelle d’une demande
+    2. Publication éventuelle d'une demande
        de Pull ciblée pour le Mac.
 
     Les événements de contrôle eux-mêmes
@@ -462,9 +359,7 @@ export async function writeS3JSON(
   */
   const requestPull =
     options.requestPull ??
-    shouldRequestStoragePull(
-      key
-    );
+    shouldRequestStoragePull(key);
 
   if (!requestPull) {
     return;
@@ -472,10 +367,7 @@ export async function writeS3JSON(
 
   await publishStoragePullRequest(
     {
-      downloadPaths: [
-        key
-      ],
-
+      downloadPaths: [key],
       deletePaths: [],
 
       reason:
@@ -486,75 +378,66 @@ export async function writeS3JSON(
   );
 }
 
+
 /* =========================
    Find file
 ========================= */
+
+interface ProxyHeadResponse {
+  key: string;
+  contentType: string | null;
+  lastModified: string | null;
+  size: number | null;
+  etag: string | null;
+}
 
 export async function findS3FileByName(
   folderPath: string,
   fileName: string
 ): Promise<S3StorageItem | null> {
-  assertConfig();
-
   const key =
-    buildS3Key(
-      folderPath,
-      fileName
+    buildS3Key(folderPath, fileName);
+
+  const response =
+    await proxyFetch(
+      "/api/s3/head",
+      { method: "GET" },
+      { key }
     );
 
-  try {
-    const response =
-      await s3.send(
-        new HeadObjectCommand({
-          Bucket:
-            bucket,
-
-          Key:
-            key,
-        })
-      );
-
-    return {
-      id:
-        key,
-
-      key,
-
-      name:
-        fileName,
-
-      mimeType:
-        response.ContentType ??
-        "application/octet-stream",
-
-      modifiedTime:
-        response.LastModified
-          ?.toISOString() ??
-        null,
-
-      size:
-        response.ContentLength ??
-        null,
-
-      etag:
-        response.ETag
-          ?.replaceAll(
-            '"',
-            ""
-          ) ??
-        null,
-    };
-
-  } catch (err) {
-    if (
-      isNotFoundError(err)
-    ) {
-      return null;
-    }
-
-    throw err;
+  if (response.status === 404) {
+    return null;
   }
+
+  if (!response.ok) {
+    throw new Error(
+      `S3 proxy head failed: HTTP ${response.status} for ${key}`
+    );
+  }
+
+  const data =
+    (await response.json()) as ProxyHeadResponse;
+
+  return {
+    id: key,
+    key,
+    name: fileName,
+
+    mimeType:
+      data.contentType ??
+      "application/octet-stream",
+
+    modifiedTime:
+      data.lastModified,
+
+    size:
+      data.size,
+
+    etag:
+      data.etag,
+  };
 }
+
 
 /* =========================
    Download file
@@ -575,113 +458,67 @@ export async function downloadS3File(
   return content;
 }
 
+
 /* =========================
    List files
 ========================= */
 
+interface ProxyListItem {
+  key: string;
+  lastModified: string | null;
+  size: number | null;
+  etag: string | null;
+}
+
+interface ProxyListResponse {
+  items: ProxyListItem[];
+}
+
 export async function listS3FilesInFolder(
   folderPath: string
 ): Promise<S3StorageItem[]> {
-  assertConfig();
-
   const prefix =
-    buildFolderPrefix(
-      folderPath
+    buildFolderPrefix(folderPath);
+
+  const response =
+    await proxyFetch(
+      "/api/s3/list",
+      { method: "GET" },
+      { prefix }
     );
 
-  const items:
-    S3StorageItem[] = [];
+  if (!response.ok) {
+    throw new Error(
+      `S3 proxy list failed: HTTP ${response.status} for prefix "${prefix}"`
+    );
+  }
 
-  let continuationToken:
-    string | undefined;
+  const data =
+    (await response.json()) as ProxyListResponse;
 
-  do {
-    const response =
-      await s3.send(
-        new ListObjectsV2Command({
-          Bucket:
-            bucket,
+  return data.items.map((item) => ({
+    id: item.key,
+    key: item.key,
 
-          Prefix:
-            prefix,
+    name:
+      getFileNameFromKey(item.key),
 
-          Delimiter:
-            "/",
+    mimeType:
+      isJSONPath(item.key)
+        ? "application/json"
+        : "application/octet-stream",
 
-          ContinuationToken:
-            continuationToken,
-        })
-      );
+    modifiedTime:
+      item.lastModified,
 
-    for (
-      const object
-      of response.Contents ??
-      []
-    ) {
-      const key =
-        object.Key;
+    size:
+      item.size,
 
-      if (!key) {
-        continue;
-      }
-
-      /*
-        Ignore un éventuel objet
-        représentant uniquement le dossier.
-      */
-      if (
-        key === prefix
-      ) {
-        continue;
-      }
-
-      items.push({
-        id:
-          key,
-
-        key,
-
-        name:
-          getFileNameFromKey(
-            key
-          ),
-
-        mimeType:
-          isJSONPath(key)
-            ? "application/json"
-            : "application/octet-stream",
-
-        modifiedTime:
-          object.LastModified
-            ?.toISOString() ??
-          null,
-
-        size:
-          object.Size ??
-          null,
-
-        etag:
-          object.ETag
-            ?.replaceAll(
-              '"',
-              ""
-            ) ??
-          null,
-      });
-    }
-
-    continuationToken =
-      response.IsTruncated
-        ? response
-            .NextContinuationToken
-        : undefined;
-
-  } while (
-    continuationToken
-  );
-
-  return items;
+    etag:
+      item.etag,
+  }));
 }
+
 
 /* =========================
    Delete file
@@ -691,24 +528,23 @@ export async function deleteS3File(
   folderPath: string,
   fileName: string
 ): Promise<void> {
-  assertConfig();
-
   const key =
-    buildS3Key(
-      folderPath,
-      fileName
+    buildS3Key(folderPath, fileName);
+
+  const response =
+    await proxyFetch(
+      "/api/s3/delete",
+      { method: "DELETE" },
+      { key }
     );
 
-  await s3.send(
-    new DeleteObjectCommand({
-      Bucket:
-        bucket,
-
-      Key:
-        key,
-    })
-  );
+  if (!response.ok) {
+    throw new Error(
+      `S3 proxy delete failed: HTTP ${response.status} for ${key}`
+    );
+  }
 }
+
 
 /* =========================
    Metadata
