@@ -505,29 +505,6 @@ function openLocalDocument(
   return true;
 }
 
-function openGoogleDocument(
-  item: ArchiveItem
-): boolean {
-  if (!item.googleFileId) {
-    return false;
-  }
-
-  const driveUrl =
-    "https://drive.google.com/file/d/" +
-    encodeURIComponent(
-      item.googleFileId
-    ) +
-    "/view";
-
-  window.open(
-    driveUrl,
-    "_blank",
-    "noopener"
-  );
-
-  return true;
-}
-
 function isIOSStandalonePWA(): boolean {
   /*
     navigator.standalone est une propriete non-standard
@@ -567,8 +544,16 @@ async function fetchArchiveDocumentUrl(
   const base =
     proxyUrl.replace(/\/+$/, "");
 
+  /*
+    Les fichiers archives existent deja physiquement sur le
+    disque du Mac (source de la synchronisation vers S3).
+    Le proxy tournant sur ce meme Mac, autant lire directement
+    le disque local plutot que de repasser par archives-prod -
+    plus rapide, et ca marche identiquement pour le Mac et
+    l'iPad puisque les deux passent par le meme proxy.
+  */
   const url =
-    new URL(base + "/api/archives/read");
+    new URL(base + "/api/local/read");
 
   url.searchParams.set(
     "key",
@@ -584,8 +569,17 @@ async function fetchArchiveDocumentUrl(
     });
 
   if (!response.ok) {
+    /*
+      Distingue un vrai "fichier absent" (404, le fichier
+      n'existe pas sur le disque local) d'un autre echec
+      (reseau, Tailscale pas encore reconnecte, cle
+      invalide, etc.) - utile pour diagnostiquer les
+      echecs intermittents sur iPad.
+    */
     throw new Error(
-      `Archive read failed: HTTP ${response.status} for ${physicalName}`
+      response.status === 404
+        ? `Local archive file not found: ${physicalName}`
+        : `Local archive read failed: HTTP ${response.status} for ${physicalName}`
     );
   }
 
@@ -601,7 +595,7 @@ async function fetchArchiveDocumentUrl(
   return URL.createObjectURL(blob);
 }
 
-async function openS3Document(
+async function openArchiveDocument(
   item: ArchiveItem
 ): Promise<boolean> {
   if (!item.physicalName) {
@@ -654,20 +648,28 @@ async function openDocument(
   /*
     Document opening strategy:
 
-    - Mac desktop:
+    - Mac desktop, mode non OBJECT_STORAGE :
       open the physical local archive
       through the hometools:// protocol.
 
-    - Google Drive:
-      open the PDF through googleFileId.
-
-    - Object Storage (iPad / browser):
-      fetch the PDF through the local
-      Tailscale proxy (archives-prod is
-      now a private bucket).
+    - Object Storage (Mac ET iPad) :
+      lecture du fichier local via le proxy
+      Tailscale, qui tourne sur le Mac ou
+      se trouvent physiquement les archives.
   */
 
+  /*
+    openLocalDocument() ne peut pas verifier si le gestionnaire
+    hometools:// a reellement trouve/ouvert le fichier (une
+    navigation vers un protocole personnalise ne remonte jamais
+    d'echec cote JS). Si l'utilisateur a explicitement choisi
+    OBJECT_STORAGE comme backend, on respecte ce choix plutot
+    que de tenter le local en silence et de risquer un echec
+    invisible (Apercu qui s'ouvre mais reste vide).
+  */
   if (
+    backend.value !==
+      "OBJECT_STORAGE" &&
     openLocalDocument(item)
   ) {
     return;
@@ -675,21 +677,10 @@ async function openDocument(
 
   if (
     backend.value ===
-    "GOOGLE_DRIVE"
-  ) {
-    if (
-      openGoogleDocument(item)
-    ) {
-      return;
-    }
-  }
-
-  if (
-    backend.value ===
     "OBJECT_STORAGE"
   ) {
     if (
-      await openS3Document(item)
+      await openArchiveDocument(item)
     ) {
       return;
     }
