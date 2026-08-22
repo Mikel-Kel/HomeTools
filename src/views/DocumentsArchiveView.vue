@@ -456,54 +456,8 @@ watch(
 );
 
 /* =========================
-   Platform detection
-========================= */
-
-function isRealMacDesktop():
-  boolean {
-  const userAgent =
-    navigator.userAgent;
-
-  const isMac =
-    userAgent.includes(
-      "Macintosh"
-    );
-
-  const isTouch =
-    navigator.maxTouchPoints >
-    1;
-
-  return (
-    isMac &&
-    !isTouch
-  );
-}
-
-/* =========================
    Open document
 ========================= */
-
-function openLocalDocument(
-  item: ArchiveItem
-): boolean {
-  if (
-    !isRealMacDesktop() ||
-    !item.physicalName
-  ) {
-    return false;
-  }
-
-  const url =
-    "hometools://open?file=" +
-    encodeURIComponent(
-      item.physicalName
-    );
-
-  window.location.href =
-    url;
-
-  return true;
-}
 
 function isIOSStandalonePWA(): boolean {
   /*
@@ -646,44 +600,21 @@ async function openDocument(
   item: ArchiveItem
 ) {
   /*
-    Document opening strategy:
+    Un seul chemin d'ouverture desormais, quel que soit
+    l'appareil (Mac ou iPad) : lecture via le proxy Tailscale,
+    qui sert soit le disque local (archives), soit S3
+    (hometools-prod) selon l'endpoint appele.
 
-    - Mac desktop, mode non OBJECT_STORAGE :
-      open the physical local archive
-      through the hometools:// protocol.
-
-    - Object Storage (Mac ET iPad) :
-      lecture du fichier local via le proxy
-      Tailscale, qui tourne sur le Mac ou
-      se trouvent physiquement les archives.
-  */
-
-  /*
-    openLocalDocument() ne peut pas verifier si le gestionnaire
-    hometools:// a reellement trouve/ouvert le fichier (une
-    navigation vers un protocole personnalise ne remonte jamais
-    d'echec cote JS). Si l'utilisateur a explicitement choisi
-    OBJECT_STORAGE comme backend, on respecte ce choix plutot
-    que de tenter le local en silence et de risquer un echec
-    invisible (Apercu qui s'ouvre mais reste vide).
+    L'ancien protocole hometools:// est abandonne : impossible
+    a deboguer depuis ce fichier (mecanisme natif macOS hors de
+    ce codebase), et souffrait tres probablement du meme bug de
+    normalisation Unicode (NFC/NFD) deja identifie et corrige
+    cote proxy pour les noms de fichiers accentues.
   */
   if (
-    backend.value !==
-      "OBJECT_STORAGE" &&
-    openLocalDocument(item)
+    await openArchiveDocument(item)
   ) {
     return;
-  }
-
-  if (
-    backend.value ===
-    "OBJECT_STORAGE"
-  ) {
-    if (
-      await openArchiveDocument(item)
-    ) {
-      return;
-    }
   }
 
   alert(
