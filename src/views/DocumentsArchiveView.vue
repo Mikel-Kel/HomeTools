@@ -528,34 +528,127 @@ function openGoogleDocument(
   return true;
 }
 
-function openS3Document(
+function isIOSStandalonePWA(): boolean {
+  /*
+    navigator.standalone est une propriete non-standard
+    specifique a iOS Safari, vraie uniquement lorsque la
+    PWA a ete ajoutee a l'ecran d'accueil et est lancee en
+    mode standalone (pas d'UI de navigateur, pas d'onglets).
+  */
+  const standalone =
+    (window.navigator as unknown as {
+      standalone?: boolean;
+    }).standalone;
+
+  return standalone === true;
+}
+
+/*
+  archives-prod est desormais un bucket PRIVE : il n'y a plus
+  d'URL publique directe. La lecture passe par le proxy local
+  (Tailscale), authentifiee par la meme cle que hometools-prod,
+  sur l'endpoint binaire dedie /api/archives/read.
+*/
+async function fetchArchiveDocumentUrl(
+  physicalName: string
+): Promise<string> {
+  const proxyUrl =
+    import.meta.env.VITE_PROXY_URL as string | undefined;
+
+  const proxyApiKey =
+    import.meta.env.VITE_PROXY_API_KEY as string | undefined;
+
+  if (!proxyUrl || !proxyApiKey) {
+    throw new Error(
+      "Missing VITE_PROXY_URL or VITE_PROXY_API_KEY"
+    );
+  }
+
+  const base =
+    proxyUrl.replace(/\/+$/, "");
+
+  const url =
+    new URL(base + "/api/archives/read");
+
+  url.searchParams.set(
+    "key",
+    physicalName
+  );
+
+  const response =
+    await fetch(url.toString(), {
+      headers: {
+        "X-Proxy-Key":
+          proxyApiKey,
+      },
+    });
+
+  if (!response.ok) {
+    throw new Error(
+      `Archive read failed: HTTP ${response.status} for ${physicalName}`
+    );
+  }
+
+  const blob =
+    await response.blob();
+
+  /*
+    L'URL blob:// generee ici n'est valide que dans cet onglet
+    et est liberee automatiquement par le navigateur a sa
+    fermeture - pas besoin de revokeObjectURL manuel pour ce
+    cas d'usage ponctuel (ouverture d'un document).
+  */
+  return URL.createObjectURL(blob);
+}
+
+async function openS3Document(
   item: ArchiveItem
-): boolean {
+): Promise<boolean> {
   if (!item.physicalName) {
     return false;
   }
 
-  const s3BaseUrl =
-    "https://archives-prod.fsn1.your-objectstorage.com";
+  try {
+    const objectUrl =
+      await fetchArchiveDocumentUrl(
+        item.physicalName
+      );
 
-  const s3Url =
-    s3BaseUrl +
-    "/" +
-    item.physicalName
-      .split("/")
-      .map(encodeURIComponent)
-      .join("/");
+    if (isIOSStandalonePWA()) {
+      /*
+        window.open() est notoirement peu fiable dans une PWA
+        iOS installee en mode standalone : il n'y a pas de
+        notion d'onglet vers laquelle ouvrir une nouvelle
+        fenetre, et l'appel echoue souvent silencieusement.
 
-  window.open(
-    s3Url,
-    "_blank",
-    "noopener"
-  );
+        Naviguer directement dans la fenetre courante est le
+        contournement le plus robuste pour ce cas precis.
+      */
+      window.location.href =
+        objectUrl;
 
-  return true;
+      return true;
+    }
+
+    window.open(
+      objectUrl,
+      "_blank",
+      "noopener"
+    );
+
+    return true;
+
+  } catch (err) {
+    console.error(
+      "Failed to open archive document",
+      err
+    );
+
+    return false;
+  }
 }
 
-function openDocument(
+async function openDocument(
   item: ArchiveItem
 ) {
   /*
@@ -569,8 +662,9 @@ function openDocument(
       open the PDF through googleFileId.
 
     - Object Storage (iPad / browser):
-      open the PDF directly from
-      archives-prod S3 bucket via public URL.
+      fetch the PDF through the local
+      Tailscale proxy (archives-prod is
+      now a private bucket).
   */
 
   if (
@@ -595,7 +689,7 @@ function openDocument(
     "OBJECT_STORAGE"
   ) {
     if (
-      openS3Document(item)
+      await openS3Document(item)
     ) {
       return;
     }
