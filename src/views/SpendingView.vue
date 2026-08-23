@@ -100,6 +100,9 @@ const draftsState =
 const releasedState =
   ref<string | null>(null);
 
+const card24StatusState =
+  ref<string | null>(null);
+
 /* =========================
    Filters
 ========================= */
@@ -619,6 +622,21 @@ async function openAllocation(
 const card24Downloading =
   ref(false);
 
+const card24PendingFileName =
+  ref<string | null>(null);
+
+const CARD24_STATUS_FOLDER =
+  "events/status";
+
+const CARD24_PENDING_KEY =
+  "card24PendingEvent";
+
+const CARD24_TIMEOUT_MS =
+  5 * 60 * 1000; // safety net: 5 min
+
+let card24TimeoutHandle:
+  number | null = null;
+
 function buildCard24EventFileName():
   string {
   const now  = new Date();
@@ -635,6 +653,86 @@ function buildCard24EventFileName():
   return prefixEventFileName(
     baseFileName
   );
+}
+
+function clearCard24Pending() {
+  card24Downloading.value =
+    false;
+
+  card24PendingFileName.value =
+    null;
+
+  localStorage.removeItem(
+    CARD24_PENDING_KEY
+  );
+
+  if (card24TimeoutHandle !== null) {
+    window.clearTimeout(
+      card24TimeoutHandle
+    );
+
+    card24TimeoutHandle =
+      null;
+  }
+}
+
+function armCard24Timeout(
+  remainingMs: number =
+    CARD24_TIMEOUT_MS
+) {
+  if (card24TimeoutHandle !== null) {
+    window.clearTimeout(
+      card24TimeoutHandle
+    );
+  }
+
+  card24TimeoutHandle =
+    window.setTimeout(() => {
+      if (card24Downloading.value) {
+        loadError.value =
+          "Card24 : pas de réponse du backend après 5 minutes.";
+
+        clearCard24Pending();
+      }
+    }, Math.max(remainingMs, 0));
+}
+
+/*
+  Checks whether a status file for this event has appeared yet.
+  Returns true once the pending state has been resolved (success
+  or error), false if it's still in progress.
+*/
+async function checkCard24Status(
+  fileName: string
+): Promise<boolean> {
+  try {
+    const status =
+      await loadJSONFromFolder<{
+        status: string;
+        message?: string;
+      }>(
+        CARD24_STATUS_FOLDER,
+        fileName
+      );
+
+    if (!status) {
+      return false;
+    }
+
+    if (status.status === "error") {
+      loadError.value =
+        status.message ||
+        "Card24 download failed";
+    }
+
+    clearCard24Pending();
+
+    return true;
+
+  } catch {
+    // Status file not there yet, keep waiting.
+    return false;
+  }
 }
 
 async function onDownloadCard24() {
@@ -675,6 +773,25 @@ async function onDownloadCard24() {
 
     await save(event);
 
+    card24PendingFileName.value =
+      fileName;
+
+    localStorage.setItem(
+      CARD24_PENDING_KEY,
+
+      JSON.stringify({
+        fileName,
+        startedAt: Date.now(),
+      })
+    );
+
+    armCard24Timeout();
+
+    // In case the backend already ran between save() and now.
+    await checkCard24Status(
+      fileName
+    );
+
   } catch (err) {
     console.error(
       "Card24 event publish failed",
@@ -686,11 +803,79 @@ async function onDownloadCard24() {
         ? err.message
         : "Card24 event publish failed";
 
-  } finally {
-    card24Downloading.value =
-      false;
+    clearCard24Pending();
   }
 }
+
+useDriveWatcher({
+  folderId: CARD24_STATUS_FOLDER,
+
+  lastKnownState:
+    card24StatusState,
+
+  onChanged:
+    async () => {
+      if (
+        !card24PendingFileName.value
+      ) {
+        return;
+      }
+
+      await checkCard24Status(
+        card24PendingFileName.value
+      );
+    },
+});
+
+onMounted(() => {
+  const raw =
+    localStorage.getItem(
+      CARD24_PENDING_KEY
+    );
+
+  if (!raw) {
+    return;
+  }
+
+  try {
+    const pending =
+      JSON.parse(raw) as {
+        fileName: string;
+        startedAt: number;
+      };
+
+    const elapsed =
+      Date.now() - pending.startedAt;
+
+    if (elapsed >= CARD24_TIMEOUT_MS) {
+      localStorage.removeItem(
+        CARD24_PENDING_KEY
+      );
+
+      return;
+    }
+
+    card24Downloading.value =
+      true;
+
+    card24PendingFileName.value =
+      pending.fileName;
+
+    armCard24Timeout(
+      CARD24_TIMEOUT_MS - elapsed
+    );
+
+    // The backend may have finished while the app was closed/reloaded.
+    checkCard24Status(
+      pending.fileName
+    );
+
+  } catch {
+    localStorage.removeItem(
+      CARD24_PENDING_KEY
+    );
+  }
+});
 
 /* =========================
    FX popover
@@ -1163,6 +1348,17 @@ onBeforeUnmount(() => {
 
   resizeObserver =
     null;
+
+  // Note: intentionally NOT clearing card24 pending state here —
+  // it must survive a reload/navigation so the hourglass can resume.
+  if (card24TimeoutHandle !== null) {
+    window.clearTimeout(
+      card24TimeoutHandle
+    );
+
+    card24TimeoutHandle =
+      null;
+  }
 });
 </script>
 
