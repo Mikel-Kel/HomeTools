@@ -459,6 +459,79 @@ watch(
    Open document
 ========================= */
 
+function isMacDesktopBrowser(): boolean {
+  /*
+    Contrairement a l'ancien isRealMacDesktop() (retire plus haut
+    dans cette session), cette detection ne sert PAS a decider si
+    on peut acceder au fichier - le proxy fonctionne identiquement
+    partout. Elle sert uniquement a choisir la PRESENTATION
+    preferee sur Mac (Apercu natif) vs les autres appareils
+    (affichage dans le navigateur, seul choix sensé sur iPad).
+
+    Si la detection se trompe, le pire cas est cosmetique : le
+    document s'affiche quand meme, juste pas dans l'app preferee.
+  */
+  const isMac =
+    navigator.userAgent.includes(
+      "Macintosh"
+    );
+
+  const isTouch =
+    navigator.maxTouchPoints >
+    1;
+
+  return (
+    isMac &&
+    !isTouch
+  );
+}
+
+async function openNativelyOnMac(
+  physicalName: string
+): Promise<boolean> {
+  const proxyUrl =
+    import.meta.env.VITE_PROXY_URL as string | undefined;
+
+  const proxyApiKey =
+    import.meta.env.VITE_PROXY_API_KEY as string | undefined;
+
+  if (!proxyUrl || !proxyApiKey) {
+    return false;
+  }
+
+  const base =
+    proxyUrl.replace(/\/+$/, "");
+
+  const url =
+    new URL(base + "/api/local/open");
+
+  url.searchParams.set(
+    "key",
+    physicalName
+  );
+
+  try {
+    const response =
+      await fetch(url.toString(), {
+        method: "POST",
+        headers: {
+          "X-Proxy-Key":
+            proxyApiKey,
+        },
+      });
+
+    return response.ok;
+
+  } catch (err) {
+    console.error(
+      "Native open via proxy failed",
+      err
+    );
+
+    return false;
+  }
+}
+
 function isIOSStandalonePWA(): boolean {
   /*
     navigator.standalone est une propriete non-standard
@@ -554,6 +627,22 @@ async function openArchiveDocument(
 ): Promise<boolean> {
   if (!item.physicalName) {
     return false;
+  }
+
+  if (isMacDesktopBrowser()) {
+    if (
+      await openNativelyOnMac(
+        item.physicalName
+      )
+    ) {
+      return true;
+    }
+    /*
+      Echec de l'ouverture native (proxy injoignable, launchctl
+      qui echoue, etc.) : on continue vers l'affichage navigateur
+      ci-dessous plutot que d'abandonner - toujours mieux qu'un
+      message d'erreur pour un probleme purement cosmetique.
+    */
   }
 
   try {
