@@ -219,6 +219,30 @@ const asOf =
   });
 
 /* =========================
+   Home status messages
+========================= */
+
+type HomeMessageLevel =
+  | "ok"
+  | "warning"
+  | "error";
+
+interface HomeMessage {
+  id: string;
+  level: HomeMessageLevel;
+  text: string;
+}
+
+/*
+  Populated by loadHomeMessages() from
+  diagnostics/homeMessages.json, written
+  by the nightly Housekeeping job and
+  its individual check scripts.
+*/
+const homeMessages =
+  ref<HomeMessage[]>([]);
+
+/* =========================
    Data normalization
 ========================= */
 
@@ -258,6 +282,15 @@ function normalizeAsOf(
     value.length > 0
     ? value
     : null;
+}
+
+function normalizeMessageLevel(
+  value: unknown
+): HomeMessageLevel {
+  return value === "warning" ||
+    value === "error"
+    ? value
+    : "ok";
 }
 
 /* =========================
@@ -583,6 +616,60 @@ async function loadHomeSummary() {
 }
 
 /* =========================
+   Load home messages
+========================= */
+
+/*
+  Deliberately soft-failing: a problem
+  loading the diagnostics feed should
+  never block the rest of the home page
+  (markets/FX/securities) from showing.
+*/
+async function loadHomeMessages() {
+  try {
+    const data =
+      await loadJSONFromFolder<any>(
+        "diagnostics",
+        "homeMessages.json"
+      );
+
+    homeMessages.value =
+      (
+        data?.messages ??
+        []
+      ).map(
+        (
+          message: any,
+          index: number
+        ) => ({
+          id:
+            String(
+              message.id ?? index
+            ),
+
+          level:
+            normalizeMessageLevel(
+              message.level
+            ),
+
+          text:
+            String(
+              message.text ?? ""
+            ),
+        })
+      );
+
+  } catch (err) {
+    console.warn(
+      "Failed to load home messages:",
+      err
+    );
+
+    homeMessages.value = [];
+  }
+}
+
+/* =========================
    Initialization
 ========================= */
 
@@ -603,7 +690,11 @@ async function initializeHome() {
     }
 
     await loadSettings();
-    await loadHomeSummary();
+
+    await Promise.all([
+      loadHomeSummary(),
+      loadHomeMessages(),
+    ]);
 
   } catch (err) {
     loadError.value =
@@ -1101,6 +1192,30 @@ function formatSecurityValue(
             )
           }}
         </div>
+
+        <!-- STATUS MESSAGES -->
+
+        <div
+          v-if="homeMessages.length"
+          class="status-panel"
+        >
+          <div class="status-list">
+            <div
+              v-for="message in homeMessages"
+              :key="message.id"
+              class="status-item"
+            >
+              <span
+                class="status-dot"
+                :class="message.level"
+              ></span>
+
+              <span class="status-text">
+                {{ message.text }}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1388,6 +1503,73 @@ span:not(:first-child) {
 
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+/* =========================
+   Status messages
+========================= */
+
+.status-panel {
+  box-sizing: border-box;
+
+  width: 100%;
+  max-width: 460px;
+  margin-top: 32px;
+
+  padding: 10px 14px;
+
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  background: var(--surface);
+}
+
+.status-list {
+  display: flex;
+  flex-direction: column;
+
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.status-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+
+  padding: 6px 0;
+
+  border-bottom:
+    1px solid
+    var(--border);
+
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.status-item:last-child {
+  border-bottom: none;
+}
+
+.status-dot {
+  flex-shrink: 0;
+  margin-top: 5px;
+
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-dot.ok {
+  background: var(--positive);
+}
+
+.status-dot.warning {
+  background: var(--warning);
+}
+
+.status-dot.error {
+  background: var(--negative);
 }
 
 /* =========================

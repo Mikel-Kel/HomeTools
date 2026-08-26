@@ -39,6 +39,7 @@
      STATUS
   ===================================================== */
   --positive: #15803d;
+  --warning: #d97706;
   --negative: #b91c1c;
   --neutral: #cfd8dc;
 
@@ -156,6 +157,7 @@ body {
      STATUS
   ===================================================== */
   --positive: #22c55e;
+  --warning: #fbbf24;
   --negative: #f87171;
   --neutral: #475569;
 
