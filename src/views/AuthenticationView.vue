@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
@@ -17,15 +17,6 @@ import {
   pickLocalDirectory,
   getLocalDirectory,
 } from "@/services/local/localDirectory";
-
-import {
-  readPublishedJSON,
-} from "@/services/publishedData/publishedData";
-
-import {
-  readS3JSON,
-  writeS3JSON,
-} from "@/services/s3/s3StorageAdapter";
 
 /* =========================
    Router
@@ -170,145 +161,6 @@ async function handleConnect() {
 
 function handleObjectStorageContinue() {
   router.push({ name: "home" });
-}
-
-/* =========================
-   TEST publishedData
-========================= */
-
-async function testPublishedData() {
-  try {
-    const data =
-      await readPublishedJSON<any>(
-        "spending/spending.json"
-      );
-
-    console.log(
-      "Published Data:",
-      data
-    );
-
-    alert(
-      data
-        ? "Published data loaded successfully"
-        : "Published data not found"
-    );
-
-  } catch (err) {
-    console.error(err);
-
-    alert("Published data read failed");
-  }
-}
-
-/* =========================
-   Hetzner Object Storage POC
-========================= */
-
-const s3Busy = ref(false);
-const s3Result = ref("");
-const s3Error = ref("");
-
-async function testS3Read() {
-  s3Busy.value = true;
-  s3Result.value = "";
-  s3Error.value = "";
-
-  try {
-    const data =
-      await readS3JSON<any>(
-        "settings/test.json"
-      );
-
-    s3Result.value =
-      JSON.stringify(data, null, 2);
-
-  } catch (err) {
-    console.error(err);
-
-    s3Error.value =
-      err instanceof Error
-        ? err.message
-        : String(err);
-
-  } finally {
-    s3Busy.value = false;
-  }
-}
-
-async function testS3Write() {
-  s3Busy.value = true;
-  s3Result.value = "";
-  s3Error.value = "";
-
-  try {
-    const payload = {
-      provider: "Hetzner Object Storage",
-      source: "HomeTools PWA",
-      device,
-      timestamp: new Date().toISOString(),
-      ok: true,
-    };
-
-    await writeS3JSON(
-      "poc/device-write.json",
-      payload
-    );
-
-    s3Result.value =
-      "WRITE OK: poc/device-write.json";
-
-  } catch (err) {
-    console.error(err);
-
-    s3Error.value =
-      err instanceof Error
-        ? err.message
-        : String(err);
-
-  } finally {
-    s3Busy.value = false;
-  }
-}
-
-async function testS3WriteThenRead() {
-  s3Busy.value = true;
-  s3Result.value = "";
-  s3Error.value = "";
-
-  try {
-    const payload = {
-      provider: "Hetzner Object Storage",
-      source: "HomeTools PWA",
-      device,
-      timestamp: new Date().toISOString(),
-      ok: true,
-    };
-
-    await writeS3JSON(
-      "poc/device-write.json",
-      payload
-    );
-
-    const data =
-      await readS3JSON<any>(
-        "poc/device-write.json"
-      );
-
-    s3Result.value =
-      JSON.stringify(data, null, 2);
-
-  } catch (err) {
-    console.error(err);
-
-    s3Error.value =
-      err instanceof Error
-        ? err.message
-        : String(err);
-
-  } finally {
-    s3Busy.value = false;
-  }
 }
 </script>
 
@@ -457,78 +309,11 @@ async function testS3WriteThenRead() {
       <h2>Hetzner Object Storage</h2>
 
       <p>
-        HomeTools will use the configured S3 bucket.
+        HomeTools will use the configured S3 bucket via the Tailscale proxy.
       </p>
 
       <button @click="handleObjectStorageContinue">
         Continue with Object Storage
-      </button>
-
-      <!-- Temporary POC controls -->
-
-      <div class="poc-panel">
-        <h3>Connection test</h3>
-
-        <div class="button-row">
-          <button
-            class="secondary-button"
-            @click="testS3Read"
-            :disabled="s3Busy"
-          >
-            Test READ
-          </button>
-
-          <button
-            class="secondary-button"
-            @click="testS3Write"
-            :disabled="s3Busy"
-          >
-            Test WRITE
-          </button>
-
-          <button
-            class="secondary-button"
-            @click="testS3WriteThenRead"
-            :disabled="s3Busy"
-          >
-            WRITE + READ
-          </button>
-        </div>
-
-        <p v-if="s3Busy">
-          Testing Object Storage…
-        </p>
-
-        <div
-          v-if="s3Result"
-          class="result"
-        >
-          <strong>S3 result</strong>
-
-          <pre>{{ s3Result }}</pre>
-        </div>
-
-        <div
-          v-if="s3Error"
-          class="error result"
-        >
-          <strong>S3 error</strong>
-
-          <pre>{{ s3Error }}</pre>
-        </div>
-      </div>
-    </section>
-
-    <!-- Temporary existing test -->
-
-    <section class="test-section">
-      <h2>Published data test</h2>
-
-      <button
-        class="secondary-button"
-        @click="testPublishedData"
-      >
-        Test publishedData
       </button>
     </section>
   </div>
@@ -546,13 +331,11 @@ async function testS3WriteThenRead() {
 ========================================================= */
 
 .backend-section,
-.connection-section,
-.test-section {
+.connection-section {
   padding-bottom: 1.25rem;
 }
 
-.connection-section,
-.test-section {
+.connection-section {
   margin-top: 1.5rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
@@ -561,11 +344,6 @@ async function testS3WriteThenRead() {
 h2 {
   margin: 0;
   font-size: 1.05rem;
-}
-
-h3 {
-  margin: 0;
-  font-size: 0.95rem;
 }
 
 .hint {
@@ -685,39 +463,6 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-}
-
-/* =========================================================
-   POC
-========================================================= */
-
-.poc-panel {
-  margin-top: 1.5rem;
-  padding: 1rem;
-
-  border: 1px solid var(--border);
-  border-radius: 10px;
-
-  background: var(--surface-soft);
-}
-
-.result {
-  margin-top: 1rem;
-}
-
-pre {
-  margin-top: 0.5rem;
-  padding: 0.75rem;
-
-  background: var(--surface);
-  color: var(--text);
-
-  border: 1px solid var(--border);
-  border-radius: 8px;
-
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 /* =========================================================
