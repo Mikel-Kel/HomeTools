@@ -12,7 +12,7 @@ import SpendingView from "../views/SpendingView.vue";
 import AllocationView from "../views/AllocationView.vue";
 import FollowUpView from "../views/FollowUpView.vue";
 import DocumentsArchiveView from "../views/DocumentsArchiveView.vue";
-import EventLogView from "../views/devtools/EventLogView.vue";
+import EventLogView from "../views/EventLogView.vue";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),

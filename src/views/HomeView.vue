@@ -898,7 +898,7 @@ function formatSecurityValue(
           <li>
             <router-link
               to="/events"
-              class="menu-item dev"
+              class="menu-item"
             >
               <AppIcon
                 name="pages_warning"
