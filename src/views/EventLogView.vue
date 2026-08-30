@@ -42,7 +42,7 @@ import {
        "job": "Housekeeping",
        "summary": "green",
        "lines": [
-         { "time": "23:10:02", "level": "INFO", "text": "Housekeeping started" },
+         { "time": "23:10:02", "job": "CLEAN-UP", "level": "INFO", "text": "Housekeeping started" },
          ...
        ]
      }
@@ -82,6 +82,7 @@ interface RunSummary {
 
 interface LogLine {
   time: string | null;
+  job: string;
   level: LineLevel;
   text: string;
 }
@@ -205,6 +206,11 @@ function normalizeRun(
             typeof line?.time === "string"
               ? line.time
               : null,
+
+          job:
+            typeof line?.job === "string"
+              ? line.job.trim()
+              : "",
 
           level:
             normalizeLineLevel(
@@ -493,6 +499,13 @@ function healthLabel(
           ></span>
 
           <span
+            v-if="line.job"
+            class="log-job"
+          >
+            {{ line.job }}
+          </span>
+
+          <span
             v-if="line.time"
             class="log-time"
           >
@@ -666,6 +679,21 @@ function healthLabel(
   flex-shrink: 0;
 
   color: var(--text-muted);
+}
+
+.log-job {
+  flex-shrink: 0;
+
+  padding: 0 6px;
+  border-radius: 4px;
+
+  background: var(--primary-soft);
+  color: var(--primary);
+
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .log-text {
