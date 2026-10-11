@@ -64,6 +64,11 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 - `events/` : événements émis par la PWA dans le backend actif, traités côté Mac (`pullObjectStorageEvents`, `processEvents`,
   `processEvent_*`). Nom de fichier préfixé `PWA-` hors Local Drive (`src/utils/eventFileName.ts`).
   Sous-dossiers : `pending`, `control`, `processing`, `processed`, `rejected`, `status`.
+- Demande de ré-allocation : `events/[PWA-]REA_<AAAAMMJJHHMMSS>_<FITID>.json` (FITID complet dans le nom). Le badge « Pending »
+  de `FollowUpDetails.vue` est déduit du stockage, jamais de l'appareil : REA encore présent à la racine de `events/` (demandé),
+  ou `pending: true` sur la ligne dans `allocations/budget/FollowUpDetails-<année>.json` (traité, en attente de ré-allocation).
+  Le backend publie `FollowUpDetails` avant de retirer le REA de `events/`. Les allocations d'un mouvement en attente sont
+  conservées jusqu'à la release qui les remplace.
 - `events/control/` : en Object Storage, toute écriture sous `events/`, `allocations/drafts/` ou `allocations/released/` émet
   un événement `STORAGE_PULL_REQUESTED` pour que le Mac rapatrie les fichiers (`src/services/s3/storagePullRequest.ts`).
   Le champ `paths` y est un alias de compatibilité de `downloadPaths`.
@@ -74,9 +79,8 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 
 - `VITE_PROXY_API_KEY` est en clair dans le bundle public. Objectif : la retirer du build et la stocker dans un coffre chiffré
   (PBKDF2 / AES-GCM, verrouillage après inactivité), saisie une fois par appareil. **Ce coffre reste à construire.**
-- Écritures « pending » fantômes : un iPad affiche des écritures en pending absentes des données de référence (Object Storage).
-  Pistes : état pending persisté en localStorage/sessionStorage jamais purgé, fichiers homonymes en double sur Google Drive
-  (create au lieu d'update).
+- Google Drive : `listGoogleFilesInFolder` ne gère pas la pagination et `findGoogleFileByName` prend le premier résultat sans tri ;
+  un fichier homonyme en double (create au lieu d'update) est donc possible, et lu de façon arbitraire.
 - Le contrôle de version ne s'exécute qu'en Local Drive (`versionGuard.ts` sort tant qu'aucun dossier local n'est choisi).
 - Dépendances déclarées mais importées nulle part : `@aws-sdk/client-s3`, `axios`, `idb-keyval`.
 

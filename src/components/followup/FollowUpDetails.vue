@@ -16,10 +16,6 @@ import {
 } from "@/composables/useAppBootstrap";
 
 import {
-  useDriveJsonFile,
-} from "@/composables/useDriveJsonFile";
-
-import {
   useDriveWatcher,
 } from "@/composables/useDriveWatcher";
 
@@ -36,7 +32,9 @@ import {
 } from "@/composables/useParties";
 
 import {
+  listFiles,
   loadJSONFromFolder,
+  saveJSONToFolder,
 } from "@/services/driveAdapter";
 
 import {
@@ -59,6 +57,7 @@ interface FollowUpDetailItem {
   bankDescription: string;
   partyId: number | null;
   tagId: number | null;
+  pending?: boolean;
 }
 
 interface FollowUpDetailsFile {
@@ -66,18 +65,6 @@ interface FollowUpDetailsFile {
   updatedAt?: string;
   year: number;
   items: FollowUpDetailItem[];
-}
-
-interface SpendingItem {
-  id?: string;
-  fitid?: string;
-}
-
-interface SpendingFile {
-  version?: number;
-  generatedAt?: string;
-  count?: number;
-  items: SpendingItem[];
 }
 
 interface MonthGroup {
@@ -155,7 +142,7 @@ const detailsRemoteState =
     null
   );
 
-const spendingRemoteState =
+const eventsRemoteState =
   ref<string | null>(
     null
   );
@@ -193,57 +180,81 @@ let fxTimer:
    PENDING REALLOCATIONS
 ========================================================= */
 
-const PENDING_KEY =
-  "pendingReallocations";
+const EVENTS_FOLDER =
+  "events";
 
 /*
-  État local transitoire.
-
-  Il est créé immédiatement après l’écriture de l’événement
-  REA afin d’afficher Pending sans attendre le traitement
-  backend.
-
-  Dès que le FITID apparaît dans spending.json, cette entrée
-  locale est supprimée car spending.json devient la source
-  de vérité.
+  Nom d’un événement REA :
+    [PWA-]REA_<AAAAMMJJHHMMSS>_<FITID>.json
 */
-const localPendingReallocationIds =
-  ref<Map<string, number>>(
-    loadPending()
+const REA_EVENT_FILE_PATTERN =
+  /^(?:PWA-)?REA_\d{14}_(.+)\.json$/;
+
+/*
+  FITID dont l’événement REA attend encore son traitement
+  dans events/.
+
+  Cet état est relu depuis le stockage : aucun pending
+  n’est conservé sur l’appareil. Le backend retire le
+  fichier de events/ une fois le REA traité ; le pending
+  est alors porté par FollowUpDetails.
+*/
+const requestedReallocationIds =
+  ref<Set<string>>(
+    new Set()
   );
 
 /*
-  FITID présents dans spending.json.
-
-  Un mouvement présent dans spending.json est non alloué
-  ou revenu dans le workflow Spending après une demande
-  de réallocation.
+  Demandes dont l’écriture est en cours, pour ignorer
+  un second appui sur la même ligne.
 */
-const spendingPendingIds =
-  ref<Set<string>>(
-    new Set()
+const reallocationRequestsInFlight =
+  new Set<string>();
+
+/*
+  FITID que le backend exporte comme pending dans
+  FollowUpDetails : le REA est traité, le mouvement attend
+  sa nouvelle allocation et conserve les précédentes.
+*/
+const backendPendingIds =
+  computed<Set<string>>(
+    () => {
+      const ids =
+        new Set<string>();
+
+      for (
+        const item
+        of raw.value?.items ?? []
+      ) {
+        if (item.pending === true) {
+          ids.add(
+            item.allocationId
+          );
+        }
+      }
+
+      return ids;
+    }
   );
 
 /*
   État final utilisé dans le template.
 
   Il combine :
-  - les demandes locales encore en transit ;
-  - les FITID réellement présents dans spending.json.
+  - les demandes encore en attente dans events/ ;
+  - les FITID exportés comme pending par le backend.
 */
 const pendingReallocationIds =
   computed<Set<string>>(
     () => {
       const ids =
         new Set<string>(
-          spendingPendingIds.value
+          backendPendingIds.value
         );
 
       for (
         const id
-        of localPendingReallocationIds
-          .value
-          .keys()
+        of requestedReallocationIds.value
       ) {
         ids.add(id);
       }
@@ -251,59 +262,6 @@ const pendingReallocationIds =
       return ids;
     }
   );
-
-function loadPending():
-  Map<string, number> {
-
-  try {
-    const storedValue =
-      localStorage.getItem(
-        PENDING_KEY
-      );
-
-    if (!storedValue) {
-      return new Map();
-    }
-
-    const parsed =
-      JSON.parse(
-        storedValue
-      );
-
-    if (!Array.isArray(parsed)) {
-      return new Map();
-    }
-
-    return new Map(
-      parsed
-        .filter(
-          entry =>
-            Array.isArray(entry) &&
-            entry.length >= 2
-        )
-        .map(
-          entry => [
-            String(entry[0]),
-            Number(entry[1]),
-          ]
-        )
-    );
-
-  } catch {
-    return new Map();
-  }
-}
-
-function savePending(
-  map: Map<string, number>
-) {
-  localStorage.setItem(
-    PENDING_KEY,
-    JSON.stringify(
-      [...map.entries()]
-    )
-  );
-}
 
 /* =========================================================
    ROW ACTIONS
@@ -376,14 +334,8 @@ function buildEventFileName(
       "0"
     );
 
-  const shortAllocationId =
-    allocationId.slice(
-      0,
-      12
-    );
-
   const baseFileName =
-    `REA_${YYYY}${MM}${DD}${HH}${mm}${ss}_${shortAllocationId}.json`;
+    `REA_${YYYY}${MM}${DD}${HH}${mm}${ss}_${allocationId}.json`;
 
   return prefixEventFileName(
     baseFileName
@@ -399,6 +351,9 @@ async function requestReallocation(
 ) {
   if (
     pendingReallocationIds.value.has(
+      item.allocationId
+    ) ||
+    reallocationRequestsInFlight.has(
       item.allocationId
     )
   ) {
@@ -422,6 +377,10 @@ async function requestReallocation(
   if (!confirmed) {
     return;
   }
+
+  reallocationRequestsInFlight.add(
+    item.allocationId
+  );
 
   try {
     const event = {
@@ -453,31 +412,22 @@ async function requestReallocation(
       2. writeS3JSON crée automatiquement un
          STORAGE_PULL_REQUESTED ciblant ce fichier.
     */
-    const {
-      save,
-    } =
-      useDriveJsonFile(
-        "events",
-        fileName
-      );
-
-    await save(event);
+    await saveJSONToFolder(
+      EVENTS_FOLDER,
+      fileName,
+      event
+    );
 
     /*
-      Pending immédiat, sans attendre que le backend
-      crée le draft et republie spending.json.
+      Pending immédiat : l’événement vient d’être écrit
+      dans events/. Le watcher confirme ensuite cet état
+      à partir du contenu réel du dossier.
     */
-    localPendingReallocationIds
-      .value
-      .set(
+    requestedReallocationIds.value =
+      new Set([
+        ...requestedReallocationIds.value,
         item.allocationId,
-        Date.now()
-      );
-
-    savePending(
-      localPendingReallocationIds
-        .value
-    );
+      ]);
 
     activeRowFitid.value =
       null;
@@ -492,104 +442,77 @@ async function requestReallocation(
       err instanceof Error
         ? err.message
         : String(err);
+
+  } finally {
+    reallocationRequestsInFlight.delete(
+      item.allocationId
+    );
   }
 }
 
 /* =========================================================
-   SPENDING PENDING STATE
+   REQUESTED REALLOCATIONS
 ========================================================= */
 
-function spendingItemId(
-  item: SpendingItem
-): string {
-  return String(
-    item.id ??
-    item.fitid ??
-    ""
-  ).trim();
-}
-
-async function loadSpendingPending() {
+async function loadRequestedReallocations() {
   if (!storageReady.value) {
-    spendingPendingIds.value =
+    requestedReallocationIds.value =
       new Set();
 
     return;
   }
 
   try {
-    const data =
-      await loadJSONFromFolder<
-        SpendingFile
-      >(
-        "spending",
-        "spending.json"
+    const files =
+      await listFiles(
+        EVENTS_FOLDER
       );
 
     const nextIds =
       new Set<string>();
 
-    for (
-      const item
-      of data?.items ?? []
-    ) {
+    for (const file of files) {
       const id =
-        spendingItemId(
-          item
-        );
+        REA_EVENT_FILE_PATTERN
+          .exec(file.name)
+          ?.[1];
 
       if (id) {
         nextIds.add(id);
       }
     }
 
-    spendingPendingIds.value =
-      nextIds;
-
     /*
-      Lorsque le FITID apparaît dans spending.json,
-      le backend a traité le REA.
-
-      Le pending local transitoire peut être retiré :
-      le pending reste alors porté par spending.json.
+      Un REA qui quitte events/ a été traité : le backend a
+      publié FollowUpDetails avec le pending avant de le
+      retirer. Si ce pending n’a pas encore été relu,
+      FollowUpDetails est rechargé avant de retirer la
+      demande, pour que le pending ne disparaisse pas entre
+      les deux watchers.
     */
-    let localStateChanged =
-      false;
-
-    for (
-      const id
-      of [
-        ...localPendingReallocationIds
-          .value
-          .keys(),
-      ]
-    ) {
-      if (
-        nextIds.has(id)
-      ) {
-        localPendingReallocationIds
-          .value
-          .delete(id);
-
-        localStateChanged =
-          true;
-      }
-    }
-
-    if (localStateChanged) {
-      savePending(
-        localPendingReallocationIds
-          .value
+    const someProcessedRequestUnseen =
+      [
+        ...requestedReallocationIds.value,
+      ].some(
+        id =>
+          !nextIds.has(id) &&
+          !backendPendingIds.value.has(id)
       );
+
+    if (someProcessedRequestUnseen) {
+      await loadDetails();
     }
+
+    requestedReallocationIds.value =
+      nextIds;
 
   } catch (err) {
     /*
       Une erreur temporaire de lecture ne doit pas
-      supprimer les pending locaux existants.
+      modifier l’état affiché.
     */
     console.error(
-      "Unable to load spending pending state",
+      "Unable to load requested reallocations",
       err
     );
   }
@@ -730,13 +653,13 @@ watch(
       raw.value =
         null;
 
-      spendingPendingIds.value =
+      requestedReallocationIds.value =
         new Set();
 
       detailsRemoteState.value =
         null;
 
-      spendingRemoteState.value =
+      eventsRemoteState.value =
         null;
 
       error.value =
@@ -745,7 +668,7 @@ watch(
       return;
     }
 
-    await loadSpendingPending();
+    await loadRequestedReallocations();
 
     if (
       props.subCategoryId !==
@@ -792,22 +715,18 @@ useDriveWatcher({
 });
 
 /*
-  spending.json watcher.
+  events watcher.
 
-  Après traitement REA :
-  - le FITID apparaît dans spending.json ;
-  - le pending reste affiché.
-
-  Après release de la nouvelle allocation :
-  - le FITID disparaît de spending.json ;
-  - le pending disparaît.
+  Entre la demande et son traitement par le backend,
+  l’événement REA est présent dans events/ : le pending
+  est visible par tous les clients du même stockage.
 */
 useDriveWatcher({
   folderId:
-    "spending",
+    EVENTS_FOLDER,
 
   lastKnownState:
-    spendingRemoteState,
+    eventsRemoteState,
 
   onChanged:
     async () => {
@@ -815,7 +734,7 @@ useDriveWatcher({
         return;
       }
 
-      await loadSpendingPending();
+      await loadRequestedReallocations();
     },
 });
 
@@ -1394,7 +1313,7 @@ async function initializeDetails() {
   try {
     await loadSettings();
 
-    await loadSpendingPending();
+    await loadRequestedReallocations();
 
     initialized.value =
       true;
