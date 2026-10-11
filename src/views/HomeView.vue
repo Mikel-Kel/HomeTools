@@ -17,6 +17,15 @@ const device =
   detectDevice();
 
 /* =========================
+   Number formatting
+========================= */
+
+import {
+  formatAmount,
+  formatInteger,
+} from "@/utils/amountFormat";
+
+/* =========================
    Storage access
 ========================= */
 
@@ -748,18 +757,6 @@ function performanceClass(
       value < 0,
   };
 }
-
-function formatSecurityValue(
-  value: number
-): string {
-  return value.toLocaleString(
-    undefined,
-    {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }
-  );
-}
 </script>
 
 <template>
@@ -945,9 +942,9 @@ function formatSecurityValue(
 
               <span class="summary-value">
                 {{
-                  Math
-                    .round(market.value)
-                    .toLocaleString()
+                  formatInteger(
+                    market.value
+                  )
                 }}
               </span>
 
@@ -1123,7 +1120,7 @@ function formatSecurityValue(
                 "
               >
                 {{
-                  formatSecurityValue(
+                  formatAmount(
                     security.value
                   )
                 }}

@@ -41,6 +41,11 @@ import {
   formatDate,
 } from "@/utils/dateFormat";
 
+import {
+  formatAmount,
+  formatInteger,
+} from "@/utils/amountFormat";
+
 /* =========================================================
    TYPES
 ========================================================= */
@@ -91,6 +96,18 @@ const props =
     maxMonth?: number | null;
     includeOffBudget?: boolean;
     labelFilter?: string;
+  }>();
+
+/* =========================================================
+   EMITS
+========================================================= */
+
+const emit =
+  defineEmits<{
+    (
+      event: "filtered-total",
+      total: number
+    ): void;
   }>();
 
 /* =========================================================
@@ -742,31 +759,6 @@ useDriveWatcher({
    FORMAT HELPERS
 ========================================================= */
 
-function fmt(
-  value: number
-): string {
-  return value.toLocaleString(
-    "en-GB",
-    {
-      minimumFractionDigits:
-        2,
-
-      maximumFractionDigits:
-        2,
-    }
-  );
-}
-
-function fmtInt(
-  value: number
-): string {
-  return Math
-    .round(value)
-    .toLocaleString(
-      "en-GB"
-    );
-}
-
 function fmtForeign(
   item: FollowUpDetailItem
 ): string {
@@ -775,17 +767,9 @@ function fmtForeign(
   }
 
   const value =
-    item.amountCcy
-      .toLocaleString(
-        "en-GB",
-        {
-          minimumFractionDigits:
-            2,
-
-          maximumFractionDigits:
-            2,
-        }
-      );
+    formatAmount(
+      item.amountCcy
+    );
 
   return item.currency
     ? `${value} ${item.currency}`
@@ -1079,6 +1063,42 @@ const filteredItems =
         );
     }
   );
+
+/* =========================================================
+   FILTERED TOTAL
+========================================================= */
+
+/*
+  Total des allocations affichées, tous mois confondus.
+
+  Il est transmis à la vue : lorsqu’un libellé est
+  recherché, le total ne peut pas venir des agrégats,
+  qui ignorent ce filtre.
+*/
+watch(
+  filteredItems,
+
+  list => {
+    emit(
+      "filtered-total",
+
+      list.reduce(
+        (
+          total,
+          item
+        ) =>
+          total +
+          item.amount,
+
+        0
+      )
+    );
+  },
+
+  {
+    immediate: true,
+  }
+);
 
 /* =========================================================
    MONTHLY GROUPS
@@ -1436,7 +1456,7 @@ onBeforeUnmount(
             "
           >
             {{
-              fmt(
+              formatAmount(
                 group.total
               )
             }}
@@ -1455,7 +1475,7 @@ onBeforeUnmount(
               "
             >
               {{
-                fmtInt(
+                formatInteger(
                   props
                     .monthlyBudgetMap![
                       group.key
@@ -1632,7 +1652,7 @@ onBeforeUnmount(
             >
               <span class="amount-value">
                 {{
-                  fmt(
+                  formatAmount(
                     item.amount
                   )
                 }}
@@ -1700,6 +1720,10 @@ onBeforeUnmount(
 
 /* =========================================================
    Grid layout
+
+   Mêmes colonnes et même marge horizontale que la grille
+   de FollowUpView, pour aligner les montants sur la ligne
+   Total et sur les en-têtes.
 ========================================================= */
 
 .grid {
@@ -1708,8 +1732,8 @@ onBeforeUnmount(
   grid-template-columns:
     220px
     1fr
-    100px
-    80px;
+    90px
+    90px;
 
   column-gap: 16px;
   align-items: center;
@@ -1723,7 +1747,7 @@ onBeforeUnmount(
   cursor: pointer;
   font-weight: 600;
   border-top: 1px solid var(--border);
-  padding: 6px 0;
+  padding: 6px 12px;
   font-size: 0.8rem;
   font-style: italic;
   color: var(--text-soft);
@@ -1765,7 +1789,7 @@ onBeforeUnmount(
 ========================================================= */
 
 .row {
-  padding: 3px 0;
+  padding: 3px 12px;
   transition: background 0.15s ease;
 }
 

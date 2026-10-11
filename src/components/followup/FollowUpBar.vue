@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { formatInteger } from "@/utils/amountFormat";
 
 /* =========================
    Props
@@ -100,7 +101,7 @@ const label = computed(() => {
   const v = Math.round(delta.value);
   if (v === 0) return "0";
 
-  const abs = Math.abs(v).toLocaleString();
+  const abs = formatInteger(Math.abs(v));
   return v < 0 ? `-${abs}` : abs;
 });
 

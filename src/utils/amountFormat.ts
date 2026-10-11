@@ -2,6 +2,13 @@
    Amount formatting utilities
 ========================================= */
 
+/*
+  Format unique des nombres dans toute l'application,
+  indépendant de la langue du navigateur :
+  apostrophe pour les milliers, point décimal.
+*/
+const NUMBER_LOCALE = "de-CH"
+
 export type AmountFormatOptions = {
   showPlus?: boolean
 }
@@ -20,9 +27,20 @@ export function formatAmount(
 
   return (
     sign +
-    amount.toLocaleString(undefined, {
+    amount.toLocaleString(NUMBER_LOCALE, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     })
   )
+}
+
+export function formatInteger(
+  value: number | null | undefined
+): string {
+
+  if (value == null) return ""
+
+  return Math
+    .round(value)
+    .toLocaleString(NUMBER_LOCALE)
 }

@@ -23,6 +23,7 @@ import { useAppParameters } from "@/composables/useAppParameters";
 import { loadJSONFromFolder } from "@/services/driveAdapter";
 
 import { formatDate } from "@/utils/dateFormat";
+import { formatAmount, formatInteger } from "@/utils/amountFormat";
 
 import type {
   CategoryNature,
@@ -269,13 +270,19 @@ function getMonthIndex():
   );
 }
 
-function fmt(
+/*
+  Montant de la ligne Total : arrondi, sauf au niveau du
+  détail des allocations, où il s’aligne sur les montants
+  à deux décimales affichés en dessous.
+*/
+function fmtTotal(
   value: number
 ): string {
 
-  return Math
-    .round(value)
-    .toLocaleString();
+  return selectedSubCategory.value ===
+    null
+    ? formatInteger(value)
+    : formatAmount(value);
 }
 
 function normalizeText(
@@ -963,8 +970,41 @@ function allocatedValue(
   return item.amount;
 }
 
+/*
+  Lorsqu’une sous-catégorie est sélectionnée, le libellé
+  recherché filtre les allocations du détail et non les
+  libellés de sous-catégories : la ligne Total reste
+  affichée, et son montant est celui des allocations
+  retenues, transmis par FollowUpDetails.
+*/
+const detailsFilteredTotal =
+  ref(0);
+
+const detailsLabelFilterActive =
+  computed(() =>
+    selectedSubCategory.value !==
+      null &&
+    normalizeText(
+      labelFilter.value
+    ) !== ""
+  );
+
+const totalSourceItems =
+  computed<FollowUpItem[]>(
+    () =>
+      detailsLabelFilterActive.value
+        ? baseItems.value
+        : items.value
+  );
+
 function totalAllocatedValue():
   number {
+
+  if (
+    detailsLabelFilterActive.value
+  ) {
+    return detailsFilteredTotal.value;
+  }
 
   return items.value.reduce(
     (
@@ -981,7 +1021,7 @@ const totalItem =
     FollowUpItem | null
   >(() => {
     if (
-      !items.value.length
+      !totalSourceItems.value.length
     ) {
       return null;
     }
@@ -990,7 +1030,7 @@ const totalItem =
       totalAllocatedValue();
 
     const budget =
-      items.value
+      totalSourceItems.value
         .map(
           item =>
             displayedBudget(
@@ -1031,7 +1071,7 @@ const currentNature =
 const scale =
   computed(() => {
     const values =
-      items.value.map(
+      totalSourceItems.value.map(
         item =>
           Math.abs(
             item.amount
@@ -1713,7 +1753,7 @@ watch(
             "
           >
             {{
-              fmt(
+              fmtTotal(
                 totalAllocatedValue()
               )
             }}
@@ -1727,7 +1767,7 @@ watch(
               "
             >
               {{
-                fmt(
+                formatInteger(
                   totalItem.budget
                 )
               }}
@@ -1795,7 +1835,7 @@ watch(
           "
         >
           {{
-            fmt(
+            formatInteger(
               allocatedValue(item)
             )
           }}
@@ -1810,7 +1850,7 @@ watch(
             "
           >
             {{
-              fmt(
+              formatInteger(
                 displayedBudget(
                   item
                 )!
@@ -1867,6 +1907,9 @@ watch(
       "
       :label-filter="
         labelFilter
+      "
+      @filtered-total="
+        detailsFilteredTotal = $event
       "
     />
   </div>
