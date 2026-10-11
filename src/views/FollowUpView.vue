@@ -271,18 +271,20 @@ function getMonthIndex():
 }
 
 /*
-  Montant de la ligne Total : arrondi, sauf au niveau du
-  détail des allocations, où il s’aligne sur les montants
-  à deux décimales affichés en dessous.
+  Montant de la ligne Total : arrondi, sauf lorsque des
+  allocations sont listées en dessous (sous-catégorie
+  sélectionnée ou recherche transversale), où il s’aligne
+  sur leurs montants à deux décimales.
 */
 function fmtTotal(
   value: number
 ): string {
 
-  return selectedSubCategory.value ===
-    null
-    ? formatInteger(value)
-    : formatAmount(value);
+  return selectedSubCategory.value !==
+      null ||
+    crossSearchActive.value
+    ? formatAmount(value)
+    : formatInteger(value);
 }
 
 function normalizeText(
@@ -806,7 +808,7 @@ function computeSubCategoryItems():
   return output;
 }
 
-const baseItems =
+const items =
   computed<FollowUpItem[]>(
     () => {
       if (
@@ -820,25 +822,32 @@ const baseItems =
     }
   );
 
-const items =
-  computed<FollowUpItem[]>(
-    () => {
-      const query =
-        normalizeText(
-          labelFilter.value
-        );
+/* =========================
+   Label search
+========================= */
 
-      if (!query) {
-        return baseItems.value;
-      }
+/*
+  Le libellé recherché filtre les allocations, jamais
+  les libellés de catégories.
 
-      return baseItems.value
-        .filter(item =>
-          normalizeText(
-            item.label
-          ).includes(query)
-        );
-    }
+  - Sous-catégorie sélectionnée : le détail par mois
+    est filtré.
+  - Sinon : recherche transversale. Les barres laissent
+    la place aux allocations trouvées dans le périmètre
+    sélectionné, regroupées par sous-catégorie.
+*/
+const labelSearchActive =
+  computed(() =>
+    normalizeText(
+      labelFilter.value
+    ) !== ""
+  );
+
+const crossSearchActive =
+  computed(() =>
+    labelSearchActive.value &&
+    selectedSubCategory.value ===
+      null
   );
 
 /* =========================
@@ -971,38 +980,18 @@ function allocatedValue(
 }
 
 /*
-  Lorsqu’une sous-catégorie est sélectionnée, le libellé
-  recherché filtre les allocations du détail et non les
-  libellés de sous-catégories : la ligne Total reste
-  affichée, et son montant est celui des allocations
-  retenues, transmis par FollowUpDetails.
+  Pendant une recherche de libellé, le montant de la
+  ligne Total est celui des allocations retenues,
+  transmis par FollowUpDetails : les agrégats ignorent
+  ce filtre.
 */
 const detailsFilteredTotal =
   ref(0);
 
-const detailsLabelFilterActive =
-  computed(() =>
-    selectedSubCategory.value !==
-      null &&
-    normalizeText(
-      labelFilter.value
-    ) !== ""
-  );
-
-const totalSourceItems =
-  computed<FollowUpItem[]>(
-    () =>
-      detailsLabelFilterActive.value
-        ? baseItems.value
-        : items.value
-  );
-
 function totalAllocatedValue():
   number {
 
-  if (
-    detailsLabelFilterActive.value
-  ) {
+  if (labelSearchActive.value) {
     return detailsFilteredTotal.value;
   }
 
@@ -1021,7 +1010,7 @@ const totalItem =
     FollowUpItem | null
   >(() => {
     if (
-      !totalSourceItems.value.length
+      !items.value.length
     ) {
       return null;
     }
@@ -1029,18 +1018,24 @@ const totalItem =
     const amount =
       totalAllocatedValue();
 
+    /*
+      En recherche transversale, les allocations trouvées
+      ne sont pas comparées au budget entier du périmètre.
+    */
     const budget =
-      totalSourceItems.value
-        .map(
-          item =>
-            displayedBudget(
-              item
-            ) ?? 0
-        )
-        .reduce(
-          (a, b) => a + b,
-          0
-        );
+      crossSearchActive.value
+        ? undefined
+        : items.value
+            .map(
+              item =>
+                displayedBudget(
+                  item
+                ) ?? 0
+            )
+            .reduce(
+              (a, b) => a + b,
+              0
+            );
 
     return {
       id: "total",
@@ -1071,7 +1066,7 @@ const currentNature =
 const scale =
   computed(() => {
     const values =
-      totalSourceItems.value.map(
+      items.value.map(
         item =>
           Math.abs(
             item.amount
@@ -1169,16 +1164,25 @@ const allocatedColumnLabel =
 const showAllocationsDetail =
   computed(() =>
     selectedCategory.value !==
-    "*"
+      "*" ||
+    crossSearchActive.value
   );
 
+/*
+  Sans catégorie sélectionnée, la recherche transversale
+  porte sur les catégories visibles avec les filtres
+  courants.
+*/
 const allocationCategoryIds =
   computed(() => {
     if (
       selectedCategory.value ===
       "*"
     ) {
-      return [];
+      return categoryChips.value.map(
+        category =>
+          category.id
+      );
     }
 
     return [
@@ -1793,7 +1797,8 @@ watch(
         v-for="item in items"
         v-if="
           selectedSubCategory ===
-          null
+            null &&
+          !crossSearchActive
         "
         :key="item.id"
         class="followup-grid followup-row"
@@ -1907,6 +1912,9 @@ watch(
       "
       :label-filter="
         labelFilter
+      "
+      :group-by-sub-category="
+        crossSearchActive
       "
       @filtered-total="
         detailsFilteredTotal = $event

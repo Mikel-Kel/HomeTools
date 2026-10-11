@@ -32,6 +32,10 @@ import {
 } from "@/composables/useParties";
 
 import {
+  useCategories,
+} from "@/composables/useCategories";
+
+import {
   listFiles,
   loadJSONFromFolder,
   saveJSONToFolder,
@@ -72,11 +76,28 @@ interface FollowUpDetailsFile {
   items: FollowUpDetailItem[];
 }
 
-interface MonthGroup {
+/*
+  Un groupe contient une ou plusieurs sections de lignes.
+
+  - Détail d’une sous-catégorie : un groupe par mois,
+    avec une seule section sans en-tête.
+  - Recherche transversale : un groupe par sous-catégorie,
+    avec une section par mois, chacune repliable.
+*/
+interface DetailSection {
   key: string;
   label: string;
   total: number;
   items: FollowUpDetailItem[];
+  collapsible: boolean;
+}
+
+interface DetailGroup {
+  key: string;
+  label: string;
+  total: number;
+  items: FollowUpDetailItem[];
+  sections: DetailSection[];
 }
 
 /* =========================================================
@@ -96,7 +117,27 @@ const props =
     maxMonth?: number | null;
     includeOffBudget?: boolean;
     labelFilter?: string;
+
+    /*
+      Recherche transversale : les allocations de toutes
+      les sous-catégories des catégories transmises sont
+      affichées, regroupées par sous-catégorie et non
+      par mois.
+    */
+    groupBySubCategory?: boolean;
   }>();
+
+/*
+  Le détail est affiché pour une sous-catégorie
+  sélectionnée, ou pour une recherche transversale.
+*/
+const detailsActive =
+  computed(() =>
+    props.subCategoryId !==
+      null ||
+    props.groupBySubCategory ===
+      true
+  );
 
 /* =========================================================
    EMITS
@@ -139,6 +180,9 @@ const tagsStore =
 
 const partiesStore =
   useParties();
+
+const categoriesStore =
+  useCategories();
 
 /* =========================================================
    STATE
@@ -540,10 +584,7 @@ async function loadRequestedReallocations() {
 ========================================================= */
 
 async function loadDetails() {
-  if (
-    props.subCategoryId ===
-    null
-  ) {
+  if (!detailsActive.value) {
     raw.value =
       null;
 
@@ -623,8 +664,7 @@ watch(
 
     if (
       storageReady.value &&
-      props.subCategoryId !==
-        null
+      detailsActive.value
     ) {
       await loadDetails();
     }
@@ -632,14 +672,18 @@ watch(
 );
 
 watch(
-  () =>
-    props.subCategoryId,
+  [
+    () =>
+      props.subCategoryId,
 
-  async value => {
+    detailsActive,
+  ],
+
+  async () => {
     activeRowFitid.value =
       null;
 
-    if (value === null) {
+    if (!detailsActive.value) {
       raw.value =
         null;
 
@@ -687,10 +731,7 @@ watch(
 
     await loadRequestedReallocations();
 
-    if (
-      props.subCategoryId !==
-      null
-    ) {
+    if (detailsActive.value) {
       await loadDetails();
     }
   }
@@ -718,8 +759,7 @@ useDriveWatcher({
     async () => {
       if (
         !storageReady.value ||
-        props.subCategoryId ===
-          null
+        !detailsActive.value
       ) {
         return;
       }
@@ -949,11 +989,14 @@ const filteredItems =
     () => {
       if (
         !raw.value ||
-        props.subCategoryId ===
-          null
+        !detailsActive.value
       ) {
         return [];
       }
+
+      const groupBySubCategory =
+        props.groupBySubCategory ===
+        true;
 
       const selectedCategoryIds =
         new Set(
@@ -978,9 +1021,17 @@ const filteredItems =
       return raw.value.items
         .filter(
           item => {
+            /*
+              En recherche transversale, seules les
+              catégories transmises sont retenues : une
+              liste vide ne signifie pas « toutes ».
+            */
             const matchesCategory =
-              selectedCategoryIds.size ===
-                0 ||
+              (
+                !groupBySubCategory &&
+                selectedCategoryIds.size ===
+                  0
+              ) ||
               selectedCategoryIds.has(
                 item.categoryId
               );
@@ -990,8 +1041,10 @@ const filteredItems =
             }
 
             if (
+              selectedSubCategoryId !==
+                null &&
               item.subCategoryId !==
-              selectedSubCategoryId
+                selectedSubCategoryId
             ) {
               return false;
             }
@@ -1101,117 +1154,282 @@ watch(
 );
 
 /* =========================================================
-   MONTHLY GROUPS
+   GROUPS
 ========================================================= */
 
-const monthlyGroups =
-  computed<MonthGroup[]>(
-    () => {
-      const map =
-        new Map<
-          string,
-          FollowUpDetailItem[]
-        >();
+function groupTotal(
+  list: FollowUpDetailItem[]
+): number {
+  return list.reduce(
+    (
+      total,
+      item
+    ) =>
+      total +
+      item.amount,
 
-      for (
-        const item
-        of filteredItems.value
-      ) {
-        const key =
+    0
+  );
+}
+
+/*
+  filteredItems est déjà trié par date décroissante :
+  les lignes de chaque groupe conservent cet ordre.
+*/
+function groupItems(
+  list: FollowUpDetailItem[],
+  keyOf: (
+    item: FollowUpDetailItem
+  ) => string
+): Map<
+  string,
+  FollowUpDetailItem[]
+> {
+  const map =
+    new Map<
+      string,
+      FollowUpDetailItem[]
+    >();
+
+  for (
+    const item
+    of list
+  ) {
+    const key =
+      keyOf(item);
+
+    if (!map.has(key)) {
+      map.set(
+        key,
+        []
+      );
+    }
+
+    map.get(key)!
+      .push(item);
+  }
+
+  return map;
+}
+
+/*
+  Sections mensuelles d’une liste d’allocations, du mois
+  le plus récent au plus ancien.
+*/
+function monthSections(
+  list: FollowUpDetailItem[],
+  keyPrefix: string,
+  collapsible: boolean
+): DetailSection[] {
+  return Array
+    .from(
+      groupItems(
+        list,
+
+        item =>
           monthKey(
             item.allocationDate
-          );
+          )
+      ).entries()
+    )
+    .sort(
+      (a, b) =>
+        b[0].localeCompare(
+          a[0]
+        )
+    )
+    .map(
+      ([
+        month,
+        monthItems,
+      ]) => ({
+        key:
+          `${keyPrefix}${month}`,
 
-        if (!map.has(key)) {
-          map.set(
-            key,
-            []
-          );
-        }
+        label:
+          monthLabel(
+            month
+          ),
 
-        map.get(key)!
-          .push(item);
-      }
+        total:
+          groupTotal(
+            monthItems
+          ),
 
-      return Array
+        items:
+          monthItems,
+
+        collapsible,
+      })
+    );
+}
+
+const monthGroups =
+  computed<DetailGroup[]>(
+    () =>
+      monthSections(
+        filteredItems.value,
+        "",
+        false
+      ).map(
+        section => ({
+          key:
+            section.key,
+
+          label:
+            section.label,
+
+          total:
+            section.total,
+
+          items:
+            section.items,
+
+          sections:
+            [section],
+        })
+      )
+  );
+
+/*
+  Recherche transversale : un groupe par sous-catégorie,
+  dans l’ordre habituel des catégories puis des
+  sous-catégories, détaillé par mois.
+*/
+const subCategoryGroups =
+  computed<DetailGroup[]>(
+    () =>
+      Array
         .from(
-          map.entries()
+          groupItems(
+            filteredItems.value,
+
+            item =>
+              `${item.categoryId}-${item.subCategoryId}`
+          ).entries()
         )
         .map(
           ([
             key,
             list,
-          ]) => ({
-            key,
+          ]) => {
+            const category =
+              categoriesStore
+                .getCategory(
+                  list[0].categoryId
+                );
 
-            label:
-              monthLabel(
-                key
-              ),
+            const subCategory =
+              category
+                ?.subcategories
+                .find(
+                  item =>
+                    item.id ===
+                    list[0].subCategoryId
+                );
 
-            total:
-              list.reduce(
-                (
-                  total,
-                  item
-                ) =>
-                  total +
-                  item.amount,
+            return {
+              key,
 
-                0
-              ),
+              label:
+                `${
+                  category?.label ??
+                  `#${list[0].categoryId}`
+                } › ${
+                  subCategory?.label ??
+                  `#${list[0].subCategoryId}`
+                }`,
 
-            items:
-              list.sort(
-                (a, b) =>
-                  b.allocationDate
-                    .localeCompare(
-                      a.allocationDate
-                    )
-              ),
-          })
+              total:
+                groupTotal(list),
+
+              items:
+                list,
+
+              sections:
+                monthSections(
+                  list,
+                  `${key}|`,
+                  true
+                ),
+
+              categorySeq:
+                category?.seq ??
+                Number.MAX_SAFE_INTEGER,
+
+              subCategorySeq:
+                subCategory?.seq ??
+                Number.MAX_SAFE_INTEGER,
+            };
+          }
         )
         .sort(
           (a, b) =>
-            b.key.localeCompare(
-              a.key
+            a.categorySeq -
+              b.categorySeq ||
+            a.subCategorySeq -
+              b.subCategorySeq ||
+            a.key.localeCompare(
+              b.key
             )
-        );
-    }
+        )
+  );
+
+const detailGroups =
+  computed<DetailGroup[]>(
+    () =>
+      props.groupBySubCategory
+        ? subCategoryGroups.value
+        : monthGroups.value
   );
 
 /* =========================================================
    COLLAPSE
 ========================================================= */
 
-const openMonths =
+const openGroups =
   ref<Set<string>>(
     new Set()
   );
 
+/*
+  Les groupes et sections ouverts le restent lorsque la
+  liste change. À défaut, le premier groupe est ouvert,
+  ainsi que la première section de chaque groupe.
+*/
 watch(
-  monthlyGroups,
+  detailGroups,
 
   groups => {
-    if (!groups.length) {
-      openMonths.value =
-        new Set();
-
-      return;
-    }
+    const collapsibleSections =
+      (
+        group: DetailGroup
+      ) =>
+        group.sections.filter(
+          section =>
+            section.collapsible
+        );
 
     const availableKeys =
       new Set(
-        groups.map(
-          group =>
-            group.key
+        groups.flatMap(
+          group => [
+            group.key,
+
+            ...collapsibleSections(
+              group
+            ).map(
+              section =>
+                section.key
+            ),
+          ]
         )
       );
 
     const retained =
       new Set(
         [
-          ...openMonths.value,
+          ...openGroups.value,
         ].filter(
           key =>
             availableKeys.has(
@@ -1221,15 +1439,44 @@ watch(
       );
 
     if (
-      retained.size ===
-      0
+      groups.length &&
+      !groups.some(
+        group =>
+          retained.has(
+            group.key
+          )
+      )
     ) {
       retained.add(
         groups[0].key
       );
     }
 
-    openMonths.value =
+    for (
+      const group
+      of groups
+    ) {
+      const sections =
+        collapsibleSections(
+          group
+        );
+
+      if (
+        sections.length &&
+        !sections.some(
+          section =>
+            retained.has(
+              section.key
+            )
+        )
+      ) {
+        retained.add(
+          sections[0].key
+        );
+      }
+    }
+
+    openGroups.value =
       retained;
   },
 
@@ -1239,12 +1486,12 @@ watch(
   }
 );
 
-function toggleMonth(
+function toggleGroup(
   key: string
 ) {
   const next =
     new Set(
-      openMonths.value
+      openGroups.value
     );
 
   if (next.has(key)) {
@@ -1253,7 +1500,7 @@ function toggleMonth(
     next.add(key);
   }
 
-  openMonths.value =
+  openGroups.value =
     next;
 }
 
@@ -1338,10 +1585,7 @@ async function initializeDetails() {
     initialized.value =
       true;
 
-    if (
-      props.subCategoryId !==
-      null
-    ) {
+    if (detailsActive.value) {
       await loadDetails();
     }
 
@@ -1373,10 +1617,7 @@ onBeforeUnmount(
 
 <template>
   <section
-    v-if="
-      props.subCategoryId !==
-      null
-    "
+    v-if="detailsActive"
     class="details"
   >
     <div
@@ -1407,17 +1648,21 @@ onBeforeUnmount(
       <div
         v-for="
           group
-          in monthlyGroups
+          in detailGroups
         "
         :key="group.key"
         class="month-block"
       >
-        <!-- Month header -->
+        <!-- Group header -->
 
         <div
           class="grid month-header"
+          :class="{
+            primary:
+              props.groupBySubCategory
+          }"
           @click="
-            toggleMonth(
+            toggleGroup(
               group.key
             )
           "
@@ -1427,10 +1672,14 @@ onBeforeUnmount(
               col-label
               month-toggle
             "
+            :class="{
+              wide:
+                props.groupBySubCategory
+            }"
           >
             <span>
               {{
-                openMonths.has(
+                openGroups.has(
                   group.key
                 )
                   ? "▼"
@@ -1439,9 +1688,22 @@ onBeforeUnmount(
             </span>
 
             {{ group.label }}
+
+            <span
+              v-if="
+                props.groupBySubCategory
+              "
+              class="group-count"
+            >
+              ({{ group.items.length }})
+            </span>
           </div>
 
-          <div></div>
+          <div
+            v-if="
+              !props.groupBySubCategory
+            "
+          ></div>
 
           <div
             class="
@@ -1463,6 +1725,9 @@ onBeforeUnmount(
           </div>
 
           <div
+            v-if="
+              !props.groupBySubCategory
+            "
             class="
               col-budget
               amount
@@ -1490,187 +1755,254 @@ onBeforeUnmount(
           </div>
         </div>
 
-        <!-- Month rows -->
+        <!-- Group sections -->
 
-        <div
+        <template
           v-if="
-            openMonths.has(
+            openGroups.has(
               group.key
             )
           "
         >
-          <div
+          <template
             v-for="
-              (
-                item,
-                index
-              )
-              in group.items
+              section
+              in group.sections
             "
-            :key="
-              `${item.allocationId}-${index}`
-            "
-            class="grid row"
-            :class="{
-              active:
-                activeRowFitid ===
-                item.allocationId,
-
-              pending:
-                pendingReallocationIds.has(
-                  item.allocationId
-                )
-            }"
-            @click="
-              !pendingReallocationIds.has(
-                item.allocationId
-              ) &&
-              toggleRowAction(
-                item.allocationId
-              )
-            "
+            :key="section.key"
           >
+            <!-- Section header -->
+
             <div
-              class="
-                col-label
-                date-cell
+              v-if="section.collapsible"
+              class="grid month-header secondary"
+              @click="
+                toggleGroup(
+                  section.key
+                )
               "
             >
-              <span
-                v-if="
-                  pendingReallocationIds.has(
-                    item.allocationId
-                  )
-                "
-                class="pending-inline"
-              >
-                Pending
-              </span>
-
-              <button
-                v-else
-                type="button"
-                class="reallocate-btn"
-                :class="{
-                  visible:
-                    activeRowFitid ===
-                    item.allocationId
-                }"
-                title="Request allocation change"
-                @click.stop="
-                  requestReallocation(
-                    item
-                  )
+              <div
+                class="
+                  col-label
+                  month-toggle
                 "
               >
-                🔄
-              </button>
+                <span>
+                  {{
+                    openGroups.has(
+                      section.key
+                    )
+                      ? "▼"
+                      : "►"
+                  }}
+                </span>
 
-              <span class="date">
+                {{ section.label }}
+              </div>
+
+              <div></div>
+
+              <div
+                class="
+                  col-spent
+                  amount
+                "
+              >
                 {{
-                  formatDate(
-                    item.allocationDate,
-                    "text"
+                  formatAmount(
+                    section.total
                   )
                 }}
-              </span>
+              </div>
+
+              <div></div>
             </div>
 
-            <div class="desc-block">
-              <div class="desc-text">
-                <div class="desc">
-                  {{
-                    item.description ||
-                    "—"
-                  }}
-                </div>
+            <!-- Section rows -->
 
-                <div class="sub muted">
-                  {{
-                    partyLabel(
-                      item.partyId
+            <div
+              v-if="
+                !section.collapsible ||
+                openGroups.has(
+                  section.key
+                )
+              "
+            >
+              <div
+                v-for="
+                  (
+                    item,
+                    index
+                  )
+                  in section.items
+                "
+                :key="
+                  `${item.allocationId}-${index}`
+                "
+                class="grid row"
+                :class="{
+                  active:
+                    activeRowFitid ===
+                    item.allocationId,
+
+                  pending:
+                    pendingReallocationIds.has(
+                      item.allocationId
                     )
-                  }}
-
+                }"
+                @click="
+                  !pendingReallocationIds.has(
+                    item.allocationId
+                  ) &&
+                  toggleRowAction(
+                    item.allocationId
+                  )
+                "
+              >
+                <div
+                  class="
+                    col-label
+                    date-cell
+                  "
+                >
                   <span
                     v-if="
-                      item.bankDescription
+                      pendingReallocationIds.has(
+                        item.allocationId
+                      )
+                    "
+                    class="pending-inline"
+                  >
+                    Pending
+                  </span>
+
+                  <button
+                    v-else
+                    type="button"
+                    class="reallocate-btn"
+                    :class="{
+                      visible:
+                        activeRowFitid ===
+                        item.allocationId
+                    }"
+                    title="Request allocation change"
+                    @click.stop="
+                      requestReallocation(
+                        item
+                      )
                     "
                   >
-                    ·
+                    🔄
+                  </button>
+
+                  <span class="date">
                     {{
-                      item.bankDescription
+                      formatDate(
+                        item.allocationDate,
+                        "text"
+                      )
                     }}
                   </span>
                 </div>
-              </div>
 
-              <div class="tag-container">
-                <span
-                  v-if="
-                    item.tagId !==
-                    null
+                <div class="desc-block">
+                  <div class="desc-text">
+                    <div class="desc">
+                      {{
+                        item.description ||
+                        "—"
+                      }}
+                    </div>
+
+                    <div class="sub muted">
+                      {{
+                        partyLabel(
+                          item.partyId
+                        )
+                      }}
+
+                      <span
+                        v-if="
+                          item.bankDescription
+                        "
+                      >
+                        ·
+                        {{
+                          item.bankDescription
+                        }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="tag-container">
+                    <span
+                      v-if="
+                        item.tagId !==
+                        null
+                      "
+                      class="tag-chip"
+                      :class="{
+                        off:
+                          getTag(
+                            item.tagId
+                          )?.offBudget
+                      }"
+                    >
+                      {{
+                        tagLabel(
+                          item.tagId
+                        )
+                      }}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  class="
+                    col-spent
+                    amount
+                    amount-cell
                   "
-                  class="tag-chip"
-                  :class="{
-                    off:
-                      getTag(
-                        item.tagId
-                      )?.offBudget
-                  }"
-                >
-                  {{
-                    tagLabel(
-                      item.tagId
+                  @mouseenter="
+                    showFxPopover(
+                      $event,
+                      item
                     )
-                  }}
-                </span>
+                  "
+                  @mouseleave="
+                    closeFxPopover
+                  "
+                  @click.stop="
+                    showFxPopover(
+                      $event,
+                      item
+                    )
+                  "
+                >
+                  <span class="amount-value">
+                    {{
+                      formatAmount(
+                        item.amount
+                      )
+                    }}
+                  </span>
+
+                  <span
+                    v-if="
+                      isForeign(
+                        item
+                      )
+                    "
+                    class="ccy-dot"
+                  ></span>
+                </div>
+
+                <div></div>
               </div>
             </div>
-
-            <div
-              class="
-                col-spent
-                amount
-                amount-cell
-              "
-              @mouseenter="
-                showFxPopover(
-                  $event,
-                  item
-                )
-              "
-              @mouseleave="
-                closeFxPopover
-              "
-              @click.stop="
-                showFxPopover(
-                  $event,
-                  item
-                )
-              "
-            >
-              <span class="amount-value">
-                {{
-                  formatAmount(
-                    item.amount
-                  )
-                }}
-              </span>
-
-              <span
-                v-if="
-                  isForeign(
-                    item
-                  )
-                "
-                class="ccy-dot"
-              ></span>
-            </div>
-
-            <div></div>
-          </div>
-        </div>
+          </template>
+        </template>
       </div>
 
       <div
@@ -1759,10 +2091,38 @@ onBeforeUnmount(
   background: var(--primary-soft);
 }
 
+/*
+  Recherche transversale : la sous-catégorie est le premier
+  niveau, les mois sont en retrait au second niveau.
+*/
+.month-header.primary {
+  font-style: normal;
+  color: var(--text);
+  opacity: 1;
+}
+
+.month-header.secondary {
+  border-top: none;
+  padding-left: 30px;
+}
+
 .month-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/*
+  Recherche transversale : le libellé « Catégorie ›
+  Sous-catégorie » occupe aussi la colonne centrale.
+*/
+.month-toggle.wide {
+  grid-column: span 2;
+}
+
+.group-count {
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 /* =========================================================
