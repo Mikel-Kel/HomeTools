@@ -174,6 +174,9 @@ const analysisScope =
 const labelFilter =
   ref("");
 
+const pendingOnly =
+  ref(false);
+
 const filtersOpen =
   ref(true);
 
@@ -823,12 +826,12 @@ const items =
   );
 
 /* =========================
-   Label search
+   Allocation search
 ========================= */
 
 /*
-  Le libellé recherché filtre les allocations, jamais
-  les libellés de catégories.
+  Le libellé recherché et le filtre Pending portent sur
+  les allocations, jamais sur les libellés de catégories.
 
   - Sous-catégorie sélectionnée : le détail par mois
     est filtré.
@@ -836,8 +839,9 @@ const items =
     la place aux allocations trouvées dans le périmètre
     sélectionné, regroupées par sous-catégorie.
 */
-const labelSearchActive =
+const allocationSearchActive =
   computed(() =>
+    pendingOnly.value ||
     normalizeText(
       labelFilter.value
     ) !== ""
@@ -845,10 +849,43 @@ const labelSearchActive =
 
 const crossSearchActive =
   computed(() =>
-    labelSearchActive.value &&
+    allocationSearchActive.value &&
     selectedSubCategory.value ===
       null
   );
+
+/* =========================
+   Reset
+========================= */
+
+function resetFilters() {
+  year.value =
+    currentYear;
+
+  analysisScope.value =
+    "YTD";
+
+  natureFilter.value =
+    "E";
+
+  includeOffBudget.value =
+    true;
+
+  showSecondaryCategories.value =
+    false;
+
+  labelFilter.value =
+    "";
+
+  pendingOnly.value =
+    false;
+
+  selectedCategory.value =
+    "*";
+
+  selectedSubCategory.value =
+    null;
+}
 
 /* =========================
    Budget computation
@@ -980,7 +1017,7 @@ function allocatedValue(
 }
 
 /*
-  Pendant une recherche de libellé, le montant de la
+  Pendant une recherche d’allocations, le montant de la
   ligne Total est celui des allocations retenues,
   transmis par FollowUpDetails : les agrégats ignorent
   ce filtre.
@@ -991,7 +1028,7 @@ const detailsFilteredTotal =
 function totalAllocatedValue():
   number {
 
-  if (labelSearchActive.value) {
+  if (allocationSearchActive.value) {
     return detailsFilteredTotal.value;
   }
 
@@ -1161,18 +1198,18 @@ const allocatedColumnLabel =
    Details
 ========================= */
 
-const showAllocationsDetail =
-  computed(() =>
-    selectedCategory.value !==
-      "*" ||
-    crossSearchActive.value
-  );
-
 /*
-  Sans catégorie sélectionnée, la recherche transversale
-  porte sur les catégories visibles avec les filtres
-  courants.
+  FollowUpDetails est toujours monté : il n’affiche le
+  détail que pour une sous-catégorie ou une recherche,
+  mais il fournit en permanence le nombre d’écritures en
+  pending du périmètre courant.
+
+  Sans catégorie sélectionnée, ce périmètre est celui des
+  catégories visibles avec les filtres courants.
 */
+const pendingCount =
+  ref(0);
+
 const allocationCategoryIds =
   computed(() => {
     if (
@@ -1509,6 +1546,17 @@ watch(
           </span>
 
           <h2>Filters</h2>
+
+          <button
+            v-if="filtersOpen"
+            type="button"
+            class="reset-button"
+            @click.stop="
+              resetFilters
+            "
+          >
+            Reset
+          </button>
         </header>
 
         <div
@@ -1651,6 +1699,32 @@ watch(
               placeholder="Search label…"
               autocomplete="off"
             />
+
+            <button
+              type="button"
+              class="scope-btn pending-toggle"
+              :class="{
+                active:
+                  pendingOnly
+              }"
+              :title="
+                pendingOnly
+                  ? 'Only pending reallocations'
+                  : 'Show only pending reallocations'
+              "
+              @click="
+                pendingOnly =
+                  !pendingOnly
+              "
+            >
+              {{
+                pendingCount === 0
+                  ? "Pending"
+                  : pendingCount === 1
+                    ? "1 pending"
+                    : `${pendingCount} pendings`
+              }}
+            </button>
           </div>
 
           <div class="category-block">
@@ -1888,9 +1962,6 @@ watch(
     />
 
     <FollowUpDetails
-      v-if="
-        showAllocationsDetail
-      "
       :year="year"
       :category-ids="
         allocationCategoryIds
@@ -1913,11 +1984,17 @@ watch(
       :label-filter="
         labelFilter
       "
+      :pending-only="
+        pendingOnly
+      "
       :group-by-sub-category="
         crossSearchActive
       "
       @filtered-total="
         detailsFilteredTotal = $event
+      "
+      @pending-count="
+        pendingCount = $event
       "
     />
   </div>
@@ -1982,6 +2059,47 @@ watch(
 
   color:
     var(--text-soft);
+}
+
+.reset-button {
+  padding:
+    2px 20px;
+
+  border-radius:
+    999px;
+
+  border:
+    1px solid
+    var(--border);
+
+  background:
+    var(--surface-soft);
+
+  color:
+    var(--text-soft);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    600;
+
+  cursor:
+    pointer;
+
+  transition:
+    all 0.15s ease;
+}
+
+.reset-button:hover {
+  background:
+    var(--primary-soft);
+
+  border-color:
+    var(--primary);
+
+  color:
+    var(--primary);
 }
 
 .filters-body {
@@ -2062,6 +2180,18 @@ watch(
 }
 
 .text-filter-row {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  gap:
+    1.5rem;
+
+  flex-wrap:
+    wrap;
+
   padding:
     4px 0 8px;
 }

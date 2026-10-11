@@ -119,6 +119,12 @@ const props =
     labelFilter?: string;
 
     /*
+      Ne retient que les allocations en attente de
+      réallocation.
+    */
+    pendingOnly?: boolean;
+
+    /*
       Recherche transversale : les allocations de toutes
       les sous-catégories des catégories transmises sont
       affichées, regroupées par sous-catégorie et non
@@ -130,6 +136,10 @@ const props =
 /*
   Le détail est affiché pour une sous-catégorie
   sélectionnée, ou pour une recherche transversale.
+
+  Les allocations de l’année sont chargées même lorsque
+  le détail n’est pas affiché : la vue en a besoin pour
+  le nombre d’écritures en pending.
 */
 const detailsActive =
   computed(() =>
@@ -148,6 +158,11 @@ const emit =
     (
       event: "filtered-total",
       total: number
+    ): void;
+
+    (
+      event: "pending-count",
+      count: number
     ): void;
   }>();
 
@@ -584,16 +599,6 @@ async function loadRequestedReallocations() {
 ========================================================= */
 
 async function loadDetails() {
-  if (!detailsActive.value) {
-    raw.value =
-      null;
-
-    error.value =
-      null;
-
-    return;
-  }
-
   if (!storageReady.value) {
     raw.value =
       null;
@@ -662,10 +667,7 @@ watch(
     detailsRemoteState.value =
       null;
 
-    if (
-      storageReady.value &&
-      detailsActive.value
-    ) {
+    if (storageReady.value) {
       await loadDetails();
     }
   }
@@ -679,23 +681,9 @@ watch(
     detailsActive,
   ],
 
-  async () => {
+  () => {
     activeRowFitid.value =
       null;
-
-    if (!detailsActive.value) {
-      raw.value =
-        null;
-
-      error.value =
-        null;
-
-      return;
-    }
-
-    if (storageReady.value) {
-      await loadDetails();
-    }
   }
 );
 
@@ -731,9 +719,7 @@ watch(
 
     await loadRequestedReallocations();
 
-    if (detailsActive.value) {
-      await loadDetails();
-    }
+    await loadDetails();
   }
 );
 
@@ -757,10 +743,7 @@ useDriveWatcher({
 
   onChanged:
     async () => {
-      if (
-        !storageReady.value ||
-        !detailsActive.value
-      ) {
+      if (!storageReady.value) {
         return;
       }
 
@@ -982,21 +965,21 @@ function closeFxPopover() {
    FILTERED ITEMS
 ========================================================= */
 
-const filteredItems =
+/*
+  Allocations du périmètre courant : catégories,
+  sous-catégorie, période, off-budget et libellé.
+
+  Le filtre Pending n’est pas appliqué ici, pour pouvoir
+  compter les écritures en pending de ce périmètre.
+*/
+const scopedItems =
   computed<
     FollowUpDetailItem[]
   >(
     () => {
-      if (
-        !raw.value ||
-        !detailsActive.value
-      ) {
+      if (!raw.value) {
         return [];
       }
-
-      const groupBySubCategory =
-        props.groupBySubCategory ===
-        true;
 
       const selectedCategoryIds =
         new Set(
@@ -1021,22 +1004,11 @@ const filteredItems =
       return raw.value.items
         .filter(
           item => {
-            /*
-              En recherche transversale, seules les
-              catégories transmises sont retenues : une
-              liste vide ne signifie pas « toutes ».
-            */
-            const matchesCategory =
-              (
-                !groupBySubCategory &&
-                selectedCategoryIds.size ===
-                  0
-              ) ||
-              selectedCategoryIds.has(
+            if (
+              !selectedCategoryIds.has(
                 item.categoryId
-              );
-
-            if (!matchesCategory) {
+              )
+            ) {
               return false;
             }
 
@@ -1116,6 +1088,73 @@ const filteredItems =
         );
     }
   );
+
+/*
+  Allocations affichées.
+*/
+const filteredItems =
+  computed<
+    FollowUpDetailItem[]
+  >(
+    () => {
+      if (!detailsActive.value) {
+        return [];
+      }
+
+      if (!props.pendingOnly) {
+        return scopedItems.value;
+      }
+
+      return scopedItems.value
+        .filter(
+          item =>
+            pendingReallocationIds.value.has(
+              item.allocationId
+            )
+        );
+    }
+  );
+
+/* =========================================================
+   PENDING COUNT
+========================================================= */
+
+/*
+  Nombre d’écritures en pending dans le périmètre
+  courant. Une écriture répartie sur plusieurs
+  allocations ne compte qu’une fois.
+*/
+const pendingCount =
+  computed(() =>
+    new Set(
+      scopedItems.value
+        .filter(
+          item =>
+            pendingReallocationIds.value.has(
+              item.allocationId
+            )
+        )
+        .map(
+          item =>
+            item.allocationId
+        )
+    ).size
+  );
+
+watch(
+  pendingCount,
+
+  count => {
+    emit(
+      "pending-count",
+      count
+    );
+  },
+
+  {
+    immediate: true,
+  }
+);
 
 /* =========================================================
    FILTERED TOTAL
@@ -1585,9 +1624,7 @@ async function initializeDetails() {
     initialized.value =
       true;
 
-    if (detailsActive.value) {
-      await loadDetails();
-    }
+    await loadDetails();
 
   } catch (err) {
     console.error(
