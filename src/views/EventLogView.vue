@@ -684,7 +684,10 @@ function healthLabel(
 .log-job {
   flex-shrink: 0;
 
+  /* 8 caractères + letter-spacing + padding horizontal */
+  min-width: calc(8ch + 0.16em + 12px);
   padding: 0 6px;
+  text-align: center;
   border-radius: 4px;
 
   background: var(--primary-soft);
