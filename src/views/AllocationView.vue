@@ -277,6 +277,18 @@ const allocationDate =
 const showAllocationDate =
   ref(false);
 
+/*
+  Allocation en cours de modification : ses valeurs sont
+  reprises dans le formulaire, qui propose alors de la
+  remplacer ou d’ajouter une nouvelle allocation.
+*/
+const editingAllocationId =
+  computed(() =>
+    allocation.value
+      ?.editingAllocationId.value ??
+    null
+  );
+
 const remainingAmount =
   computed(() =>
     allocation.value
@@ -611,12 +623,27 @@ function tagLabel(
 ========================= */
 
 async function onAddAllocation() {
+  await commitAllocation(false);
+}
+
+async function onReplaceAllocation() {
+  await commitAllocation(true);
+}
+
+async function commitAllocation(
+  replaceEdited: boolean
+) {
   if (!allocation.value) {
     return;
   }
 
-  await allocation.value
-    .addAllocation();
+  if (replaceEdited) {
+    await allocation.value
+      .replaceAllocation();
+  } else {
+    await allocation.value
+      .addAllocation();
+  }
 
   showAllocationDate.value =
     false;
@@ -653,6 +680,50 @@ async function onRemoveAllocation(
 ) {
   await allocation.value
     ?.removeAllocation(index);
+
+  if (
+    editingAllocationId.value ===
+    null
+  ) {
+    showAllocationDate.value =
+      false;
+  }
+}
+
+/*
+  Un second appui sur la même allocation annule la
+  modification.
+*/
+function onEditAllocation(
+  index: number
+) {
+  if (!allocation.value) {
+    return;
+  }
+
+  const item =
+    allocations.value[index];
+
+  if (
+    item?.id ===
+    editingAllocationId.value
+  ) {
+    allocation.value
+      .cancelEdit();
+
+    showAllocationDate.value =
+      false;
+
+    return;
+  }
+
+  allocation.value
+    .editAllocation(index);
+
+  showAllocationDate.value =
+    allocation.value
+      .allocationDate.value !==
+    null;
 }
 
 async function closeView() {
@@ -906,10 +977,35 @@ async function closeView() {
             amount === 0
           "
           aria-label="Add allocation"
+          :title="
+            editingAllocationId
+              ? 'Add as a new allocation'
+              : 'Add allocation'
+          "
           @click="onAddAllocation"
         >
           <AppIcon
-            name="add"
+            name="add_element"
+            :size="24"
+          />
+        </button>
+
+        <button
+          v-if="editingAllocationId"
+          type="button"
+          class="theme-toggle"
+          :disabled="
+            isLocked ||
+            !categoryID ||
+            !subCategoryID ||
+            amount === 0
+          "
+          aria-label="Replace the edited allocation"
+          title="Replace the edited allocation"
+          @click="onReplaceAllocation"
+        >
+          <AppIcon
+            name="update_element"
             :size="24"
           />
         </button>
@@ -931,6 +1027,11 @@ async function closeView() {
               index
             ) in allocations"
             :key="allocationItem.id"
+            :class="{
+              editing:
+                allocationItem.id ===
+                editingAllocationId
+            }"
           >
             <td class="alloc-text">
               <div class="alloc-comment-row">
@@ -1008,7 +1109,25 @@ async function closeView() {
             <td class="alloc-action">
               <button
                 type="button"
+                class="alloc-edit"
                 :disabled="isLocked"
+                :title="
+                  allocationItem.id ===
+                    editingAllocationId
+                    ? 'Cancel edit'
+                    : 'Edit allocation'
+                "
+                @click="
+                  onEditAllocation(index)
+                "
+              >
+                ✎
+              </button>
+
+              <button
+                type="button"
+                :disabled="isLocked"
+                title="Remove allocation"
                 @click="
                   onRemoveAllocation(index)
                 "
@@ -1249,6 +1368,18 @@ async function closeView() {
   background: none;
   border: none;
   color: var(--negative);
+}
+
+.allocation-list button.alloc-edit {
+  color: var(--primary);
+}
+
+.allocation-list tr.editing {
+  background: var(--primary-soft);
+}
+
+.alloc-action {
+  white-space: nowrap;
 }
 
 .allocation-row:hover {

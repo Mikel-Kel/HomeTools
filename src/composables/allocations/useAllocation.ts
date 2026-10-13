@@ -26,6 +26,12 @@ type AllocationState =
 
 const loading = ref(true);
 
+/*
+  Commentaire attribué à une allocation saisie sans
+  commentaire.
+*/
+const DEFAULT_COMMENT = "Please comment";
+
 /* =========================
    Helpers
 ========================= */
@@ -80,6 +86,12 @@ export function useAllocation(
   const amount = ref(Math.abs(spendingAmount));
   const allocationDate = ref<string | null>(null);
   const allocatedTagID = ref<number | null>(null);
+
+  /*
+    Allocation dont les valeurs ont été reprises dans le
+    formulaire pour être modifiée.
+  */
+  const editingAllocationId = ref<string | null>(null);
 
   const lastSavedSnapshot = ref<string>("[]");
 
@@ -245,21 +257,51 @@ export function useAllocation(
      Mutations
   ========================= */
 
-  async function addAllocation() {
+  /*
+    Enregistre le contenu du formulaire.
+
+    replaceEdited :
+      true  → remplace l'allocation en cours de
+              modification, à sa position ;
+      false → ajoute une nouvelle allocation, même si
+              le formulaire a été rempli à partir d'une
+              allocation existante.
+  */
+  async function commitAllocation(replaceEdited: boolean) {
     return runExclusive(async () => {
       if (!categoryID.value || !subCategoryID.value) return;
       if (!Number.isFinite(amount.value) || amount.value === 0) return;
 
-      allocations.value.push({
-        id: crypto.randomUUID(),
+      const editedIndex =
+        replaceEdited
+          ? allocations.value.findIndex(
+              a => a.id === editingAllocationId.value
+            )
+          : -1;
+
+      if (replaceEdited && editedIndex < 0) return;
+
+      const entry: Allocation = {
+        id:
+          editedIndex >= 0
+            ? allocations.value[editedIndex].id
+            : crypto.randomUUID(),
         categoryID: categoryID.value,
         subCategoryID: subCategoryID.value,
-        comment: comment.value.trim() || "Please comment",
+        comment: comment.value.trim() || DEFAULT_COMMENT,
         amount: Number(amount.value.toFixed(2)),
         allocationDate:
           allocationDate.value?.trim() || spendingDate,
         allocatedTagID: allocatedTagID.value
-      });
+      };
+
+      if (editedIndex >= 0) {
+        allocations.value.splice(editedIndex, 1, entry);
+      } else {
+        allocations.value.push(entry);
+      }
+
+      editingAllocationId.value = null;
 
       resetForm();
       recomputeLocalState();
@@ -280,6 +322,46 @@ export function useAllocation(
     });
   }
 
+  async function addAllocation() {
+    return commitAllocation(false);
+  }
+
+  async function replaceAllocation() {
+    return commitAllocation(true);
+  }
+
+  /*
+    Reprend dans le formulaire les valeurs d'une
+    allocation existante.
+  */
+  function editAllocation(index: number) {
+    const item = allocations.value[index];
+
+    if (!item) return;
+
+    editingAllocationId.value = item.id;
+
+    categoryID.value = item.categoryID;
+    subCategoryID.value = item.subCategoryID;
+    comment.value =
+      item.comment === DEFAULT_COMMENT
+        ? ""
+        : item.comment;
+    amount.value = item.amount;
+    allocationDate.value =
+      item.allocationDate &&
+      item.allocationDate !== spendingDate
+        ? item.allocationDate
+        : null;
+    allocatedTagID.value = item.allocatedTagID;
+  }
+
+  function cancelEdit() {
+    editingAllocationId.value = null;
+
+    resetForm();
+  }
+
   async function removeAllocation(index: number) {
     return runExclusive(async () => {
       if (
@@ -287,9 +369,20 @@ export function useAllocation(
         index >= allocations.value.length
       ) return;
 
-      allocations.value.splice(index, 1);
+      const [removed] =
+        allocations.value.splice(index, 1);
 
-      presetAmount();
+      /*
+        Le formulaire n'est pas modifié pendant la
+        modification d'une autre allocation.
+      */
+      if (removed.id === editingAllocationId.value) {
+        editingAllocationId.value = null;
+        resetForm();
+      } else if (editingAllocationId.value === null) {
+        presetAmount();
+      }
+
       recomputeLocalState();
     });
   }
@@ -363,6 +456,8 @@ export function useAllocation(
     allocationDate,
     allocatedTagID,
 
+    editingAllocationId,
+
     totalAllocated,
     remainingAmount,
     isBalanced,
@@ -378,6 +473,9 @@ export function useAllocation(
 
     loadDraft,
     addAllocation,
+    replaceAllocation,
+    editAllocation,
+    cancelEdit,
     removeAllocation,
     saveDraft
   };
