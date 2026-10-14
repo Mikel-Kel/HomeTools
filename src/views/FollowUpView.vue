@@ -18,6 +18,7 @@ import { useDriveWatcher } from "@/composables/useDriveWatcher";
 
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useCategories } from "@/composables/useCategories";
+import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
 import { useAppParameters } from "@/composables/useAppParameters";
 
 import { loadJSONFromFolder } from "@/services/driveAdapter";
@@ -176,6 +177,26 @@ const labelFilter =
 
 const pendingOnly =
   ref(false);
+
+/*
+  Tags retenus pour les allocations : vide = tous.
+*/
+const tagFilter =
+  ref<number[]>([]);
+
+const {
+  tags: allocationTags,
+} = useAllocationTags();
+
+const tagChipItems =
+  computed(() =>
+    allocationTags.value.map(
+      tag => ({
+        id: tag.id,
+        label: tag.tagName,
+      })
+    )
+  );
 
 const filtersOpen =
   ref(true);
@@ -830,8 +851,9 @@ const items =
 ========================= */
 
 /*
-  Le libellé recherché et le filtre Pending portent sur
-  les allocations, jamais sur les libellés de catégories.
+  Le libellé recherché, les tags et le filtre Pending
+  portent sur les allocations, jamais sur les libellés de
+  catégories.
 
   - Sous-catégorie sélectionnée : le détail par mois
     est filtré.
@@ -842,6 +864,7 @@ const items =
 const allocationSearchActive =
   computed(() =>
     pendingOnly.value ||
+    tagFilter.value.length > 0 ||
     normalizeText(
       labelFilter.value
     ) !== ""
@@ -879,6 +902,9 @@ function resetFilters() {
 
   pendingOnly.value =
     false;
+
+  tagFilter.value =
+    [];
 
   selectedCategory.value =
     "*";
@@ -1761,6 +1787,17 @@ watch(
                 onSubCategorySelect
               "
             />
+
+            <ChipSelector
+              v-model="tagFilter"
+              label="Tag"
+              :items="tagChipItems"
+              :multiple="true"
+              :show-all="true"
+              :align-with-content="
+                false
+              "
+            />
           </div>
         </div>
       </section>
@@ -1986,6 +2023,9 @@ watch(
       "
       :pending-only="
         pendingOnly
+      "
+      :tag-ids="
+        tagFilter
       "
       :group-by-sub-category="
         crossSearchActive

@@ -22,7 +22,7 @@ dist-ssr
 .vite
 dist/
 node_modules/
-tsbuildinfo
+*.tsbuildinfo
 **/*.vue.js
 *.suo
 *.ntvs*

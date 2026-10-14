@@ -125,6 +125,11 @@ const props =
     pendingOnly?: boolean;
 
     /*
+      Tags retenus : vide ou absent = tous.
+    */
+    tagIds?: number[];
+
+    /*
       Recherche transversale : les allocations de toutes
       les sous-catégories des catégories transmises sont
       affichées, regroupées par sous-catégorie et non
@@ -967,7 +972,7 @@ function closeFxPopover() {
 
 /*
   Allocations du périmètre courant : catégories,
-  sous-catégorie, période, off-budget et libellé.
+  sous-catégorie, période, off-budget, tags et libellé.
 
   Le filtre Pending n’est pas appliqué ici, pour pouvoir
   compter les écritures en pending de ce périmètre.
@@ -999,6 +1004,11 @@ const scopedItems =
         normalizeText(
           props.labelFilter ??
           ""
+        );
+
+      const selectedTagIds =
+        new Set(
+          props.tagIds ?? []
         );
 
       return raw.value.items
@@ -1045,6 +1055,18 @@ const scopedItems =
             if (
               !includeOffBudget &&
               isOffBudget
+            ) {
+              return false;
+            }
+
+            if (
+              selectedTagIds.size > 0 &&
+              (
+                item.tagId === null ||
+                !selectedTagIds.has(
+                  item.tagId
+                )
+              )
             ) {
               return false;
             }
