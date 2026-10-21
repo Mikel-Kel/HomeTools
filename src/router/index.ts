@@ -12,7 +12,7 @@ import SpendingView from "../views/SpendingView.vue";
 import AllocationView from "../views/AllocationView.vue";
 import FollowUpView from "../views/FollowUpView.vue";
 import DocumentsArchiveView from "../views/DocumentsArchiveView.vue";
-import EventLogView from "../views/EventLogView.vue";
+import HousekeepingView from "../views/HousekeepingView.vue";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -87,14 +87,19 @@ const router = createRouter({
       },
     },
     {
-      path: "/events",
-      name: "events",
-      component: EventLogView,
+      path: "/housekeeping",
+      name: "housekeeping",
+      component: HousekeepingView,
       meta: {
         level: 1,
-        title: "Events",
+        title: "Housekeeping",
         requiresDrive: true,
       },
+    },
+    {
+      /* Ancienne adresse de la page des journaux. */
+      path: "/events",
+      redirect: "/housekeeping",
     },
   ],
 });

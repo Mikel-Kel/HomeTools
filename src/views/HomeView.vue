@@ -894,7 +894,7 @@ function performanceClass(
 
           <li>
             <router-link
-              to="/events"
+              to="/housekeeping"
               class="menu-item"
             >
               <AppIcon
@@ -903,7 +903,7 @@ function performanceClass(
               />
 
               <span>
-                Activity logs
+                Housekeeping
               </span>
             </router-link>
           </li>
