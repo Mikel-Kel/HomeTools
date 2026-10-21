@@ -74,6 +74,10 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   Le champ `paths` y est un alias de compatibilité de `downloadPaths`.
 - `events/status/` : fichiers de statut de traitement (boucle de retour Card24). Surveillés par `SpendingView.vue`
   (watcher, persistance localStorage, timeout de sécurité de 5 minutes).
+- Nom d'un document archivé (`buildPhysicalName`, `DocumentsArchiveView.vue`) :
+  `AAAA/<Folder>/P<PartyID sur 5 chiffres>/<AAAA-MM-JJ>[-DTA<AAAAMMJJ>][-IF1<Info1>][-IF2<Info2>][-TAG<id>[_<id>…]][-AMT<centimes>].pdf`.
+  Le backend reconstruit `archivetoc` et les tags à partir de ces noms (`scripts/python/archive_reconcile.py`) :
+  ne pas changer cette grammaire sans adapter le script. Tags séparés par `_`.
 
 ## Points ouverts connus
 
