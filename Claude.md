@@ -52,6 +52,10 @@ si elle est plus ancienne que la version de `AppParameters.json` (`src/services/
     (ouverture native sur le Mac) : utilisés par `DocumentsArchiveView.vue`, quel que soit le backend actif.
 - Il n'y a pas d'authentification applicative ni de coffre d'identifiants : la clé du proxy vient de `VITE_PROXY_API_KEY`.
 - Thème : tokens `--positive`, `--negative`, `--warning` dans `src/assets/theme.css`, variantes clair/sombre (`[data-theme="dark"]`).
+- Fichiers JSON publiés par le Mac : les lire avec `useRemoteJson` (`src/composables/useRemoteJson.ts`), qui attend le stockage,
+  charge, surveille et recharge sans clignotement, et les convertir avec la fonction de lecture de leur contrat
+  (`src/contracts/<domaine>.ts`, helpers dans `src/contracts/read.ts`). Les types et noms de fichiers du contrat vivent dans ce dossier.
+  Migration en cours : Housekeeping et Home sont converties, les autres vues utilisent encore `loadJSONFromFolder` directement.
 
 ## Contrat d'échange avec le backend Mac (Housekeeping)
 

@@ -4,6 +4,7 @@ import {
   onBeforeUnmount,
   onMounted,
   ref,
+  watch,
 } from "vue";
 
 import {
@@ -17,23 +18,26 @@ import {
 } from "@/composables/useDriveWatcher";
 
 import {
+  useRemoteJson,
+} from "@/composables/useRemoteJson";
+
+import {
+  HOUSEKEEPING_LOG_INDEX_FILE,
+  HOUSEKEEPING_LOGS_FOLDER,
+  HOUSEKEEPING_STEPS_FILE,
+  HOUSEKEEPING_STEPS_FOLDER,
+  readHousekeepingSteps,
+  type HousekeepingStep,
+} from "@/contracts/housekeeping";
+
+import {
   detectDevice,
 } from "@/utils/deviceDetection";
 
 /* =========================
    Data contract
 
-   settings/housekeepingSteps.json, exported by every
-   housekeeping run from the backend step catalogue:
-     {
-       "generatedAt": "2026-10-21T08:49:56Z",
-       "steps": [
-         { "key": "exportSpending", "label": "Export spending",
-           "group": "Exports", "manual": true, "nightly": true },
-         { "key": "archiveReconcile", ..., "forces": ["exportArchiveToc"] },
-         ...
-       ]
-     }
+   Step catalogue: src/contracts/housekeeping.ts.
 
    Manual run request, events/PWA-HKP_<AAAAMMJJHHMMSS>.json:
      {
@@ -50,14 +54,8 @@ import {
    never modified.
 ========================= */
 
-const SETTINGS_FOLDER = "settings";
-const STEPS_FILE = "housekeepingSteps.json";
-
 const EVENTS_FOLDER = "events";
 const STATUS_FOLDER = "events/status";
-
-const DIAGNOSTICS_FOLDER = "diagnostics";
-const LOG_INDEX_FILE = "housekeepingLogIndex.json";
 
 const HKP_EVENT_FILE_PATTERN =
   /^(?:PWA-)?HKP_\d{14}\.json$/;
@@ -72,15 +70,6 @@ const NO_ANSWER_DELAY_MS =
 /* =========================
    Types
 ========================= */
-
-interface HousekeepingStep {
-  key: string;
-  label: string;
-  group: string;
-  manual: boolean;
-  nightly: boolean;
-  forces: string[];
-}
 
 interface StepGroup {
   name: string;
@@ -111,17 +100,34 @@ interface RequestState {
    State
 ========================= */
 
+/*
+  Catalogue des étapes, publié par chaque housekeeping.
+*/
+const catalogue =
+  useRemoteJson({
+    folder:
+      HOUSEKEEPING_STEPS_FOLDER,
+
+    file:
+      HOUSEKEEPING_STEPS_FILE,
+
+    read:
+      readHousekeepingSteps,
+  });
+
 const steps =
-  ref<HousekeepingStep[]>([]);
+  computed<HousekeepingStep[]>(() =>
+    catalogue.data.value ?? []
+  );
+
+const loading =
+  catalogue.loading;
+
+const loadError =
+  catalogue.error;
 
 const selectedKeys =
   ref<Set<string>>(new Set());
-
-const loading =
-  ref(false);
-
-const loadError =
-  ref<string | null>(null);
 
 const request =
   ref<RequestState | null>(null);
@@ -310,56 +316,22 @@ function selectNone() {
     new Set();
 }
 
-/* =========================
-   Loading
-========================= */
+/*
+  Sélection initiale : les étapes de la nuit, au premier
+  chargement du catalogue seulement.
+*/
+watch(
+  steps,
 
-async function loadSteps() {
-  loading.value = true;
-  loadError.value = null;
-
-  try {
-    const data =
-      await loadJSONFromFolder<{
-        steps?: HousekeepingStep[];
-      }>(
-        SETTINGS_FOLDER,
-        STEPS_FILE
-      );
-
-    if (!data?.steps?.length) {
-      throw new Error(
-        `${STEPS_FILE} not found: it is created by the next housekeeping run`
-      );
+  (current, previous) => {
+    if (
+      current.length &&
+      !previous?.length
+    ) {
+      selectNightly();
     }
-
-    steps.value =
-      data.steps.map(
-        step => ({
-          key: String(step.key),
-          label: String(step.label ?? step.key),
-          group: String(step.group ?? "Other"),
-          manual: step.manual === true,
-          nightly: step.nightly === true,
-          forces:
-            Array.isArray(step.forces)
-              ? step.forces.map(String)
-              : [],
-        })
-      );
-
-    selectNightly();
-
-  } catch (err) {
-    loadError.value =
-      err instanceof Error
-        ? err.message
-        : String(err);
-
-  } finally {
-    loading.value = false;
   }
-}
+);
 
 /* =========================
    Request
@@ -558,10 +530,10 @@ let logIndexStateKnown =
 
 useDriveWatcher({
   folderId:
-    DIAGNOSTICS_FOLDER,
+    HOUSEKEEPING_LOGS_FOLDER,
 
   fileName:
-    LOG_INDEX_FILE,
+    HOUSEKEEPING_LOG_INDEX_FILE,
 
   lastKnownState:
     logIndexRemoteState,
@@ -609,8 +581,6 @@ onMounted(async () => {
       },
       10_000
     );
-
-  await loadSteps();
 
   await checkEvents().catch(
     err =>

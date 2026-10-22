@@ -2,7 +2,6 @@
 import {
   computed,
   nextTick,
-  onMounted,
   ref,
   watch,
 } from "vue";
@@ -10,356 +9,124 @@ import {
 import ChipSelector from "@/components/ChipSelector.vue";
 
 import {
-  loadJSONFromFolder,
-} from "@/services/driveAdapter";
+  useRemoteJson,
+} from "@/composables/useRemoteJson";
 
 import {
-  useDriveWatcher,
-} from "@/composables/useDriveWatcher";
+  HOUSEKEEPING_LOG_INDEX_FILE,
+  HOUSEKEEPING_LOGS_FOLDER,
+  housekeepingLogFile,
+  readHousekeepingLog,
+  readHousekeepingLogIndex,
+  type HousekeepingLogLine,
+} from "@/contracts/housekeeping";
 
 import {
   formatDate,
 } from "@/utils/dateFormat";
 
 /* =========================
-   Data contract
+   Data
 
-   Published by housekeeping.applescript
-   (via publishToObjectStorage.applescript)
-   to the "diagnostics" folder.
-
-   Deliberately flat, no subfolder: the Local Drive
-   backend resolves names via the File System Access
-   API, whose getFileHandle() rejects any "/" in the
-   name - it can only walk one directory level at a
-   time.
-
-   diagnostics/housekeepingLogIndex.json
-     {
-       "runs": [
-         { "date": "2026-08-27", "summary": "green", "lineCount": 142 },
-         ...
-       ]
-     }
-
-   diagnostics/housekeepingLog-{date}.json
-     {
-       "date": "2026-08-27",
-       "job": "Housekeeping",
-       "summary": "green",
-       "lines": [
-         { "time": "23:10:02", "job": "CLEAN-UP", "level": "INFO", "text": "Housekeeping started" },
-         ...
-       ]
-     }
-
-   "summary" tolerates either the red/yellow/green
-   wording used by the nightly health check or
-   ok/warning/error; both are normalized below.
+   Contrat des fichiers : src/contracts/housekeeping.ts.
+   Le dossier diagnostics/ reste plat : le backend Local
+   Drive ne résout pas les noms contenant « / ».
 ========================= */
 
-const LOGS_FOLDER = "diagnostics";
-const INDEX_FILE = "housekeepingLogIndex.json";
+/*
+  Index des jours, rechargé à la fin de chaque housekeeping,
+  de nuit comme manuel.
+*/
+const index =
+  useRemoteJson({
+    folder:
+      HOUSEKEEPING_LOGS_FOLDER,
 
-function runFile(date: string): string {
-  return `housekeepingLog-${date}.json`;
-}
+    file:
+      HOUSEKEEPING_LOG_INDEX_FILE,
 
-/* =========================
-   Types
-========================= */
-
-type HealthLevel =
-  | "ok"
-  | "warning"
-  | "error";
-
-type LineLevel =
-  | "info"
-  | "ok"
-  | "warning"
-  | "error";
-
-interface RunSummary {
-  date: string;
-  summary: HealthLevel;
-  lineCount: number;
-}
-
-interface LogLine {
-  time: string | null;
-  job: string;
-  level: LineLevel;
-  text: string;
-}
-
-interface Run {
-  date: string;
-  job: string;
-  summary: HealthLevel;
-  lines: LogLine[];
-}
-
-/* =========================
-   Normalization
-========================= */
-
-function normalizeHealth(
-  value: unknown
-): HealthLevel {
-  const token =
-    String(value ?? "")
-      .trim()
-      .toLowerCase();
-
-  if (
-    token === "red" ||
-    token === "error"
-  ) {
-    return "error";
-  }
-
-  if (
-    token === "yellow" ||
-    token === "warning"
-  ) {
-    return "warning";
-  }
-
-  return "ok";
-}
-
-function normalizeLineLevel(
-  value: unknown
-): LineLevel {
-  const token =
-    String(value ?? "")
-      .trim()
-      .toUpperCase();
-
-  switch (token) {
-    case "OK":
-      return "ok";
-
-    case "WARN":
-      return "warning";
-
-    case "ERR":
-      return "error";
-
-    default:
-      return "info";
-  }
-}
-
-function normalizeRunSummary(
-  raw: any
-): RunSummary | null {
-  const date =
-    typeof raw?.date === "string"
-      ? raw.date
-      : null;
-
-  if (!date) {
-    return null;
-  }
-
-  return {
-    date,
-
-    summary:
-      normalizeHealth(
-        raw.summary
-      ),
-
-    lineCount:
-      Number.isFinite(
-        Number(raw.lineCount)
-      )
-        ? Number(raw.lineCount)
-        : 0,
-  };
-}
-
-function normalizeRun(
-  raw: any,
-  fallbackDate: string
-): Run {
-  return {
-    date:
-      typeof raw?.date === "string"
-        ? raw.date
-        : fallbackDate,
-
-    job:
-      typeof raw?.job === "string"
-        ? raw.job
-        : "Housekeeping",
-
-    summary:
-      normalizeHealth(
-        raw?.summary
-      ),
-
-    lines:
-      (
-        Array.isArray(raw?.lines)
-          ? raw.lines
-          : []
-      ).map(
-        (line: any): LogLine => ({
-          time:
-            typeof line?.time === "string"
-              ? line.time
-              : null,
-
-          job:
-            typeof line?.job === "string"
-              ? line.job.trim()
-              : "",
-
-          level:
-            normalizeLineLevel(
-              line?.level
-            ),
-
-          text:
-            String(
-              line?.text ?? ""
-            ),
-        })
-      ),
-  };
-}
-
-/* =========================
-   State
-========================= */
+    read:
+      readHousekeepingLogIndex,
+  });
 
 const availableRuns =
-  ref<RunSummary[]>([]);
+  computed(() =>
+    index.data.value ?? []
+  );
+
+const loadingIndex =
+  index.loading;
+
+const indexError =
+  index.error;
+
+const hasRuns =
+  computed(() =>
+    availableRuns.value.length > 0
+  );
 
 const selectedDate =
   ref<string | null>(null);
 
-const currentRun =
-  ref<Run | null>(null);
+/*
+  Journal du jour sélectionné. Il est réécrit en même temps
+  que l’index : il est relu à chaque changement de celui-ci.
+*/
+const log =
+  useRemoteJson({
+    folder:
+      HOUSEKEEPING_LOGS_FOLDER,
 
-const loadingIndex =
-  ref(false);
+    file:
+      () =>
+        selectedDate.value
+          ? housekeepingLogFile(selectedDate.value)
+          : null,
+
+    read:
+      raw =>
+        readHousekeepingLog(
+          raw,
+          selectedDate.value ?? ""
+        ),
+
+    watchRemote:
+      false,
+  });
+
+const currentRun =
+  log.data;
 
 const loadingRun =
-  ref(false);
-
-const indexError =
-  ref<string | null>(null);
+  log.loading;
 
 const runError =
-  ref<string | null>(null);
+  log.error;
 
-const hasRuns = computed(() =>
-  availableRuns.value.length > 0
-);
+/*
+  Le jour consulté reste sélectionné tant qu’il existe ;
+  à défaut, le plus récent.
+*/
+watch(
+  availableRuns,
 
-/* =========================
-   Loading
-========================= */
-
-async function loadIndex() {
-  loadingIndex.value = true;
-  indexError.value = null;
-
-  try {
-    const data =
-      await loadJSONFromFolder<any>(
-        LOGS_FOLDER,
-        INDEX_FILE
-      );
-
-    const runs =
-      (
-        data?.runs ?? []
-      )
-        .map(normalizeRunSummary)
-        .filter(
-          (
-            run: RunSummary | null
-          ): run is RunSummary =>
-            run !== null
-        )
-        .sort(
-          (a: RunSummary, b: RunSummary) =>
-            b.date.localeCompare(a.date)
-        );
-
-    availableRuns.value = runs;
-
-    /*
-      Lors d’un rechargement, le jour consulté reste
-      sélectionné s’il existe encore.
-    */
-    const date =
-      runs.find(
-        (run: RunSummary) =>
+  async runs => {
+    if (
+      selectedDate.value &&
+      runs.some(
+        run =>
           run.date ===
           selectedDate.value
-      )?.date ??
-      runs[0]?.date;
-
-    if (date) {
-      await selectRun(date);
+      )
+    ) {
+      await log.reload();
+      return;
     }
 
-  } catch (err) {
-    console.error(
-      "Failed to load housekeeping log index:",
-      err
-    );
-
-    availableRuns.value = [];
-
-    indexError.value =
-      err instanceof Error
-        ? err.message
-        : String(err);
-
-  } finally {
-    loadingIndex.value = false;
+    selectedDate.value =
+      runs[0]?.date ?? null;
   }
-}
-
-async function selectRun(date: string) {
-  selectedDate.value = date;
-
-  loadingRun.value = true;
-  runError.value = null;
-  currentRun.value = null;
-
-  try {
-    const data =
-      await loadJSONFromFolder<any>(
-        LOGS_FOLDER,
-        runFile(date)
-      );
-
-    currentRun.value =
-      normalizeRun(data, date);
-
-  } catch (err) {
-    console.error(
-      `Failed to load housekeeping log for ${date}:`,
-      err
-    );
-
-    runError.value =
-      err instanceof Error
-        ? err.message
-        : String(err);
-
-  } finally {
-    loadingRun.value = false;
-  }
-}
+);
 
 function handleDateChange(
   event: Event
@@ -369,54 +136,9 @@ function handleDateChange(
       .value;
 
   if (date) {
-    selectRun(date);
+    selectedDate.value = date;
   }
 }
-
-onMounted(async () => {
-  await loadIndex();
-});
-
-/*
-  L’index est réécrit à la fin de chaque housekeeping, de nuit
-  comme manuel : les journaux se mettent à jour d’eux-mêmes.
-*/
-const indexRemoteState =
-  ref<string | null>(null);
-
-/*
-  Le premier contrôle du watcher ne fait que mémoriser l’état
-  du fichier, déjà chargé à l’ouverture.
-*/
-let indexStateKnown =
-  false;
-
-useDriveWatcher({
-  folderId:
-    LOGS_FOLDER,
-
-  fileName:
-    INDEX_FILE,
-
-  lastKnownState:
-    indexRemoteState,
-
-  onChanged:
-    async () => {
-      if (!indexStateKnown) {
-        indexStateKnown =
-          true;
-
-        return;
-      }
-
-      if (loadingIndex.value) {
-        return;
-      }
-
-      await loadIndex();
-    },
-});
 
 /* =========================
    Filters
@@ -457,7 +179,7 @@ const ROUTINE_TEXT_PATTERNS = [
 ];
 
 function isProblem(
-  line: LogLine
+  line: HousekeepingLogLine
 ): boolean {
   return (
     line.level === "warning" ||
@@ -466,7 +188,7 @@ function isProblem(
 }
 
 function isRoutine(
-  line: LogLine
+  line: HousekeepingLogLine
 ): boolean {
   return (
     !isProblem(line) &&

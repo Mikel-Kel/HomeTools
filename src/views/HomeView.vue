@@ -88,8 +88,21 @@ const {
 ========================= */
 
 import {
-  loadJSONFromFolder,
-} from "@/services/driveAdapter";
+  useRemoteJson,
+} from "@/composables/useRemoteJson";
+
+import {
+  APP_PARAMETERS_FILE,
+  APP_PARAMETERS_FOLDER,
+  HOME_MESSAGES_FILE,
+  HOME_MESSAGES_FOLDER,
+  HOME_SUMMARY_FILE,
+  HOME_SUMMARY_FOLDER,
+  readHomeMessages,
+  readHomeSummary,
+  readSecurityParameters,
+  type SecurityQuote,
+} from "@/contracts/home";
 
 import {
   formatDate,
@@ -123,78 +136,128 @@ const appVersion =
   __APP_VERSION__;
 
 /* =========================
-   Shared types
+   Data
+
+   Contrat des fichiers : src/contracts/home.ts. Les trois
+   fichiers sont relus dès qu’ils changent sur le stockage.
 ========================= */
 
-interface SummaryPerformance {
-  change: number | null;
-  ytd: number | null;
-  y1: number | null;
-  asOf: string | null;
-}
+const summary =
+  useRemoteJson({
+    folder:
+      HOME_SUMMARY_FOLDER,
 
-/* =========================
-   Markets indices
-========================= */
+    file:
+      HOME_SUMMARY_FILE,
 
-interface MarketIndex
-  extends SummaryPerformance {
-  id: number;
-  code: string;
-  value: number;
-}
+    read:
+      readHomeSummary,
+
+    optional:
+      true,
+  });
+
+const securityParameters =
+  useRemoteJson({
+    folder:
+      APP_PARAMETERS_FOLDER,
+
+    file:
+      APP_PARAMETERS_FILE,
+
+    read:
+      readSecurityParameters,
+  });
+
+/*
+  Volontairement sans effet sur le reste de la page : un
+  problème de lecture des messages n’empêche pas d’afficher
+  les marchés.
+*/
+const messages =
+  useRemoteJson({
+    folder:
+      HOME_MESSAGES_FOLDER,
+
+    file:
+      HOME_MESSAGES_FILE,
+
+    read:
+      readHomeMessages,
+
+    optional:
+      true,
+  });
 
 const markets =
-  ref<MarketIndex[]>([]);
-
-/* =========================
-   FX rates
-========================= */
-
-interface FXRate
-  extends SummaryPerformance {
-  id: number;
-  code: string;
-  rate: number;
-}
+  computed(() =>
+    summary.data.value?.indices ?? []
+  );
 
 const fxRates =
-  ref<FXRate[]>([]);
-
-/* =========================
-   Securities
-========================= */
-
-interface SecurityParameter {
-  code: string;
-  description: string;
-  isin: string | null;
-  currency: string | null;
-  enabled: boolean;
-}
+  computed(() =>
+    summary.data.value?.fx ?? []
+  );
 
 interface SecuritySummary
-  extends SummaryPerformance {
-  id: number;
-  code: string;
+  extends SecurityQuote {
   description: string;
   isin: string | null;
   currency: string | null;
   value: number;
 }
 
+/*
+  Les titres suivent l’ordre de securities.list
+  (AppParameters.json) ; un titre désactivé, ou sans cours
+  dans homeSummary.json, n’est pas affiché.
+*/
 const securities =
-  ref<SecuritySummary[]>([]);
+  computed<SecuritySummary[]>(() => {
+    const quotes =
+      new Map(
+        (summary.data.value?.securities ?? []).map(
+          quote => [
+            quote.code,
+            quote,
+          ]
+        )
+      );
 
-/* =========================
-   Status
-========================= */
+    return (securityParameters.data.value ?? [])
+      .map(
+        (parameter): SecuritySummary | null => {
+          const quote =
+            quotes.get(
+              parameter.code
+            );
 
-const loading =
-  ref(false);
+          if (
+            !quote ||
+            quote.value === null
+          ) {
+            return null;
+          }
 
-const loadError =
-  ref<string | null>(null);
+          return {
+            ...quote,
+            value: quote.value,
+            description: parameter.description,
+            isin: parameter.isin,
+            currency: parameter.currency,
+          };
+        }
+      )
+      .filter(
+        (security): security is SecuritySummary =>
+          security !== null
+      );
+  });
+
+const homeMessages =
+  computed(() =>
+    messages.data.value ?? []
+  );
 
 const asOf =
   computed(() => {
@@ -220,475 +283,51 @@ const asOf =
     }
 
     /*
-      ISO dates sort naturally.
-      This also avoids depending on the
-      first item of one specific section.
+      Les dates ISO se trient naturellement ; la plus
+      récente toutes sections confondues est affichée.
     */
     return dates.sort().at(-1) ?? null;
   });
 
 /* =========================
-   Home status messages
+   Status
 ========================= */
 
-type HomeMessageLevel =
-  | "ok"
-  | "warning"
-  | "error";
-
-interface HomeMessage {
-  id: string;
-  level: HomeMessageLevel;
-  text: string;
-}
-
-/*
-  Populated by loadHomeMessages() from
-  diagnostics/homeMessages.json, written
-  by the nightly Housekeeping job and
-  its individual check scripts.
-*/
-const homeMessages =
-  ref<HomeMessage[]>([]);
-
-/* =========================
-   Data normalization
-========================= */
-
-function toNullableNumber(
-  value: unknown
-): number | null {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return null;
-  }
-
-  const result =
-    Number(value);
-
-  return Number.isFinite(result)
-    ? result
-    : null;
-}
-
-function toRequiredNumber(
-  value: unknown,
-  fallback = 0
-): number {
-  const result =
-    toNullableNumber(value);
-
-  return result ?? fallback;
-}
-
-function normalizeAsOf(
-  value: unknown
-): string | null {
-  return typeof value === "string" &&
-    value.length > 0
-    ? value
-    : null;
-}
-
-function normalizeMessageLevel(
-  value: unknown
-): HomeMessageLevel {
-  return value === "warning" ||
-    value === "error"
-    ? value
-    : "ok";
-}
-
-/* =========================
-   Load home summary
-========================= */
-
-async function loadHomeSummary() {
-  try {
-    const [
-      data,
-      settings,
-    ] = await Promise.all([
-      loadJSONFromFolder<any>(
-        "settings",
-        "homeSummary.json"
-      ),
-
-      loadJSONFromFolder<any>(
-        "settings",
-        "AppParameters.json"
-      ),
-    ]);
-
-    if (!data?.markets) {
-      console.warn(
-        "No home summary markets data found"
-      );
-
-      markets.value = [];
-      fxRates.value = [];
-      securities.value = [];
-
-      return;
-    }
-
-    /* =========================
-       Markets
-    ========================= */
-
-    markets.value =
-      (
-        data.markets.indices ??
-        []
-      ).map(
-        (
-          market: any,
-          index: number
-        ) => ({
-          id:
-            toRequiredNumber(
-              market.id,
-              index
-            ),
-
-          code:
-            String(
-              market.code ?? ""
-            ),
-
-          value:
-            toRequiredNumber(
-              market.close ??
-              market.value
-            ),
-
-          change:
-            toNullableNumber(
-              market.delta
-            ),
-
-          ytd:
-            toNullableNumber(
-              market.ytd
-            ),
-
-          y1:
-            toNullableNumber(
-              market.y1
-            ),
-
-          asOf:
-            normalizeAsOf(
-              market.asOf
-            ),
-        })
-      );
-
-    /* =========================
-       FX
-    ========================= */
-
-    fxRates.value =
-      (
-        data.markets.fx ??
-        []
-      )
-        .filter(
-          (rate: any) =>
-            rate.tag === "S"
-        )
-        .map(
-          (
-            rate: any,
-            index: number
-          ) => ({
-            id:
-              toRequiredNumber(
-                rate.id,
-                index
-              ),
-
-            code:
-              String(
-                rate.code ?? ""
-              ),
-
-            rate:
-              toRequiredNumber(
-                rate.rate
-              ),
-
-            change:
-              toNullableNumber(
-                rate.delta
-              ),
-
-            ytd:
-              toNullableNumber(
-                rate.ytd
-              ),
-
-            y1:
-              toNullableNumber(
-                rate.y1
-              ),
-
-            asOf:
-              normalizeAsOf(
-                rate.asOf
-              ),
-          })
-        );
-
-    /* =========================
-       Securities parameters
-    ========================= */
-
-    const configuredSecurities:
-      SecurityParameter[] =
-      (
-        settings
-          ?.securities
-          ?.list ??
-        []
-      )
-        .filter(
-          (security: any) =>
-            security.enabled === true
-        )
-        .map(
-          (security: any) => ({
-            code:
-              String(
-                security.code ?? ""
-              ),
-
-            description:
-              String(
-                security.description ??
-                security.code ??
-                ""
-              ),
-
-            isin:
-              security.isin
-                ? String(
-                    security.isin
-                  )
-                : null,
-
-            currency:
-              security.currency
-                ? String(
-                    security.currency
-                  )
-                : null,
-
-            enabled:
-              true,
-          })
-        );
-
-    /*
-      Main expected location:
-        markets.securities
-
-      The fallback to data.securities
-      makes the view tolerant if the
-      section is temporarily placed at
-      the root of homeSummary.json.
-    */
-    const rawSecurities =
-      data.markets.securities ??
-      data.securities ??
-      [];
-
-    const securitiesByCode =
-      new Map<string, any>(
-        rawSecurities.map(
-          (security: any) => [
-            String(
-              security.code ?? ""
-            ),
-            security,
-          ]
-        )
-      );
-
-    /*
-      Mapping from parameters preserves
-      the order of securities.list and
-      automatically excludes any title
-      that is not enabled.
-    */
-    securities.value =
-      configuredSecurities
-        .map(
-          (
-            parameter,
-            index
-          ) => {
-            const raw =
-              securitiesByCode.get(
-                parameter.code
-              );
-
-            if (!raw) {
-              console.warn(
-                `No summary data found for security ${parameter.code}`
-              );
-
-              return null;
-            }
-
-            const value =
-              toNullableNumber(
-                raw.close ??
-                raw.value ??
-                raw.rate ??
-                raw.price
-              );
-
-            if (value === null) {
-              console.warn(
-                `No valid value found for security ${parameter.code}`
-              );
-
-              return null;
-            }
-
-            return {
-              id:
-                toRequiredNumber(
-                  raw.id,
-                  index
-                ),
-
-              code:
-                parameter.code,
-
-              description:
-                parameter.description,
-
-              isin:
-                parameter.isin,
-
-              currency:
-                parameter.currency,
-
-              value,
-
-              change:
-                toNullableNumber(
-                  raw.delta
-                ),
-
-              ytd:
-                toNullableNumber(
-                  raw.ytd
-                ),
-
-              y1:
-                toNullableNumber(
-                  raw.y1
-                ),
-
-              asOf:
-                normalizeAsOf(
-                  raw.asOf
-                ),
-            };
-          }
-        )
-        .filter(
-          (
-            security
-          ): security is SecuritySummary =>
-            security !== null
-        );
-
-  } catch (err) {
-    console.error(
-      "Failed to load home summary:",
-      err
-    );
-
-    markets.value = [];
-    fxRates.value = [];
-    securities.value = [];
-
-    throw err;
-  }
-}
-
-/* =========================
-   Load home messages
-========================= */
-
-/*
-  Deliberately soft-failing: a problem
-  loading the diagnostics feed should
-  never block the rest of the home page
-  (markets/FX/securities) from showing.
-*/
-async function loadHomeMessages() {
-  try {
-    const data =
-      await loadJSONFromFolder<any>(
-        "diagnostics",
-        "homeMessages.json"
-      );
-
-    homeMessages.value =
-      (
-        data?.messages ??
-        []
-      ).map(
-        (
-          message: any,
-          index: number
-        ) => ({
-          id:
-            String(
-              message.id ?? index
-            ),
-
-          level:
-            normalizeMessageLevel(
-              message.level
-            ),
-
-          text:
-            String(
-              message.text ?? ""
-            ),
-        })
-      );
-
-  } catch (err) {
-    console.warn(
-      "Failed to load home messages:",
-      err
-    );
-
-    homeMessages.value = [];
-  }
-}
+const bootstrapping =
+  ref(false);
+
+const bootstrapError =
+  ref<string | null>(null);
+
+const loading =
+  computed(() =>
+    bootstrapping.value ||
+    summary.loading.value
+  );
+
+const loadError =
+  computed(() =>
+    bootstrapError.value ??
+    summary.error.value ??
+    securityParameters.error.value
+  );
 
 /* =========================
    Initialization
 ========================= */
 
+/*
+  Connexion au stockage et référentiels communs ; les
+  fichiers de la page se chargent dès que le stockage est
+  prêt.
+*/
 async function initializeHome() {
-  if (loading.value) {
+  if (bootstrapping.value) {
     return;
   }
 
-  loading.value = true;
-  loadError.value = null;
+  bootstrapping.value = true;
+  bootstrapError.value = null;
 
   try {
     const ready =
@@ -700,19 +339,14 @@ async function initializeHome() {
 
     await loadSettings();
 
-    await Promise.all([
-      loadHomeSummary(),
-      loadHomeMessages(),
-    ]);
-
   } catch (err) {
-    loadError.value =
+    bootstrapError.value =
       err instanceof Error
         ? err.message
         : String(err);
 
   } finally {
-    loading.value = false;
+    bootstrapping.value = false;
   }
 }
 
