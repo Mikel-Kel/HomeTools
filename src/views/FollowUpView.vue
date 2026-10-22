@@ -14,14 +14,20 @@ import FollowUpDetails from "@/components/followup/FollowUpDetails.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
-import { useDriveWatcher } from "@/composables/useDriveWatcher";
+import { useRemoteJson } from "@/composables/useRemoteJson";
 
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
 import { useAppParameters } from "@/composables/useAppParameters";
 
-import { loadJSONFromFolder } from "@/services/driveAdapter";
+import {
+  BUDGET_FILE,
+  FOLLOW_UP_FILE,
+  FOLLOW_UP_FOLDER,
+  readBudget,
+  readFollowUp,
+} from "@/contracts/followUp";
 
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount, formatInteger } from "@/utils/amountFormat";
@@ -43,52 +49,6 @@ type NatureFilter =
   | "ALL"
   | "I"
   | "E";
-
-/* ---- Follow-up ---- */
-
-interface FollowUpYearItem {
-  subCategoryId: number;
-  amount: number;
-  monthToDate: number;
-  amountOffBudget?: number;
-  monthToDateOffBudget?: number;
-}
-
-interface FollowUpYear {
-  year: number;
-  items: FollowUpYearItem[];
-}
-
-interface FollowUpCategory {
-  categoryId: number;
-  years: FollowUpYear[];
-}
-
-interface FollowUpFile {
-  version?: number;
-  updatedAt?: string;
-  categories: FollowUpCategory[];
-}
-
-/* ---- Budget ---- */
-
-interface BudgetItem {
-  categoryId: number;
-  subCategoryId: number;
-  amount: number;
-}
-
-interface BudgetMonth {
-  year: number;
-  month: number;
-  items: BudgetItem[];
-}
-
-interface BudgetFile {
-  version?: number;
-  updatedAt?: string;
-  budgets: BudgetMonth[];
-}
 
 interface FollowUpItem {
   id: string;
@@ -133,14 +93,17 @@ const {
    State
 ========================= */
 
-const loading =
+/*
+  Connexion au stockage et référentiels communs.
+*/
+const bootstrapping =
   ref(false);
 
-const loadError =
+const bootstrapped =
+  ref(false);
+
+const bootstrapError =
   ref<string | null>(null);
-
-const initialized =
-  ref(false);
 
 const categorySheetOpen =
   ref(false);
@@ -159,14 +122,59 @@ const selectedSubCategory =
 const includeOffBudget =
   ref(true);
 
+/*
+  Agrégats et budget, relus dès qu’ils changent sur le
+  stockage. Contrat : src/contracts/followUp.ts.
+*/
+const followUp =
+  useRemoteJson({
+    folder:
+      FOLLOW_UP_FOLDER,
+
+    file:
+      FOLLOW_UP_FILE,
+
+    read:
+      readFollowUp,
+  });
+
+const budget =
+  useRemoteJson({
+    folder:
+      FOLLOW_UP_FOLDER,
+
+    file:
+      BUDGET_FILE,
+
+    read:
+      readBudget,
+  });
+
 const followUpRaw =
-  ref<FollowUpFile | null>(
-    null
-  );
+  followUp.data;
 
 const budgetRaw =
-  ref<BudgetFile | null>(
-    null
+  budget.data;
+
+const loading =
+  computed(() =>
+    bootstrapping.value ||
+    followUp.loading.value ||
+    budget.loading.value
+  );
+
+const loadError =
+  computed(() =>
+    bootstrapError.value ??
+    followUp.error.value ??
+    budget.error.value
+  );
+
+const initialized =
+  computed(() =>
+    bootstrapped.value &&
+    followUpRaw.value !== null &&
+    budgetRaw.value !== null
   );
 
 const analysisScope =
@@ -209,38 +217,6 @@ const showSecondaryCategories =
 
 const followUpSpreadLimit =
   ref(10);
-
-/* =========================
-   Storage watcher
-========================= */
-
-const followUpLastModified =
-  ref<string | null>(null);
-
-/*
-  Le composable garde encore son nom historique
-  useDriveWatcher, mais il utilise désormais la
-  façade multi-backend pour lire les métadonnées.
-*/
-useDriveWatcher({
-  folderId:
-    "allocations/budget",
-
-  fileName:
-    "FollowUp.json",
-
-  lastKnownState:
-    followUpLastModified,
-
-  onChanged:
-    async () => {
-      if (!storageReady.value) {
-        return;
-      }
-
-      await loadFollowUp();
-    },
-});
 
 /* =========================
    Filters
@@ -1382,56 +1358,18 @@ const detailsMaxMonth =
   );
 
 /* =========================
-   Loaders
+   Initialization
 ========================= */
 
-async function loadFollowUp() {
-  const data =
-    await loadJSONFromFolder<
-      FollowUpFile
-    >(
-      "allocations/budget",
-      "FollowUp.json"
-    );
-
-  if (!data) {
-    throw new Error(
-      "FollowUp.json not found"
-    );
-  }
-
-  followUpRaw.value =
-    data;
-}
-
-async function loadBudget() {
-  const data =
-    await loadJSONFromFolder<
-      BudgetFile
-    >(
-      "allocations/budget",
-      "budget.json"
-    );
-
-  if (!data) {
-    throw new Error(
-      "budget.json not found"
-    );
-  }
-
-  budgetRaw.value =
-    data;
-}
-
 async function initializeView() {
-  if (loading.value) {
+  if (bootstrapping.value) {
     return;
   }
 
-  loading.value =
+  bootstrapping.value =
     true;
 
-  loadError.value =
+  bootstrapError.value =
     null;
 
   try {
@@ -1448,25 +1386,13 @@ async function initializeView() {
     }
 
     await loadSettings();
-    await loadFollowUp();
-    await loadBudget();
 
     followUpSpreadLimit.value =
       appParameters.value
         ?.followUpSpreadLimit ??
       10;
 
-    if (
-      availableYears.value.length &&
-      !availableYears.value.includes(
-        year.value
-      )
-    ) {
-      year.value =
-        availableYears.value[0];
-    }
-
-    initialized.value =
+    bootstrapped.value =
       true;
 
   } catch (err) {
@@ -1475,16 +1401,38 @@ async function initializeView() {
       err
     );
 
-    loadError.value =
+    bootstrapError.value =
       err instanceof Error
         ? err.message
         : String(err);
 
   } finally {
-    loading.value =
+    bootstrapping.value =
       false;
   }
 }
+
+/*
+  Au premier chargement des agrégats, l’année affichée doit
+  exister dans le fichier.
+*/
+watch(
+  followUpRaw,
+
+  (current, previous) => {
+    if (
+      current &&
+      !previous &&
+      availableYears.value.length &&
+      !availableYears.value.includes(
+        year.value
+      )
+    ) {
+      year.value =
+        availableYears.value[0];
+    }
+  }
+);
 
 /* =========================
    Storage readiness watcher
@@ -1492,9 +1440,10 @@ async function initializeView() {
 
 watch(
   storageReady,
+
   async ready => {
     if (!ready) {
-      initialized.value =
+      bootstrapped.value =
         false;
 
       return;
@@ -1502,6 +1451,7 @@ watch(
 
     await initializeView();
   },
+
   {
     immediate: true,
   }

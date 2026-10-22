@@ -20,6 +20,17 @@ import {
 } from "@/composables/useDriveWatcher";
 
 import {
+  useRemoteJson,
+} from "@/composables/useRemoteJson";
+
+import {
+  FOLLOW_UP_FOLDER,
+  followUpDetailsFile,
+  readFollowUpDetails,
+  type FollowUpDetailItem,
+} from "@/contracts/followUp";
+
+import {
   prefixEventFileName,
 } from "@/utils/eventFileName";
 
@@ -37,7 +48,6 @@ import {
 
 import {
   listFiles,
-  loadJSONFromFolder,
   saveJSONToFolder,
 } from "@/services/driveAdapter";
 
@@ -53,28 +63,6 @@ import {
 /* =========================================================
    TYPES
 ========================================================= */
-
-interface FollowUpDetailItem {
-  allocationId: string;
-  categoryId: number;
-  subCategoryId: number;
-  allocationDate: string;
-  amount: number;
-  amountCcy: number;
-  currency: string;
-  description: string;
-  bankDescription: string;
-  partyId: number | null;
-  tagId: number | null;
-  pending?: boolean;
-}
-
-interface FollowUpDetailsFile {
-  version?: number;
-  updatedAt?: string;
-  year: number;
-  items: FollowUpDetailItem[];
-}
 
 /*
   Un groupe contient une ou plusieurs sections de lignes.
@@ -213,15 +201,27 @@ const activeRowFitid =
     null
   );
 
-const raw =
-  ref<FollowUpDetailsFile | null>(
-    null
-  );
+/*
+  Allocations de l’année affichée, relues dès qu’elles
+  changent sur le stockage.
+*/
+const details =
+  useRemoteJson({
+    folder:
+      FOLLOW_UP_FOLDER,
 
-const detailsRemoteState =
-  ref<string | null>(
-    null
-  );
+    file:
+      () =>
+        followUpDetailsFile(
+          props.year
+        ),
+
+    read:
+      readFollowUpDetails,
+  });
+
+const raw =
+  details.data;
 
 const eventsRemoteState =
   ref<string | null>(
@@ -229,11 +229,21 @@ const eventsRemoteState =
   );
 
 const loading =
-  ref(false);
+  details.loading;
 
-const error =
+/*
+  Erreur d’une action (demande de ré-allocation) ; elle
+  prime sur l’erreur de chargement.
+*/
+const actionError =
   ref<string | null>(
     null
+  );
+
+const error =
+  computed(() =>
+    actionError.value ??
+    details.error.value
   );
 
 const initialized =
@@ -442,7 +452,7 @@ async function requestReallocation(
   }
 
   if (!storageReady.value) {
-    error.value =
+    actionError.value =
       storageUnavailableMessage.value ||
       "Storage not available.";
 
@@ -519,7 +529,7 @@ async function requestReallocation(
       err
     );
 
-    error.value =
+    actionError.value =
       err instanceof Error
         ? err.message
         : String(err);
@@ -581,7 +591,7 @@ async function loadRequestedReallocations() {
       );
 
     if (someProcessedRequestUnseen) {
-      await loadDetails();
+      await details.reload();
     }
 
     requestedReallocationIds.value =
@@ -600,86 +610,14 @@ async function loadRequestedReallocations() {
 }
 
 /* =========================================================
-   LOAD DETAILS
-========================================================= */
-
-async function loadDetails() {
-  if (!storageReady.value) {
-    raw.value =
-      null;
-
-    error.value =
-      storageUnavailableMessage.value ||
-      "Storage not available.";
-
-    return;
-  }
-
-  loading.value =
-    true;
-
-  error.value =
-    null;
-
-  try {
-    const filename =
-      `FollowUpDetails-${props.year}.json`;
-
-    const data =
-      await loadJSONFromFolder<
-        FollowUpDetailsFile
-      >(
-        "allocations/budget",
-        filename
-      );
-
-    if (!data) {
-      throw new Error(
-        `${filename} not found`
-      );
-    }
-
-    raw.value =
-      data;
-
-  } catch (err) {
-    error.value =
-      err instanceof Error
-        ? err.message
-        : "Unable to load FollowUpDetails";
-
-    raw.value =
-      null;
-
-  } finally {
-    loading.value =
-      false;
-  }
-}
-
-/* =========================================================
    PROPS WATCHERS
 ========================================================= */
 
 watch(
-  () =>
-    props.year,
-
-  async () => {
-    activeRowFitid.value =
-      null;
-
-    detailsRemoteState.value =
-      null;
-
-    if (storageReady.value) {
-      await loadDetails();
-    }
-  }
-);
-
-watch(
   [
+    () =>
+      props.year,
+
     () =>
       props.subCategoryId,
 
@@ -704,60 +642,25 @@ watch(
       initialized.value =
         false;
 
-      raw.value =
-        null;
-
       requestedReallocationIds.value =
         new Set();
-
-      detailsRemoteState.value =
-        null;
 
       eventsRemoteState.value =
         null;
 
-      error.value =
+      actionError.value =
         null;
 
       return;
     }
 
     await loadRequestedReallocations();
-
-    await loadDetails();
   }
 );
 
 /* =========================================================
    REMOTE WATCHERS
 ========================================================= */
-
-/*
-  FollowUpDetails watcher.
-
-  On observe le dossier allocations/budget plutôt qu’un nom
-  de fichier calculé une seule fois afin de supporter les
-  changements d’année.
-*/
-useDriveWatcher({
-  folderId:
-    "allocations/budget",
-
-  lastKnownState:
-    detailsRemoteState,
-
-  onChanged:
-    async () => {
-      if (!storageReady.value) {
-        return;
-      }
-
-      await loadDetails();
-
-      activeRowFitid.value =
-        null;
-    },
-});
 
 /*
   events watcher.
@@ -1646,15 +1549,13 @@ async function initializeDetails() {
     initialized.value =
       true;
 
-    await loadDetails();
-
   } catch (err) {
     console.error(
       "FollowUpDetails initialization failed",
       err
     );
 
-    error.value =
+    actionError.value =
       err instanceof Error
         ? err.message
         : String(err);
