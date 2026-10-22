@@ -1,5 +1,4 @@
 import { loadJSONFromFolder } from "@/services/driveAdapter";
-import { useDrive } from "@/composables/useDrive";
 
 interface AppVersionFile {
   version: string;

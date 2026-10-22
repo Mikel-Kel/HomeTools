@@ -1,24 +1,10 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
-import { initGoogleAPI, connectGoogle } from "@/services/google/googleInit";
+import { initGoogleAPI } from "@/services/google/googleInit";
 import { useStorageBackend } from "@/composables/useStorageBackend";
 import { log } from "./utils/logger";
 
 const { backend } = useStorageBackend();
-
-/* =========================
-   Google login helper
-========================= */
-
-async function login() {
-  if (backend.value !== "GOOGLE_DRIVE") return;
-
-  try {
-    await connectGoogle();
-  } catch (e) {
-    log.error("[Google login failed]", e);
-  }
-}
 
 /* =========================
    Init

@@ -5,7 +5,7 @@ interface Category {
   label: string;
 }
 
-const props = defineProps<{
+defineProps<{
   open: boolean;
   categories: Category[];
   modelValue: string; // "*" ou CategoryID

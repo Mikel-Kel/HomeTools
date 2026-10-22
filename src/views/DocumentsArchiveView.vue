@@ -92,7 +92,6 @@ type SubFolder = {
 ========================= */
 
 const {
-  backend,
   storageReady,
   storageUnavailableMessage,
   ensureStorageReady,

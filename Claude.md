@@ -14,6 +14,7 @@ Repos liés : backend AppleScript dans `../Backend`, proxy Flask dans `/Users/Mi
   - `.env` est versionné (identifiants Google côté client, publics par nature) ; `.env.local` est ignoré (URL et clé du proxy).
   - Toute variable `VITE_*` finit en clair dans le bundle public.
 - Commandes : `npm run dev` (http://localhost:5173), `npm run build` (`vue-tsc -b && vite build`). Pas de tests ni de lint.
+  Le type-check utilise `tsconfig.json` (avec `noUnusedLocals` / `noUnusedParameters` : tout code inutilisé fait échouer le build).
 - Après chaque modification du code : vérifier que le build passe (type-check inclus) avant de rendre la main.
   Le build réécrit `dist/` (ignoré) et `tsconfig.tsbuildinfo` (versionné).
 
@@ -63,7 +64,7 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   Le dossier `diagnostics/` doit rester plat (contrainte Local Drive ci-dessus).
 - `events/` : événements émis par la PWA dans le backend actif, traités côté Mac (`pullObjectStorageEvents`, `processEvents`,
   `processEvent_*`). Nom de fichier préfixé `PWA-` hors Local Drive (`src/utils/eventFileName.ts`).
-  Sous-dossiers : `pending`, `control`, `processing`, `processed`, `rejected`, `status`.
+  Sous-dossiers : `control`, `processing`, `processed`, `rejected`, `status`.
 - Demande de ré-allocation : `events/[PWA-]REA_<AAAAMMJJHHMMSS>_<FITID>.json` (FITID complet dans le nom). Le badge « Pending »
   de `FollowUpDetails.vue` est déduit du stockage, jamais de l'appareil : REA encore présent à la racine de `events/` (demandé),
   ou `pending: true` sur la ligne dans `allocations/budget/FollowUpDetails-<année>.json` (traité, en attente de ré-allocation).
@@ -91,7 +92,6 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 - Google Drive : `listGoogleFilesInFolder` ne gère pas la pagination et `findGoogleFileByName` prend le premier résultat sans tri ;
   un fichier homonyme en double (create au lieu d'update) est donc possible, et lu de façon arbitraire.
 - Le contrôle de version ne s'exécute qu'en Local Drive (`versionGuard.ts` sort tant qu'aucun dossier local n'est choisi).
-- Dépendances déclarées mais importées nulle part : `@aws-sdk/client-s3`, `axios`, `idb-keyval`.
 
 ## Règles de travail
 

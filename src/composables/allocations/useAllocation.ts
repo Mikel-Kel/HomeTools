@@ -3,8 +3,7 @@ import { ref, computed } from "vue";
 import {
   listFiles,
   loadJSONFromFolder,
-  saveJSONToFolder,
-  deleteFileFromFolder
+  saveJSONToFolder
 } from "@/services/driveAdapter";
 
 export interface Allocation {
@@ -170,13 +169,6 @@ export function useAllocation(
   /* =========================
      Draft persistence
   ========================= */
-
-  async function deleteDraftFileIfExists() {
-    await deleteFileFromFolder(
-      "allocations/drafts",
-      `${spendingId}.json`
-    );
-  }
 
   async function saveDraftInternal() {
     await saveJSONToFolder(

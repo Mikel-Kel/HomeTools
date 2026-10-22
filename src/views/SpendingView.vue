@@ -570,29 +570,6 @@ function totalFor(
   );
 }
 
-const remainingAmount =
-  computed(() =>
-    accounts.value.reduce(
-      (
-        total,
-        account
-      ) =>
-        total +
-        totalFor(
-          account.id
-        ),
-
-      0
-    )
-  );
-
-const absRemainingAmount =
-  computed(() =>
-    Math.abs(
-      remainingAmount.value
-    )
-  );
-
 /* =========================
    Navigation
 ========================= */
