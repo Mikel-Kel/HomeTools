@@ -36,8 +36,14 @@ import {
 } from "@/services/driveAdapter";
 
 import {
-  transformSpendingRaw,
-} from "@/spending/transformSpendingRaw";
+  useRemoteJson,
+} from "@/composables/useRemoteJson";
+
+import {
+  readSpending,
+  SPENDING_FILE,
+  SPENDING_FOLDER,
+} from "@/contracts/spending";
 
 import {
   formatDate,
@@ -81,14 +87,55 @@ const spending =
    View state
 ========================= */
 
-const loading =
+/*
+  Connexion au stockage et référentiels communs.
+*/
+const bootstrapping =
   ref(false);
 
-const loadError =
+const bootstrapped =
+  ref(false);
+
+/*
+  Erreur de démarrage ou d’une action (Card24, release) ;
+  elle prime sur l’erreur de chargement.
+*/
+const actionError =
   ref<string | null>(null);
 
+/*
+  Mouvements à allouer, relus dès que spending.json change
+  sur le stockage. Contrat : src/contracts/spending.ts.
+*/
+const spendingFile =
+  useRemoteJson({
+    folder:
+      SPENDING_FOLDER,
+
+    file:
+      SPENDING_FILE,
+
+    read:
+      readSpending,
+  });
+
+const loading =
+  computed(() =>
+    bootstrapping.value ||
+    spendingFile.loading.value
+  );
+
+const loadError =
+  computed(() =>
+    actionError.value ??
+    spendingFile.error.value
+  );
+
 const initialized =
-  ref(false);
+  computed(() =>
+    bootstrapped.value &&
+    spendingFile.data.value !== null
+  );
 
 /* =========================
    Watcher state
@@ -666,7 +713,7 @@ function armCard24Timeout(
   card24TimeoutHandle =
     window.setTimeout(() => {
       if (card24Downloading.value) {
-        loadError.value =
+        actionError.value =
           "Card24 : pas de réponse du backend après 5 minutes.";
 
         clearCard24Pending();
@@ -697,7 +744,7 @@ async function checkCard24Status(
     }
 
     if (status.status === "error") {
-      loadError.value =
+      actionError.value =
         status.message ||
         "Card24 download failed";
     }
@@ -714,7 +761,7 @@ async function checkCard24Status(
 
 async function onDownloadCard24() {
   if (!storageReady.value) {
-    loadError.value =
+    actionError.value =
       storageUnavailableMessage.value ||
       "Storage not available.";
 
@@ -775,7 +822,7 @@ async function onDownloadCard24() {
       err
     );
 
-    loadError.value =
+    actionError.value =
       err instanceof Error
         ? err.message
         : "Card24 event publish failed";
@@ -975,49 +1022,28 @@ async function releaseAllDrafts() {
    Storage loaders
 ========================= */
 
-async function loadSpending() {
-  const raw =
-    await loadJSONFromFolder<any>(
-      "spending",
-      "spending.json"
+/*
+  Les statuts d’allocation (drafts, released) sont relus à
+  chaque nouvelle version des mouvements.
+*/
+watch(
+  () =>
+    spendingFile.data.value,
+
+  async file => {
+    if (!file) {
+      spending.clear();
+      return;
+    }
+
+    spending.replaceAll(
+      file.accounts,
+      file.records
     );
 
-  if (!raw) {
-    spending.clear();
-
-    throw new Error(
-      "spending.json not found"
-    );
+    await loadAllocationStatus();
   }
-
-  /*
-    Certains exports peuvent contenir modifiedTime.
-    Le watcher utilise sinon les métadonnées du backend.
-  */
-  if (raw.modifiedTime) {
-    spending
-      .setSpendingLastModified(
-        raw.modifiedTime
-      );
-  }
-
-  const {
-    accounts:
-      transformedAccounts,
-
-    records:
-      transformedRecords,
-  } = transformSpendingRaw(
-    raw.items
-  );
-
-  spending.replaceAll(
-    transformedAccounts,
-    transformedRecords
-  );
-
-  await loadAllocationStatus();
-}
+);
 
 async function loadAllocationStatus() {
   const draftsFolder =
@@ -1114,30 +1140,6 @@ async function loadAllocationStatus() {
    Watchers
 ========================= */
 
-/*
-  Nom historique conservé.
-  Le watcher utilise la façade multi-backend.
-*/
-
-useDriveWatcher({
-  folderId: "spending",
-  fileName: "spending.json",
-
-  lastKnownState:
-    spending.spendingLastModified,
-
-  onChanged:
-    async () => {
-      if (
-        !storageReady.value
-      ) {
-        return;
-      }
-
-      await loadSpending();
-    },
-});
-
 useDriveWatcher({
   folderId:
     "allocations/drafts",
@@ -1180,7 +1182,7 @@ watch(
   storageReady,
   ready => {
     if (!ready) {
-      initialized.value =
+      bootstrapped.value =
         false;
 
       spending.clear();
@@ -1213,15 +1215,15 @@ watch(
 
 async function initializeView() {
   if (
-    loading.value
+    bootstrapping.value
   ) {
     return;
   }
 
-  loading.value =
+  bootstrapping.value =
     true;
 
-  loadError.value =
+  actionError.value =
     null;
 
   try {
@@ -1238,9 +1240,8 @@ async function initializeView() {
     }
 
     await loadSettings();
-    await loadSpending();
 
-    initialized.value =
+    bootstrapped.value =
       true;
 
   } catch (err) {
@@ -1249,13 +1250,13 @@ async function initializeView() {
       err
     );
 
-    loadError.value =
+    actionError.value =
       err instanceof Error
         ? err.message
         : String(err);
 
   } finally {
-    loading.value =
+    bootstrapping.value =
       false;
   }
 }

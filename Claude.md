@@ -55,7 +55,8 @@ si elle est plus ancienne que la version de `AppParameters.json` (`src/services/
 - Fichiers JSON publiés par le Mac : les lire avec `useRemoteJson` (`src/composables/useRemoteJson.ts`), qui attend le stockage,
   charge, surveille et recharge sans clignotement, et les convertir avec la fonction de lecture de leur contrat
   (`src/contracts/<domaine>.ts`, helpers dans `src/contracts/read.ts`). Les types et noms de fichiers du contrat vivent dans ce dossier.
-  Migration en cours : Housekeeping, Home et FollowUp sont converties ; Spending et Archives utilisent encore `loadJSONFromFolder` directement.
+  Migration en cours : Housekeeping, Home, FollowUp et Spending sont converties ; Archives utilise encore `loadJSONFromFolder` directement.
+  Les drafts d'allocation et les statuts d'événements, lus fichier par fichier, ne passent pas par `useRemoteJson`.
 
 ## Contrat d'échange avec le backend Mac (Housekeeping)
 

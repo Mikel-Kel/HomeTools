@@ -98,11 +98,6 @@ export function useSpending() {
     );
   }
 
-const spendingLastModified = ref<string | null>(null);
-
-function setSpendingLastModified(ts: string) {
-  spendingLastModified.value = ts;
-}
 
 function clear() {
   accounts.value = [];
@@ -117,8 +112,6 @@ return {
     getRecordsForAccount,
     getDraftRecords,
     getReleaseableDraftRecords,
-    spendingLastModified,
-    setSpendingLastModified,
     clear,
   };
 }
