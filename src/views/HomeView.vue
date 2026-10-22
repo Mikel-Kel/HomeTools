@@ -170,9 +170,12 @@ const securityParameters =
   });
 
 /*
-  Volontairement sans effet sur le reste de la page : un
-  problème de lecture des messages n’empêche pas d’afficher
-  les marchés.
+  Messages du jour : réinitialisés par le housekeeping de la
+  nuit, puis complétés par chaque avertissement ou erreur de
+  la journée (événements, exécutions manuelles). Ils ne sont
+  plus affichés, mais donnent l’état de la pastille du menu
+  Housekeeping. Un problème de lecture est sans effet sur le
+  reste de la page.
 */
 const messages =
   useRemoteJson({
@@ -258,6 +261,62 @@ const homeMessages =
   computed(() =>
     messages.data.value ?? []
   );
+
+/*
+  État général de la journée : le niveau le plus grave des
+  messages. Aucun message = pas de pastille.
+*/
+const housekeepingHealth =
+  computed(() => {
+    const levels =
+      homeMessages.value.map(
+        message => message.level
+      );
+
+    if (!levels.length) {
+      return null;
+    }
+
+    if (levels.includes("error")) {
+      return "error";
+    }
+
+    return levels.includes("warning")
+      ? "warning"
+      : "ok";
+  });
+
+const housekeepingHealthTitle =
+  computed(() => {
+    const errors =
+      homeMessages.value.filter(
+        message =>
+          message.level === "error"
+      ).length;
+
+    const warnings =
+      homeMessages.value.filter(
+        message =>
+          message.level === "warning"
+      ).length;
+
+    if (!errors && !warnings) {
+      return "No problem since the nightly run";
+    }
+
+    return [
+      errors
+        ? `${errors} error${errors > 1 ? "s" : ""}`
+        : "",
+
+      warnings
+        ? `${warnings} warning${warnings > 1 ? "s" : ""}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(", ") +
+      " since the nightly run";
+  });
 
 const asOf =
   computed(() => {
@@ -539,6 +598,14 @@ function performanceClass(
               <span>
                 Housekeeping
               </span>
+
+              <span
+                v-if="housekeepingHealth"
+                class="status-dot menu-status-dot"
+                :class="housekeepingHealth"
+                :title="housekeepingHealthTitle"
+                :aria-label="housekeepingHealthTitle"
+              ></span>
             </router-link>
           </li>
         </ul>
@@ -822,30 +889,6 @@ function performanceClass(
               "text"
             )
           }}
-        </div>
-
-        <!-- STATUS MESSAGES -->
-
-        <div
-          v-if="homeMessages.length"
-          class="status-panel"
-        >
-          <div class="status-list">
-            <div
-              v-for="message in homeMessages"
-              :key="message.id"
-              class="status-item"
-            >
-              <span
-                class="status-dot"
-                :class="message.level"
-              ></span>
-
-              <span class="status-text">
-                {{ message.text }}
-              </span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -1137,58 +1180,24 @@ span:not(:first-child) {
 }
 
 /* =========================
-   Status messages
+   Status dot
 ========================= */
-
-.status-panel {
-  box-sizing: border-box;
-
-  width: 100%;
-  max-width: 460px;
-  margin-top: 32px;
-
-  padding: 10px 14px;
-
-  border: 1px solid var(--border);
-  border-radius: 8px;
-
-  background: var(--surface);
-}
-
-.status-list {
-  display: flex;
-  flex-direction: column;
-
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.status-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-
-  padding: 6px 0;
-
-  border-bottom:
-    1px solid
-    var(--border);
-
-  font-size: 0.85rem;
-  color: var(--text);
-}
-
-.status-item:last-child {
-  border-bottom: none;
-}
 
 .status-dot {
   flex-shrink: 0;
-  margin-top: 5px;
 
   width: 8px;
   height: 8px;
   border-radius: 50%;
+}
+
+/*
+  Pastille d’état du menu Housekeeping, juste après son
+  libellé.
+*/
+.menu-status-dot {
+  width: 12px;
+  height: 12px;
 }
 
 .status-dot.ok {
