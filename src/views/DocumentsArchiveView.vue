@@ -13,7 +13,7 @@ import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vu
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useDriveJsonFile } from "@/composables/useDriveJsonFile";
-import { useDriveWatcher } from "@/composables/useDriveWatcher";
+import { useRemoteJson } from "@/composables/useRemoteJson";
 import { prefixEventFileName } from "@/utils/eventFileName";
 
 import { useParties } from "@/composables/useParties";
@@ -29,6 +29,19 @@ import {
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount } from "@/utils/amountFormat";
 
+import {
+  ARCHIVE_FOLDER,
+  ARCHIVE_INDEX_FILE,
+  ARCHIVE_TO_FILE_FILE,
+  archiveYearFile,
+  readArchiveIndex,
+  readArchiveToFile,
+  readArchiveYear,
+  TO_FILE_BUCKET,
+  type ArchiveIndex,
+  type ArchiveItem,
+} from "@/contracts/archive";
+
 import type {
   DocumentTag,
 } from "@/composables/archives/useDocumentTags";
@@ -36,22 +49,6 @@ import type {
 /* =========================
    Types
 ========================= */
-
-interface ArchiveItem {
-  tocid: number;
-  folder: string;
-  documentDate: string;
-  dtaDate: string | null;
-  info1: string;
-  info2: string;
-  indicatorDTA: number;
-  physicalName: string;
-  partyID: number;
-  refAmount: number;
-  googleFileId: string;
-  tagIDs?: number[];
-  sourceBucket?: string;
-}
 
 interface ArchiveFolderConfig {
   id: number;
@@ -64,21 +61,6 @@ interface FolderView {
   source: string;
   label: string;
   order: number;
-}
-
-interface ArchiveIndex {
-  years?: number[];
-  foldersUpdated?: string[];
-}
-
-interface ArchiveBucketFile {
-  items?: ArchiveItem[];
-  groups?: Record<
-    string,
-    {
-      items?: ArchiveItem[];
-    }
-  >;
 }
 
 type SubFolder = {
@@ -128,20 +110,67 @@ const tagsStore =
    State
 ========================= */
 
-const loading =
+/*
+  Connexion au stockage et référentiels communs.
+*/
+const bootstrapping =
   ref(false);
 
-const error =
+const bootstrapped =
+  ref(false);
+
+/*
+  Erreur de démarrage ou d’une action (classement,
+  suppression) ; elle prime sur les erreurs de chargement.
+*/
+const actionError =
   ref<string | null>(null);
 
-const initialized =
-  ref(false);
+/*
+  Index des archives, relu dès qu’il change : chaque
+  nouvelle version recharge les fichiers qu’il désigne.
+  Contrat : src/contracts/archive.ts.
+*/
+const archiveIndex =
+  useRemoteJson({
+    folder:
+      ARCHIVE_FOLDER,
 
+    file:
+      ARCHIVE_INDEX_FILE,
+
+    read:
+      readArchiveIndex,
+  });
+
+/*
+  Documents de toFile.json et des fichiers d’année.
+*/
 const archive =
   ref<ArchiveItem[]>([]);
 
-const indexLastModified =
+const archiveLoading =
+  ref(false);
+
+const archiveLoaded =
+  ref(false);
+
+const archiveError =
   ref<string | null>(null);
+
+const loading =
+  computed(() =>
+    bootstrapping.value ||
+    archiveIndex.loading.value ||
+    archiveLoading.value
+  );
+
+const error =
+  computed(() =>
+    actionError.value ??
+    archiveIndex.error.value ??
+    archiveError.value
+  );
 
 const filtersOpen =
   ref(true);
@@ -711,145 +740,98 @@ async function openDocument(
 }
 
 /* =========================
-   Archive mapping
-========================= */
-
-function mapToFileItems(
-  data: ArchiveBucketFile | null
-): ArchiveItem[] {
-  if (!data?.items) {
-    return [];
-  }
-
-  return data.items.map(
-    item => ({
-      ...item,
-
-      folder:
-        "A Classer",
-
-      sourceBucket:
-        "toFile",
-    })
-  );
-}
-
-function mapYearItems(
-  data: ArchiveBucketFile | null,
-  year: string
-): ArchiveItem[] {
-  if (!data?.groups) {
-    return [];
-  }
-
-  const output:
-    ArchiveItem[] = [];
-
-  for (
-    const [
-      groupName,
-      group,
-    ]
-    of Object.entries(
-      data.groups
-    )
-  ) {
-    const items =
-      group.items ?? [];
-
-    output.push(
-      ...items.map(
-        item => ({
-          ...item,
-
-          folder:
-            folderLabelToSourceMap
-              .value
-              .get(groupName) ??
-            groupName,
-
-          sourceBucket:
-            year,
-        })
-      )
-    );
-  }
-
-  return output;
-}
-
-/* =========================
    Load archive
 ========================= */
 
-async function loadArchive() {
-  if (!storageReady.value) {
-    return;
+function folderOfLabel(
+  label: string
+): string {
+  return (
+    folderLabelToSourceMap.value.get(
+      label
+    ) ??
+    label
+  );
+}
+
+/*
+  Documents d’un fichier de l’index : « toFile » ou une
+  année. Un fichier absent ne contient aucun document.
+*/
+async function loadBucket(
+  bucket: string
+): Promise<ArchiveItem[]> {
+  if (bucket === TO_FILE_BUCKET) {
+    return readArchiveToFile(
+      await loadJSONFromFolder<unknown>(
+        ARCHIVE_FOLDER,
+        ARCHIVE_TO_FILE_FILE
+      )
+    );
   }
 
-  loading.value =
-    true;
+  return readArchiveYear(
+    await loadJSONFromFolder<unknown>(
+      ARCHIVE_FOLDER,
+      archiveYearFile(bucket)
+    ),
+    bucket,
+    folderOfLabel
+  );
+}
 
-  error.value =
+/*
+  Lecture complète (première version de l’index), ou
+  partielle : seuls les fichiers republiés par le dernier
+  classement (foldersUpdated) sont relus.
+*/
+async function loadArchive(
+  index: ArchiveIndex,
+  partial: boolean
+) {
+  const buckets =
+    partial
+      ? index.foldersUpdated.filter(
+          bucket =>
+            bucket === TO_FILE_BUCKET ||
+            /^\d{4}$/.test(bucket)
+        )
+      : [
+          TO_FILE_BUCKET,
+          ...index.years.map(String),
+        ];
+
+  if (!partial) {
+    archiveLoading.value =
+      true;
+  }
+
+  archiveError.value =
     null;
 
   try {
-    const index =
-      await loadJSONFromFolder<
-        ArchiveIndex
-      >(
-        "archive",
-        "index.json"
-      );
-
-    if (!index) {
-      throw new Error(
-        "Archive index not loaded"
-      );
-    }
-
-    const years =
-      index.years ?? [];
-
-    const allItems:
-      ArchiveItem[] = [];
-
-    const toFile =
-      await loadJSONFromFolder<
-        ArchiveBucketFile
-      >(
-        "archive",
-        "toFile.json"
-      );
-
-    allItems.push(
-      ...mapToFileItems(
-        toFile
-      )
-    );
-
-    for (
-      const year
-      of years
-    ) {
-      const data =
-        await loadJSONFromFolder<
-          ArchiveBucketFile
-        >(
-          "archive",
-          `${year}.json`
-        );
-
-      allItems.push(
-        ...mapYearItems(
-          data,
-          String(year)
+    const loaded =
+      (
+        await Promise.all(
+          buckets.map(loadBucket)
         )
-      );
-    }
+      ).flat();
 
     archive.value =
-      allItems;
+      partial
+        ? [
+            ...archive.value.filter(
+              item =>
+                !buckets.includes(
+                  item.sourceBucket
+                )
+            ),
+            ...loaded,
+          ]
+        : loaded;
+
+    archiveLoaded.value =
+      true;
 
     if (
       selectedFolder.value ===
@@ -872,119 +854,53 @@ async function loadArchive() {
       err
     );
 
-    error.value =
-      err instanceof Error
-        ? err.message
-        : "Failed to load archive";
+    if (!partial) {
+      archiveError.value =
+        err instanceof Error
+          ? err.message
+          : "Failed to load archive";
+    }
 
   } finally {
-    loading.value =
+    archiveLoading.value =
       false;
   }
 }
 
-/* =========================
-   Smart reload
-========================= */
+watch(
+  () =>
+    archiveIndex.data.value,
 
-async function smartReload(
-  index: ArchiveIndex
-) {
-  const foldersUpdated =
-    index.foldersUpdated ??
-    [];
+  async (index, previous) => {
+    if (!index) {
+      return;
+    }
 
-  if (
-    foldersUpdated.length ===
-    0
-  ) {
-    console.log(
-      "Archive full reload"
+    const partial =
+      archiveLoaded.value &&
+      previous !== null &&
+      index.foldersUpdated.length > 0;
+
+    if (partial) {
+      /*
+        L’index peut être publié un instant avant les
+        fichiers qu’il désigne.
+      */
+      await new Promise<void>(
+        resolve =>
+          window.setTimeout(
+            resolve,
+            200
+          )
+      );
+    }
+
+    await loadArchive(
+      index,
+      partial
     );
-
-    await loadArchive();
-
-    return;
   }
-
-  console.log(
-    "Archive smart reload:",
-    foldersUpdated
-  );
-
-  const updatedItems:
-    ArchiveItem[] = [];
-
-  for (
-    const folder
-    of foldersUpdated
-  ) {
-    if (
-      folder ===
-      "toFile"
-    ) {
-      const toFile =
-        await loadJSONFromFolder<
-          ArchiveBucketFile
-        >(
-          "archive",
-          "toFile.json"
-        );
-
-      updatedItems.push(
-        ...mapToFileItems(
-          toFile
-        )
-      );
-
-      continue;
-    }
-
-    if (
-      /^\d{4}$/.test(
-        folder
-      )
-    ) {
-      const data =
-        await loadJSONFromFolder<
-          ArchiveBucketFile
-        >(
-          "archive",
-          `${folder}.json`
-        );
-
-      updatedItems.push(
-        ...mapYearItems(
-          data,
-          folder
-        )
-      );
-    }
-  }
-
-  archive.value = [
-    ...archive.value.filter(
-      item =>
-        !foldersUpdated.includes(
-          item.sourceBucket ??
-          ""
-        )
-    ),
-
-    ...updatedItems,
-  ];
-
-  if (
-    selectedFolder.value ===
-    billsFolderSource.value
-  ) {
-    selectDefaultPayDateForQuarter();
-  }
-
-  console.log(
-    "Archive smart reload completed"
-  );
-}
+);
 
 /* =========================
    Quarter logic
@@ -1592,7 +1508,7 @@ async function saveClassification(
   updated: ArchiveItem
 ) {
   if (!storageReady.value) {
-    error.value =
+    actionError.value =
       storageUnavailableMessage.value ||
       "Storage not available.";
 
@@ -1733,7 +1649,7 @@ async function saveClassification(
       }
     }
 
-    error.value =
+    actionError.value =
       err instanceof Error
         ? err.message
         : "Save failed";
@@ -1750,7 +1666,7 @@ async function deleteDocument(
   }
 ) {
   if (!storageReady.value) {
-    error.value =
+    actionError.value =
       storageUnavailableMessage.value ||
       "Storage not available.";
 
@@ -1803,7 +1719,7 @@ async function deleteDocument(
       err
     );
 
-    error.value =
+    actionError.value =
       err instanceof Error
         ? err.message
         : "Delete failed";
@@ -1992,16 +1908,16 @@ function highlight(
 
 async function initializeView() {
   if (
-    loading.value ||
-    initialized.value
+    bootstrapping.value ||
+    bootstrapped.value
   ) {
     return;
   }
 
-  loading.value =
+  bootstrapping.value =
     true;
 
-  error.value =
+  actionError.value =
     null;
 
   try {
@@ -2013,13 +1929,12 @@ async function initializeView() {
     }
 
     await loadSettings();
-    await loadArchive();
 
     selectedFolder.value =
       selectedFolder.value ??
       defaultFolder.value;
 
-    initialized.value =
+    bootstrapped.value =
       true;
 
   } catch (err) {
@@ -2028,22 +1943,26 @@ async function initializeView() {
       err
     );
 
-    error.value =
+    actionError.value =
       err instanceof Error
         ? err.message
         : String(err);
 
   } finally {
-    loading.value =
+    bootstrapping.value =
       false;
   }
 }
 
 watch(
   storageReady,
+
   async ready => {
     if (!ready) {
-      initialized.value =
+      bootstrapped.value =
+        false;
+
+      archiveLoaded.value =
         false;
 
       archive.value =
@@ -2057,68 +1976,12 @@ watch(
 
     await initializeView();
   },
+
   {
     immediate:
       true,
   }
 );
-
-/* =========================
-   Archive index watcher
-========================= */
-
-useDriveWatcher({
-  folderId:
-    "archive",
-
-  fileName:
-    "index.json",
-
-  lastKnownState:
-    indexLastModified,
-
-  onChanged:
-    async () => {
-      if (
-        !storageReady.value
-      ) {
-        return;
-      }
-
-      console.log(
-        "Archive index changed"
-      );
-
-      const index =
-        await loadJSONFromFolder<
-          ArchiveIndex
-        >(
-          "archive",
-          "index.json"
-        );
-
-      if (!index) {
-        return;
-      }
-
-      /*
-        Small consistency delay:
-        index.json can be published a fraction before
-        the affected year/toFile object is available.
-      */
-      await new Promise<void>(
-        resolve =>
-          window.setTimeout(
-            resolve,
-            200
-          )
-      );
-
-      await smartReload(
-        index
-      );
-    },
-});
 
 /* =========================
    Cleanup

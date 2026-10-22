@@ -30,7 +30,7 @@ interface ArchiveDocument {
   dtaDate: string | null
   info1: string
   info2: string
-  refAmount: number
+  refAmount: number | null
   tagIDs?: number[]
 }
 
