@@ -50,7 +50,8 @@ si elle est plus ancienne que la version de `AppParameters.json` (`src/services/
   - `/api/s3/read`, `write`, `head`, `list`, `delete` : utilisés par `src/services/s3/s3StorageAdapter.ts`.
   - `/api/local/read` (lecture d'un PDF d'archive sur le disque du Mac, normalisation NFC/NFD) et `/api/local/open`
     (ouverture native sur le Mac) : utilisés par `DocumentsArchiveView.vue`, quel que soit le backend actif.
-- Il n'y a pas d'authentification applicative ni de coffre d'identifiants : la clé du proxy vient de `VITE_PROXY_API_KEY`.
+- Tout appel au proxy passe par `proxyFetch` (`src/services/proxy/proxyClient.ts`), seul module qui lit `VITE_PROXY_URL`
+  et `VITE_PROXY_API_KEY`. Il n'y a pas d'authentification applicative ni de coffre d'identifiants.
 - Thème : tokens `--positive`, `--negative`, `--warning` dans `src/assets/theme.css`, variantes clair/sombre (`[data-theme="dark"]`).
 - Fichiers JSON publiés par le Mac : les lire avec `useRemoteJson` (`src/composables/useRemoteJson.ts`), qui attend le stockage,
   charge, surveille et recharge sans clignotement, et les convertir avec la fonction de lecture de leur contrat

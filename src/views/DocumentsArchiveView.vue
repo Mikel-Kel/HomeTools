@@ -14,6 +14,7 @@ import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { emitEvent } from "@/services/events/eventFiles";
+import { isProxyConfigured, proxyFetch } from "@/services/proxy/proxyClient";
 
 import { useParties } from "@/composables/useParties";
 import { useArchiveFolders } from "@/composables/archives/useArchiveFolders";
@@ -516,36 +517,24 @@ function isMacDesktopBrowser(): boolean {
 async function openNativelyOnMac(
   physicalName: string
 ): Promise<boolean> {
-  const proxyUrl =
-    import.meta.env.VITE_PROXY_URL as string | undefined;
-
-  const proxyApiKey =
-    import.meta.env.VITE_PROXY_API_KEY as string | undefined;
-
-  if (!proxyUrl || !proxyApiKey) {
+  if (!isProxyConfigured()) {
     return false;
   }
 
-  const base =
-    proxyUrl.replace(/\/+$/, "");
-
-  const url =
-    new URL(base + "/api/local/open");
-
-  url.searchParams.set(
-    "key",
-    physicalName
-  );
-
   try {
+    /*
+      Délai court : en cas d'échec, l'affichage dans le
+      navigateur prend le relais.
+    */
     const response =
-      await fetch(url.toString(), {
-        method: "POST",
-        headers: {
-          "X-Proxy-Key":
-            proxyApiKey,
-        },
-      });
+      await proxyFetch(
+        "/api/local/open",
+        {
+          method: "POST",
+          params: { key: physicalName },
+          timeoutMs: 10_000,
+        }
+      );
 
     return response.ok;
 
@@ -575,52 +564,21 @@ function isIOSStandalonePWA(): boolean {
 }
 
 /*
-  archives-prod est desormais un bucket PRIVE : il n'y a plus
-  d'URL publique directe. La lecture passe par le proxy local
-  (Tailscale), authentifiee par la meme cle que hometools-prod,
-  sur l'endpoint binaire dedie /api/archives/read.
+  archives-prod est un bucket privé, sans URL publique.
+  Les fichiers archivés existent physiquement sur le disque
+  du Mac (source de la synchronisation vers S3), et le proxy
+  tourne sur ce même Mac : il les lit directement sur le
+  disque (/api/local/read), plus vite qu'en repassant par
+  archives-prod, et de la même façon pour le Mac et l'iPad.
 */
 async function fetchArchiveDocumentUrl(
   physicalName: string
 ): Promise<string> {
-  const proxyUrl =
-    import.meta.env.VITE_PROXY_URL as string | undefined;
-
-  const proxyApiKey =
-    import.meta.env.VITE_PROXY_API_KEY as string | undefined;
-
-  if (!proxyUrl || !proxyApiKey) {
-    throw new Error(
-      "Missing VITE_PROXY_URL or VITE_PROXY_API_KEY"
-    );
-  }
-
-  const base =
-    proxyUrl.replace(/\/+$/, "");
-
-  /*
-    Les fichiers archives existent deja physiquement sur le
-    disque du Mac (source de la synchronisation vers S3).
-    Le proxy tournant sur ce meme Mac, autant lire directement
-    le disque local plutot que de repasser par archives-prod -
-    plus rapide, et ca marche identiquement pour le Mac et
-    l'iPad puisque les deux passent par le meme proxy.
-  */
-  const url =
-    new URL(base + "/api/local/read");
-
-  url.searchParams.set(
-    "key",
-    physicalName
-  );
-
   const response =
-    await fetch(url.toString(), {
-      headers: {
-        "X-Proxy-Key":
-          proxyApiKey,
-      },
-    });
+    await proxyFetch(
+      "/api/local/read",
+      { params: { key: physicalName } }
+    );
 
   if (!response.ok) {
     /*
