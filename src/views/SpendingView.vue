@@ -16,7 +16,7 @@ import DateChip from "@/components/DateChip.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useDriveWatcher } from "@/composables/useDriveWatcher";
-import { useDriveJsonFile } from "@/composables/useDriveJsonFile";
+import { useEventRequest } from "@/composables/useEventRequest";
 
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 
@@ -52,8 +52,6 @@ import {
 import {
   formatAmount,
 } from "@/utils/amountFormat";
-
-import { prefixEventFileName } from "@/utils/eventFileName";
 
 /* =========================
    Router / storage
@@ -145,9 +143,6 @@ const draftsState =
   ref<string | null>(null);
 
 const releasedState =
-  ref<string | null>(null);
-
-const card24StatusState =
   ref<string | null>(null);
 
 /* =========================
@@ -643,121 +638,35 @@ async function openAllocation(
    Card24 download
 ========================= */
 
-const card24Downloading =
-  ref(false);
-
-const card24PendingFileName =
-  ref<string | null>(null);
-
-const CARD24_STATUS_FOLDER =
-  "events/status";
-
-const CARD24_PENDING_KEY =
-  "card24PendingEvent";
-
-const CARD24_TIMEOUT_MS =
-  5 * 60 * 1000; // safety net: 5 min
-
-let card24TimeoutHandle:
-  number | null = null;
-
-function buildCard24EventFileName():
-  string {
-  const now  = new Date();
-  const YYYY = now.getFullYear();
-  const MM   = String(now.getMonth() + 1).padStart(2, "0");
-  const DD   = String(now.getDate()).padStart(2, "0");
-  const HH   = String(now.getHours()).padStart(2, "0");
-  const mm   = String(now.getMinutes()).padStart(2, "0");
-  const ss   = String(now.getSeconds()).padStart(2, "0");
-
-  const baseFileName =
-    `BAT_${YYYY}${MM}${DD}${HH}${mm}${ss}_Card24Download.json`;
-
-  return prefixEventFileName(
-    baseFileName
-  );
-}
-
-function clearCard24Pending() {
-  card24Downloading.value =
-    false;
-
-  card24PendingFileName.value =
-    null;
-
-  localStorage.removeItem(
-    CARD24_PENDING_KEY
-  );
-
-  if (card24TimeoutHandle !== null) {
-    window.clearTimeout(
-      card24TimeoutHandle
-    );
-
-    card24TimeoutHandle =
-      null;
-  }
-}
-
-function armCard24Timeout(
-  remainingMs: number =
-    CARD24_TIMEOUT_MS
-) {
-  if (card24TimeoutHandle !== null) {
-    window.clearTimeout(
-      card24TimeoutHandle
-    );
-  }
-
-  card24TimeoutHandle =
-    window.setTimeout(() => {
-      if (card24Downloading.value) {
-        actionError.value =
-          "Card24 : pas de réponse du backend après 5 minutes.";
-
-        clearCard24Pending();
-      }
-    }, Math.max(remainingMs, 0));
-}
-
 /*
-  Checks whether a status file for this event has appeared yet.
-  Returns true once the pending state has been resolved (success
-  or error), false if it's still in progress.
+  Demande de téléchargement, events/PWA-BAT_<AAAAMMJJHHMMSS>_Card24Download.json,
+  suivie par son statut dans events/status/. Elle survit à
+  un rechargement de la page.
 */
-async function checkCard24Status(
-  fileName: string
-): Promise<boolean> {
-  try {
-    const status =
-      await loadJSONFromFolder<{
-        status: string;
-        message?: string;
-      }>(
-        CARD24_STATUS_FOLDER,
-        fileName
-      );
+const CARD24_TIMEOUT_MS =
+  5 * 60 * 1000;
 
-    if (!status) {
-      return false;
-    }
+const card24 =
+  useEventRequest({
+    trigram: "BAT",
+    timeoutMs: CARD24_TIMEOUT_MS,
+    persistKey: "card24PendingEvent",
+  });
 
-    if (status.status === "error") {
+const card24Downloading =
+  card24.inProgress;
+
+watch(
+  () => card24.request.value?.phase,
+
+  phase => {
+    if (phase === "error") {
       actionError.value =
-        status.message ||
+        card24.request.value?.message ||
         "Card24 download failed";
     }
-
-    clearCard24Pending();
-
-    return true;
-
-  } catch {
-    // Status file not there yet, keep waiting.
-    return false;
   }
-}
+);
 
 async function onDownloadCard24() {
   if (!storageReady.value) {
@@ -772,11 +681,8 @@ async function onDownloadCard24() {
     return;
   }
 
-  card24Downloading.value =
-    true;
-
-  try {
-    const event = {
+  await card24.send(
+    {
       type:      "BATCH_REQUESTED",
       version:   1,
       timestamp: new Date().toISOString(),
@@ -784,122 +690,10 @@ async function onDownloadCard24() {
         script: "Card24Download",
         reason: "CARD24_DOWNLOAD_REQUESTED",
       },
-    };
-
-    const fileName =
-      buildCard24EventFileName();
-
-    const { save } =
-      useDriveJsonFile(
-        "events",
-        fileName
-      );
-
-    await save(event);
-
-    card24PendingFileName.value =
-      fileName;
-
-    localStorage.setItem(
-      CARD24_PENDING_KEY,
-
-      JSON.stringify({
-        fileName,
-        startedAt: Date.now(),
-      })
-    );
-
-    armCard24Timeout();
-
-    // In case the backend already ran between save() and now.
-    await checkCard24Status(
-      fileName
-    );
-
-  } catch (err) {
-    console.error(
-      "Card24 event publish failed",
-      err
-    );
-
-    actionError.value =
-      err instanceof Error
-        ? err.message
-        : "Card24 event publish failed";
-
-    clearCard24Pending();
-  }
-}
-
-useDriveWatcher({
-  folderId: CARD24_STATUS_FOLDER,
-
-  lastKnownState:
-    card24StatusState,
-
-  onChanged:
-    async () => {
-      if (
-        !card24PendingFileName.value
-      ) {
-        return;
-      }
-
-      await checkCard24Status(
-        card24PendingFileName.value
-      );
     },
-});
-
-onMounted(() => {
-  const raw =
-    localStorage.getItem(
-      CARD24_PENDING_KEY
-    );
-
-  if (!raw) {
-    return;
-  }
-
-  try {
-    const pending =
-      JSON.parse(raw) as {
-        fileName: string;
-        startedAt: number;
-      };
-
-    const elapsed =
-      Date.now() - pending.startedAt;
-
-    if (elapsed >= CARD24_TIMEOUT_MS) {
-      localStorage.removeItem(
-        CARD24_PENDING_KEY
-      );
-
-      return;
-    }
-
-    card24Downloading.value =
-      true;
-
-    card24PendingFileName.value =
-      pending.fileName;
-
-    armCard24Timeout(
-      CARD24_TIMEOUT_MS - elapsed
-    );
-
-    // The backend may have finished while the app was closed/reloaded.
-    checkCard24Status(
-      pending.fileName
-    );
-
-  } catch {
-    localStorage.removeItem(
-      CARD24_PENDING_KEY
-    );
-  }
-});
+    "Card24Download"
+  );
+}
 
 /* =========================
    FX popover
@@ -1326,17 +1120,6 @@ onBeforeUnmount(() => {
 
   resizeObserver =
     null;
-
-  // Note: intentionally NOT clearing card24 pending state here —
-  // it must survive a reload/navigation so the hourglass can resume.
-  if (card24TimeoutHandle !== null) {
-    window.clearTimeout(
-      card24TimeoutHandle
-    );
-
-    card24TimeoutHandle =
-      null;
-  }
 });
 </script>
 

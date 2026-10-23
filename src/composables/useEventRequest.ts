@@ -3,6 +3,7 @@ import {
   onBeforeUnmount,
   onMounted,
   ref,
+  watch,
 } from "vue";
 
 import {
@@ -60,12 +61,26 @@ interface EventRequestOptions {
     passe à true (Mac éteint, proxy injoignable, etc.).
   */
   noAnswerDelayMs?: number;
+
+  /*
+    Au-delà de ce délai, la demande passe en erreur.
+  */
+  timeoutMs?: number;
+
+  /*
+    Clé localStorage : la demande en cours survit à un
+    rechargement de la page (dans la limite de timeoutMs).
+    Format : { "fileName": "…", "startedAt": <ms> }.
+  */
+  persistKey?: string;
 }
 
 export function useEventRequest({
   trigram,
   completeOnSuccess = true,
   noAnswerDelayMs,
+  timeoutMs,
+  persistKey,
 }: EventRequestOptions) {
   const pattern =
     eventFilePattern(trigram);
@@ -151,6 +166,101 @@ export function useEventRequest({
     }
   }
 
+  function checkTimeout() {
+    if (
+      timeoutMs !== undefined &&
+      inProgress.value &&
+      request.value &&
+      now.value - request.value.requestedAt >
+        timeoutMs
+    ) {
+      update(
+        "error",
+        `No answer from the Mac after ${Math.round(timeoutMs / 60_000)} minutes`
+      );
+    }
+  }
+
+  /* =========================
+     Persistance (persistKey)
+  ========================= */
+
+  function restore() {
+    if (!persistKey) {
+      return;
+    }
+
+    try {
+      const saved =
+        JSON.parse(
+          localStorage.getItem(persistKey) ??
+            "null"
+        ) as {
+          fileName?: unknown;
+          startedAt?: unknown;
+        } | null;
+
+      if (
+        typeof saved?.fileName !== "string" ||
+        typeof saved.startedAt !== "number" ||
+        (
+          timeoutMs !== undefined &&
+          Date.now() - saved.startedAt >= timeoutMs
+        )
+      ) {
+        localStorage.removeItem(persistKey);
+
+        return;
+      }
+
+      request.value = {
+        fileName: saved.fileName,
+        requestedAt: saved.startedAt,
+        phase: "requested",
+        message: null,
+      };
+
+    } catch {
+      /* stockage local indisponible : rien à reprendre */
+    }
+  }
+
+  if (persistKey) {
+    watch(
+      request,
+
+      current => {
+        try {
+          if (
+            current &&
+            (
+              current.phase === "requested" ||
+              current.phase === "started"
+            )
+          ) {
+            localStorage.setItem(
+              persistKey,
+
+              JSON.stringify({
+                fileName: current.fileName,
+                startedAt: current.requestedAt,
+              })
+            );
+          } else {
+            localStorage.removeItem(persistKey);
+          }
+
+        } catch {
+          /* stockage local indisponible */
+        }
+      }
+    );
+  }
+
+  /* =========================
+     Suivi
+  ========================= */
+
   async function check() {
     const files =
       await listFiles(
@@ -234,12 +344,19 @@ export function useEventRequest({
   });
 
   onMounted(async () => {
-    if (noAnswerDelayMs !== undefined) {
+    restore();
+
+    if (
+      noAnswerDelayMs !== undefined ||
+      timeoutMs !== undefined
+    ) {
       clockTimer =
         window.setInterval(
           () => {
             now.value =
               Date.now();
+
+            checkTimeout();
           },
           10_000
         );
