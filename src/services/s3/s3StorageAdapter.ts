@@ -5,10 +5,10 @@ import {
   type StoragePullRequestEvent,
 } from "@/services/s3/storagePullRequest";
 
+import {
+  proxyFetch,
+} from "@/services/proxy/proxyClient";
 
-/* =========================
-   Configuration
-========================= */
 
 /*
   Depuis l'introduction du proxy Tailscale, la PWA ne
@@ -17,26 +17,8 @@ import {
 
   Le proxy (Python/Flask, sur le Mac, expose via
   `tailscale serve`) signe les requetes S3 lui-meme.
-  La PWA n'a besoin que de son URL et d'une cle d'API
-  partagee pour s'authentifier aupres du proxy.
+  Acces au proxy : src/services/proxy/proxyClient.ts.
 */
-
-const proxyUrl =
-  import.meta.env.VITE_PROXY_URL as string | undefined;
-
-const proxyApiKey =
-  import.meta.env.VITE_PROXY_API_KEY as string | undefined;
-
-
-function assertConfig(): void {
-  if (!proxyUrl) {
-    throw new Error("Missing VITE_PROXY_URL");
-  }
-
-  if (!proxyApiKey) {
-    throw new Error("Missing VITE_PROXY_API_KEY");
-  }
-}
 
 
 /* =========================
@@ -72,56 +54,6 @@ export interface S3WriteJSONOptions {
   requestPull?: boolean;
 
   reason?: string;
-}
-
-
-/* =========================
-   Proxy fetch helper
-========================= */
-
-function buildProxyUrl(
-  path: string,
-  params?: Record<string, string>
-): string {
-  const base =
-    (proxyUrl ?? "").replace(
-      /\/+$/,
-      ""
-    );
-
-  const url =
-    new URL(base + path);
-
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
-      url.searchParams.set(key, value);
-    }
-  }
-
-  return url.toString();
-}
-
-
-async function proxyFetch(
-  path: string,
-  init: RequestInit = {},
-  params?: Record<string, string>
-): Promise<Response> {
-  assertConfig();
-
-  const url =
-    buildProxyUrl(path, params);
-
-  return await fetch(url, {
-    ...init,
-    cache: "no-store",
-    headers: {
-      "X-Proxy-Key":
-        proxyApiKey ?? "",
-
-      ...(init.headers ?? {}),
-    },
-  });
 }
 
 
@@ -202,8 +134,6 @@ function isJSONPath(
 export async function publishS3StoragePullRequest(
   definition: StoragePullRequestDefinition
 ): Promise<StoragePullRequestEvent> {
-  assertConfig();
-
   return await publishStoragePullRequest(
     definition,
     writeS3JSONPrimitive
@@ -224,8 +154,7 @@ export async function readS3Text(
   const response =
     await proxyFetch(
       "/api/s3/read",
-      { method: "GET" },
-      { key }
+      { params: { key } }
     );
 
   if (response.status === 404) {
@@ -401,8 +330,7 @@ export async function findS3FileByName(
   const response =
     await proxyFetch(
       "/api/s3/head",
-      { method: "GET" },
-      { key }
+      { params: { key } }
     );
 
   if (response.status === 404) {
@@ -483,8 +411,7 @@ export async function listS3FilesInFolder(
   const response =
     await proxyFetch(
       "/api/s3/list",
-      { method: "GET" },
-      { prefix }
+      { params: { prefix } }
     );
 
   if (!response.ok) {
@@ -534,8 +461,10 @@ export async function deleteS3File(
   const response =
     await proxyFetch(
       "/api/s3/delete",
-      { method: "DELETE" },
-      { key }
+      {
+        method: "DELETE",
+        params: { key },
+      }
     );
 
   if (!response.ok) {
