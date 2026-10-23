@@ -69,9 +69,11 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 - `diagnostics/housekeepingLogIndex.json` et `diagnostics/housekeepingLog-{date}.json` : journaux affichés par `EventLogView.vue`.
   Le dossier `diagnostics/` doit rester plat (contrainte Local Drive ci-dessus).
 - `events/` : événements émis par la PWA dans le backend actif, traités côté Mac (`pullObjectStorageEvents`, `processEvents`,
-  `processEvent_*`). Nom de fichier préfixé `PWA-` hors Local Drive (`src/utils/eventFileName.ts`).
+  `processEvent_*`). Nom `PWA-<TRI>_<AAAAMMJJHHMMSS>[_<suffixe>].json`, toujours préfixé, Local Drive compris (le Mac
+  n'écrit un statut que pour ces noms ; anciens noms sans préfixe encore reconnus). Écriture par `emitEvent`
+  (`src/services/events/eventFiles.ts`), suivi d'une demande par `useEventRequest` (`src/composables/useEventRequest.ts`).
   Sous-dossiers : `control`, `processing`, `processed`, `rejected`, `status`.
-- Demande de ré-allocation : `events/[PWA-]REA_<AAAAMMJJHHMMSS>_<FITID>.json` (FITID complet dans le nom). Le badge « Pending »
+- Demande de ré-allocation : `events/PWA-REA_<AAAAMMJJHHMMSS>_<FITID>.json` (FITID complet dans le nom). Le badge « Pending »
   de `FollowUpDetails.vue` est déduit du stockage, jamais de l'appareil : REA encore présent à la racine de `events/` (demandé),
   ou `pending: true` sur la ligne dans `allocations/budget/FollowUpDetails-<année>.json` (traité, en attente de ré-allocation).
   Le backend publie `FollowUpDetails` avant de retirer le REA de `events/`. Les allocations d'un mouvement en attente sont
@@ -79,11 +81,11 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 - `events/control/` : en Object Storage, toute écriture sous `events/`, `allocations/drafts/` ou `allocations/released/` émet
   un événement `STORAGE_PULL_REQUESTED` pour que le Mac rapatrie les fichiers (`src/services/s3/storagePullRequest.ts`).
   Le champ `paths` y est un alias de compatibilité de `downloadPaths`.
-- `events/status/` : fichiers de statut de traitement (boucle de retour Card24). Surveillés par `SpendingView.vue`
-  (watcher, persistance localStorage, timeout de sécurité de 5 minutes).
+- `events/status/<nom de l'événement>` : `{ status: "success" | "error", message, finishedAt }`, conservés 24 h. Lus par
+  `useEventRequest` : Card24 (`PWA-BAT_…_Card24Download.json`, persistance localStorage, timeout de 5 minutes) et
+  housekeeping manuel. Classements d'archives (`PWA-TOC_…_<TOCID>.json`) : pas de suivi de statut.
 - `settings/housekeepingSteps.json` : `{ generatedAt, steps: [{ key, label, group, manual, nightly, forces? }] }`, catalogue des étapes du
-  housekeeping. Exécution manuelle : événement `PWA-HKP_<AAAAMMJJHHMMSS>.json` (préfixe `PWA-` même en Local Drive, pour
-  recevoir un statut dans `events/status/`), `eventType` `HOUSEKEEPING_REQUESTED`,
+  housekeeping. Exécution manuelle : événement `PWA-HKP_<AAAAMMJJHHMMSS>.json`, `eventType` `HOUSEKEEPING_REQUESTED`,
   `payload: { steps: [clés], source }`. Seules les étapes `manual: true` sont acceptées ; les étapes listées dans `forces`
   (ex. `archiveReconcile` → `exportArchiveToc`) s'exécutent avec elles. Une réconciliation manuelle est toujours appliquée.
 - Nom d'un document archivé (`buildPhysicalName`, `DocumentsArchiveView.vue`) :

@@ -12,9 +12,8 @@ import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vu
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
-import { useDriveJsonFile } from "@/composables/useDriveJsonFile";
 import { useRemoteJson } from "@/composables/useRemoteJson";
-import { prefixEventFileName } from "@/utils/eventFileName";
+import { emitEvent } from "@/services/events/eventFiles";
 
 import { useParties } from "@/composables/useParties";
 import { useArchiveFolders } from "@/composables/archives/useArchiveFolders";
@@ -1367,42 +1366,6 @@ function closeClassification() {
     null;
 }
 
-/* =========================
-   Event helpers
-========================= */
-
-function buildEventFileName(
-  tocid: number
-): string {
-  const now = new Date();
-
-  const YYYY =
-    now.getFullYear();
-
-  const MM =
-    String(now.getMonth() + 1)
-      .padStart(2, "0");
-
-  const DD =
-    String(now.getDate())
-      .padStart(2, "0");
-
-  const HH =
-    String(now.getHours())
-      .padStart(2, "0");
-
-  const mm =
-    String(now.getMinutes())
-      .padStart(2, "0");
-
-  const baseFileName =
-    `TOC_${YYYY}${MM}${DD}${HH}${mm}_${tocid}.json`;
-
-  return prefixEventFileName(
-    baseFileName
-  );
-}
-
 function formatPartyID(
   partyID: number
 ): string {
@@ -1451,8 +1414,14 @@ function buildPhysicalName(
         )}`
       : "";
 
+  /*
+    Extension du fichier d’origine (.pdf, .docx, .jpg…),
+    conservée au classement.
+  */
   const extension =
-    ".pdf";
+    /\.[A-Za-z0-9]+$/.exec(
+      item.physicalName
+    )?.[0] ?? ".pdf";
 
   if (
     item.folder ===
@@ -1598,20 +1567,14 @@ async function saveClassification(
       },
     };
 
-    const fileName =
-      buildEventFileName(
-        updated.tocid
-      );
-
-    const {
-      save,
-    } =
-      useDriveJsonFile(
-        "events",
-        fileName
-      );
-
-    await save(event);
+    /*
+      events/PWA-TOC_<AAAAMMJJHHMMSS>_<TOCID>.json
+    */
+    await emitEvent(
+      "TOC",
+      event,
+      String(updated.tocid)
+    );
 
     closeClassification();
 
@@ -1674,11 +1637,6 @@ async function deleteDocument(
   }
 
   try {
-    const fileName =
-      buildEventFileName(
-        payload.tocid
-      );
-
     const event = {
       eventType:
         "ARCHIVE_DELETED",
@@ -1695,15 +1653,11 @@ async function deleteDocument(
       },
     };
 
-    const {
-      save,
-    } =
-      useDriveJsonFile(
-        "events",
-        fileName
-      );
-
-    await save(event);
+    await emitEvent(
+      "TOC",
+      event,
+      String(payload.tocid)
+    );
 
     closeClassification();
 
