@@ -1,21 +1,17 @@
 <script setup lang="ts">
 import {
   computed,
-  onBeforeUnmount,
-  onMounted,
   ref,
   watch,
 } from "vue";
 
 import {
-  listFiles,
-  loadJSONFromFolder,
-  saveJSONToFolder,
-} from "@/services/driveAdapter";
-
-import {
   useDriveWatcher,
 } from "@/composables/useDriveWatcher";
+
+import {
+  useEventRequest,
+} from "@/composables/useEventRequest";
 
 import {
   useRemoteJson,
@@ -54,12 +50,6 @@ import {
    never modified.
 ========================= */
 
-const EVENTS_FOLDER = "events";
-const STATUS_FOLDER = "events/status";
-
-const HKP_EVENT_FILE_PATTERN =
-  /^(?:PWA-)?HKP_\d{14}\.json$/;
-
 /*
   Sans réponse du Mac au-delà de ce délai, un message
   l’indique (Mac éteint, proxy injoignable, etc.).
@@ -74,26 +64,6 @@ const NO_ANSWER_DELAY_MS =
 interface StepGroup {
   name: string;
   steps: HousekeepingStep[];
-}
-
-/*
-  Suivi d’une demande :
-  - requested : l’événement attend dans events/ ;
-  - started   : le Mac l’a pris en charge ;
-  - completed : le housekeeping a publié son journal ;
-  - error     : le Mac a refusé la demande.
-*/
-type RequestPhase =
-  | "requested"
-  | "started"
-  | "completed"
-  | "error";
-
-interface RequestState {
-  fileName: string;
-  requestedAt: number;
-  phase: RequestPhase;
-  message: string | null;
 }
 
 /* =========================
@@ -129,22 +99,30 @@ const loadError =
 const selectedKeys =
   ref<Set<string>>(new Set());
 
+/*
+  Demande en cours. Le statut « success » ne marque que la
+  prise en charge : la fin est donnée par l’index des
+  journaux (voir Tracking).
+*/
+const hkp =
+  useEventRequest({
+    trigram: "HKP",
+    completeOnSuccess: false,
+    noAnswerDelayMs: NO_ANSWER_DELAY_MS,
+  });
+
 const request =
-  ref<RequestState | null>(null);
+  hkp.request;
 
 /*
-  Demande trouvée dans events/ à l’ouverture de la page
-  (envoyée depuis un autre appareil ou avant un
-  rechargement).
+  Demande trouvée dans events/ (envoyée depuis un autre
+  appareil ou avant un rechargement).
 */
 const waitingRequestFound =
-  ref(false);
-
-const now =
-  ref(Date.now());
-
-let clockTimer:
-  number | null = null;
+  computed(() =>
+    request.value === null &&
+    hkp.waitingFiles.value.length > 0
+  );
 
 /* =========================
    Computed
@@ -232,8 +210,7 @@ const selectedSteps =
 
 const requestInProgress =
   computed(() =>
-    request.value?.phase === "requested" ||
-    request.value?.phase === "started" ||
+    hkp.inProgress.value ||
     waitingRequestFound.value
   );
 
@@ -242,13 +219,6 @@ const canRun =
     selectedSteps.value.length > 0 &&
     !requestInProgress.value &&
     !loading.value
-  );
-
-const noAnswerYet =
-  computed(() =>
-    request.value?.phase === "requested" &&
-    now.value - request.value.requestedAt >
-      NO_ANSWER_DELAY_MS
   );
 
 /* =========================
@@ -337,30 +307,6 @@ watch(
    Request
 ========================= */
 
-function buildEventFileName(): string {
-  const date =
-    new Date();
-
-  const pad = (value: number) =>
-    String(value).padStart(2, "0");
-
-  const stamp =
-    `${date.getFullYear()}` +
-    `${pad(date.getMonth() + 1)}` +
-    `${pad(date.getDate())}` +
-    `${pad(date.getHours())}` +
-    `${pad(date.getMinutes())}` +
-    `${pad(date.getSeconds())}`;
-
-  /*
-    Toujours préfixé « PWA- », Local Drive compris : le Mac
-    n’écrit un statut dans events/status/ que pour les
-    événements ainsi nommés, et la page en a besoin pour
-    afficher un refus.
-  */
-  return `PWA-HKP_${stamp}.json`;
-}
-
 async function runHousekeeping() {
   if (!canRun.value) {
     return;
@@ -382,10 +328,7 @@ async function runHousekeeping() {
     return;
   }
 
-  const fileName =
-    buildEventFileName();
-
-  const event = {
+  await hkp.send({
     eventType:
       "HOUSEKEEPING_REQUESTED",
 
@@ -404,118 +347,12 @@ async function runHousekeeping() {
       source:
         detectDevice(),
     },
-  };
-
-  try {
-    await saveJSONToFolder(
-      EVENTS_FOLDER,
-      fileName,
-      event
-    );
-
-    request.value = {
-      fileName,
-      requestedAt: Date.now(),
-      phase: "requested",
-      message: null,
-    };
-
-  } catch (err) {
-    request.value = {
-      fileName,
-      requestedAt: Date.now(),
-      phase: "error",
-      message:
-        err instanceof Error
-          ? err.message
-          : String(err),
-    };
-  }
+  });
 }
 
 /* =========================
    Tracking
 ========================= */
-
-/*
-  Relit events/ : une demande qui en sort a été prise en
-  charge par le Mac, ou refusée (statut « error » dans
-  events/status/ pour une demande envoyée par la PWA).
-*/
-async function checkEvents() {
-  const files =
-    await listFiles(
-      EVENTS_FOLDER
-    );
-
-  const names =
-    new Set(
-      files.map(
-        file => file.name
-      )
-    );
-
-  waitingRequestFound.value =
-    request.value === null &&
-    files.some(
-      file =>
-        HKP_EVENT_FILE_PATTERN.test(
-          file.name
-        )
-    );
-
-  const current =
-    request.value;
-
-  if (
-    !current ||
-    current.phase !== "requested"
-  ) {
-    return;
-  }
-
-  const status =
-    await loadJSONFromFolder<{
-      status?: string;
-      message?: string;
-    }>(
-      STATUS_FOLDER,
-      current.fileName
-    ).catch(() => null);
-
-  if (status?.status === "error") {
-    request.value = {
-      ...current,
-      phase: "error",
-      message:
-        status.message ||
-        "Request rejected by the Mac",
-    };
-
-    return;
-  }
-
-  if (!names.has(current.fileName)) {
-    request.value = {
-      ...current,
-      phase: "started",
-    };
-  }
-}
-
-const eventsRemoteState =
-  ref<string | null>(null);
-
-useDriveWatcher({
-  folderId:
-    EVENTS_FOLDER,
-
-  lastKnownState:
-    eventsRemoteState,
-
-  onChanged:
-    checkEvents,
-});
 
 /*
   L’index des journaux est réécrit à la fin de chaque
@@ -547,56 +384,8 @@ useDriveWatcher({
         return;
       }
 
-      const current =
-        request.value;
-
-      if (
-        current &&
-        (
-          current.phase === "requested" ||
-          current.phase === "started"
-        )
-      ) {
-        request.value = {
-          ...current,
-          phase: "completed",
-        };
-      }
-
-      waitingRequestFound.value =
-        false;
+      hkp.complete();
     },
-});
-
-/* =========================
-   Lifecycle
-========================= */
-
-onMounted(async () => {
-  clockTimer =
-    window.setInterval(
-      () => {
-        now.value =
-          Date.now();
-      },
-      10_000
-    );
-
-  await checkEvents().catch(
-    err =>
-      console.warn(
-        "Unable to read events",
-        err
-      )
-  );
-});
-
-onBeforeUnmount(() => {
-  if (clockTimer !== null) {
-    window.clearInterval(
-      clockTimer
-    );
-  }
 });
 
 /* =========================
@@ -611,7 +400,7 @@ const requestMessage =
 
     switch (request.value?.phase) {
       case "requested":
-        return noAnswerYet.value
+        return hkp.noAnswerYet.value
           ? "Requested — no answer from the Mac yet. Check that it is on and reachable."
           : "Requested — waiting for the Mac…";
 
