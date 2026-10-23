@@ -31,8 +31,10 @@ import {
 } from "@/contracts/followUp";
 
 import {
-  prefixEventFileName,
-} from "@/utils/eventFileName";
+  emitEvent,
+  EVENTS_FOLDER,
+  eventFilePattern,
+} from "@/services/events/eventFiles";
 
 import {
   useAllocationTags,
@@ -48,7 +50,6 @@ import {
 
 import {
   listFiles,
-  saveJSONToFolder,
 } from "@/services/driveAdapter";
 
 import {
@@ -271,15 +272,14 @@ let fxTimer:
    PENDING REALLOCATIONS
 ========================================================= */
 
-const EVENTS_FOLDER =
-  "events";
-
 /*
   Nom d’un événement REA :
-    [PWA-]REA_<AAAAMMJJHHMMSS>_<FITID>.json
+    PWA-REA_<AAAAMMJJHHMMSS>_<FITID>.json
+  (sans préfixe pour les demandes plus anciennes en Local
+  Drive).
 */
 const REA_EVENT_FILE_PATTERN =
-  /^(?:PWA-)?REA_\d{14}_(.+)\.json$/;
+  eventFilePattern("REA");
 
 /*
   FITID dont l’événement REA attend encore son traitement
@@ -373,67 +373,6 @@ function toggleRowAction(
 }
 
 /* =========================================================
-   EVENT HELPERS
-========================================================= */
-
-function buildEventFileName(
-  allocationId: string
-): string {
-  const now =
-    new Date();
-
-  const YYYY =
-    now.getFullYear();
-
-  const MM =
-    String(
-      now.getMonth() + 1
-    ).padStart(
-      2,
-      "0"
-    );
-
-  const DD =
-    String(
-      now.getDate()
-    ).padStart(
-      2,
-      "0"
-    );
-
-  const HH =
-    String(
-      now.getHours()
-    ).padStart(
-      2,
-      "0"
-    );
-
-  const mm =
-    String(
-      now.getMinutes()
-    ).padStart(
-      2,
-      "0"
-    );
-
-  const ss =
-    String(
-      now.getSeconds()
-    ).padStart(
-      2,
-      "0"
-    );
-
-  const baseFileName =
-    `REA_${YYYY}${MM}${DD}${HH}${mm}${ss}_${allocationId}.json`;
-
-  return prefixEventFileName(
-    baseFileName
-  );
-}
-
-/* =========================================================
    REQUEST REALLOCATION
 ========================================================= */
 
@@ -491,11 +430,6 @@ async function requestReallocation(
       },
     };
 
-    const fileName =
-      buildEventFileName(
-        item.allocationId
-      );
-
     /*
       En mode Object Storage :
 
@@ -503,10 +437,10 @@ async function requestReallocation(
       2. writeS3JSON crée automatiquement un
          STORAGE_PULL_REQUESTED ciblant ce fichier.
     */
-    await saveJSONToFolder(
-      EVENTS_FOLDER,
-      fileName,
-      event
+    await emitEvent(
+      "REA",
+      event,
+      item.allocationId
     );
 
     /*
