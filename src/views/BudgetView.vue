@@ -12,10 +12,12 @@ import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
+import BudgetLineSheet from "@/components/budget/BudgetLineSheet.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useRemoteJson } from "@/composables/useRemoteJson";
+import { useEventRequest } from "@/composables/useEventRequest";
 
 import {
   useCategories,
@@ -30,6 +32,7 @@ import {
 } from "@/contracts/budget";
 
 import { formatInteger } from "@/utils/amountFormat";
+import { detectDevice } from "@/utils/deviceDetection";
 
 /* =========================
    Page Budget (Mac uniquement)
@@ -65,6 +68,15 @@ const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
+
+/*
+  Le budget de l'année suivante peut être créé à partir
+  d'octobre de l'année la plus récente (0 = janvier).
+*/
+const NEW_YEAR_FROM_MONTH = 9;
+
+const NO_ANSWER_DELAY_MS =
+  2 * 60 * 1000;
 
 const natureOptions: {
   value: NatureFilter;
@@ -186,6 +198,140 @@ watch(
     ) {
       year.value =
         years[0].year;
+    }
+  }
+);
+
+/* =========================
+   New year
+
+   events/PWA-BUD_<AAAAMMJJHHMMSS>_NEWYEAR.json : le Mac
+   copie l'année la plus récente (montants et mémos des
+   sous-catégories actives, toutes les lignes « Open »),
+   puis republie budget.json.
+========================= */
+
+const latestYear =
+  computed(() =>
+    budgetYears.value[0]?.year ?? null
+  );
+
+const newYearRequest =
+  useEventRequest({
+    trigram: "BUD",
+    noAnswerDelayMs: NO_ANSWER_DELAY_MS,
+  });
+
+/*
+  Demande envoyée depuis un autre onglet ou avant un
+  rechargement, encore en attente dans events/.
+*/
+const newYearWaiting =
+  computed(() =>
+    newYearRequest.request.value === null &&
+    newYearRequest.waitingFiles.value.some(
+      name => name.endsWith("_NEWYEAR.json")
+    )
+  );
+
+const canCreateNewYear =
+  computed(() =>
+    latestYear.value !== null &&
+    Date.now() >=
+      new Date(
+        latestYear.value,
+        NEW_YEAR_FROM_MONTH,
+        1
+      ).getTime() &&
+    !newYearRequest.inProgress.value &&
+    !newYearWaiting.value
+  );
+
+async function createNewYear() {
+  if (
+    !canCreateNewYear.value ||
+    latestYear.value === null
+  ) {
+    return;
+  }
+
+  const sourceYear =
+    latestYear.value;
+
+  const targetYear =
+    sourceYear + 1;
+
+  const confirmed =
+    confirm(
+      `Create the ${targetYear} budget from ${sourceYear}?\n\n` +
+      "Amounts and memos of the active sub-categories are copied; " +
+      "every line starts as Open (to confirm)."
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  await newYearRequest.send(
+    {
+      eventType: "BUDGET_YEAR_CREATED",
+      version: 1,
+      timestamp: new Date().toISOString(),
+      payload: {
+        sourceYear,
+        targetYear,
+        source: detectDevice(),
+      },
+    },
+    "NEWYEAR"
+  );
+}
+
+const newYearMessage =
+  computed(() => {
+    if (newYearWaiting.value) {
+      return "A new year request is waiting for the Mac.";
+    }
+
+    const current =
+      newYearRequest.request.value;
+
+    switch (current?.phase) {
+      case "requested":
+        return newYearRequest.noAnswerYet.value
+          ? "New year requested — no answer from the Mac yet. Check that it is on and reachable."
+          : "New year requested — waiting for the Mac…";
+
+      case "started":
+        return "Creating the new year on the Mac…";
+
+      case "completed":
+        return "New year created.";
+
+      case "error":
+        return `New year rejected: ${current.message ?? "unknown error"}`;
+
+      default:
+        return "";
+    }
+  });
+
+/*
+  L'année créée est affichée dès que budget.json la
+  contient.
+*/
+watch(
+  latestYear,
+
+  (current, previous) => {
+    if (
+      current !== null &&
+      previous !== null &&
+      current > previous &&
+      newYearRequest.request.value?.phase === "completed"
+    ) {
+      year.value =
+        current;
     }
   }
 );
@@ -373,6 +519,41 @@ const groups =
   );
 
 /* =========================
+   Line sheet
+========================= */
+
+const editedLine =
+  ref<{
+    row: BudgetRow;
+    categoryLabel: string;
+  } | null>(null);
+
+function openLine(
+  row: BudgetRow,
+  group: BudgetGroup
+) {
+  editedLine.value = {
+    row,
+    categoryLabel: group.label,
+  };
+}
+
+function natureLabelOf(
+  line: BudgetLine
+): string {
+  switch (natureOf(line)) {
+    case "I":
+      return "Income";
+
+    case "E":
+      return "Expense";
+
+    default:
+      return "No nature";
+  }
+}
+
+/* =========================
    Summary
 
    Toute l'année, indépendamment des filtres.
@@ -558,6 +739,21 @@ watch(
         >
           Open only
         </PillButton>
+
+        <PillButton
+          v-if="canCreateNewYear && latestYear !== null"
+          @click="createNewYear"
+        >
+          + New year {{ latestYear + 1 }}
+        </PillButton>
+
+        <span
+          v-if="newYearMessage"
+          class="request-message"
+          :class="newYearRequest.request.value?.phase"
+        >
+          {{ newYearMessage }}
+        </span>
       </div>
 
       <ChipSelector
@@ -691,7 +887,10 @@ watch(
           <tr
             v-for="row in group.rows"
             :key="row.line.subCategoryId"
+            class="line-row"
             :class="{ 'to-confirm': row.line.open }"
+            title="Edit this line"
+            @click="openLine(row, group)"
           >
             <th class="label-cell">
               {{ row.label }}
@@ -740,6 +939,17 @@ watch(
       </table>
     </section>
   </main>
+
+  <BudgetLineSheet
+    v-if="editedLine"
+    :key="`${year}-${editedLine.row.line.subCategoryId}`"
+    :year="year"
+    :line="editedLine.row.line"
+    :label="editedLine.row.label"
+    :category-label="editedLine.categoryLabel"
+    :nature-label="natureLabelOf(editedLine.row.line)"
+    @close="editedLine = null"
+  />
 </template>
 
 <style scoped>
@@ -776,6 +986,19 @@ watch(
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem 1.5rem;
+}
+
+.request-message {
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.request-message.completed {
+  color: var(--positive);
+}
+
+.request-message.error {
+  color: var(--negative);
 }
 
 /* =========================
@@ -878,6 +1101,15 @@ watch(
   color: var(--text);
 
   font-weight: 700;
+}
+
+.line-row {
+  cursor: pointer;
+}
+
+.line-row:hover th,
+.line-row:hover td {
+  background: var(--primary-soft);
 }
 
 /*
