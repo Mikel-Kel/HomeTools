@@ -13,6 +13,7 @@ import CategorySheet from "@/components/followup/CategorySheet.vue";
 import FollowUpDetails from "@/components/followup/FollowUpDetails.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
+import StatusPill from "@/components/ui/StatusPill.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
@@ -1667,9 +1668,9 @@ watch(
           </div>
 
           <div class="col-chart centered">
-            <span class="status-pill">
+            <StatusPill tone="primary">
               {{ statusAsOfLabel }}
-            </span>
+            </StatusPill>
           </div>
 
           <div class="col-allocated">
@@ -2247,39 +2248,6 @@ watch(
 /* =========================================================
    7. STATUS & STATES
 ========================================================= */
-
-.status-pill {
-  display:
-    inline-flex;
-
-  align-items:
-    center;
-
-  padding:
-    4px 12px;
-
-  border-radius:
-    999px;
-
-  border:
-    1px solid
-    var(--primary);
-
-  background:
-    var(--primary-soft);
-
-  color:
-    var(--primary);
-
-  font-size:
-    var(--font-size-xs);
-
-  font-weight:
-    600;
-
-  white-space:
-    nowrap;
-}
 
 .allocated-good {
   color:

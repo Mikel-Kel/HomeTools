@@ -127,10 +127,28 @@ body {
   color: var(--text);
 }
 
+/*
+  Champs de saisie : fond et texte du thème. color-scheme
+  aligne aussi les contrôles natifs (calendrier, cases,
+  listes) sur le thème actif.
+*/
+:root {
+  color-scheme: light;
+}
+
+input,
+select,
+textarea {
+  background-color: var(--input-bg);
+  color: var(--text);
+}
+
 /* =========================================================
    DARK THEME
 ========================================================= */
 [data-theme="dark"] {
+
+  color-scheme: dark;
 
   /* =====================================================
      SURFACES (CRITICAL FIX)
@@ -139,6 +157,8 @@ body {
   --surface-1: #020617;   /* cards */
   --surface-2: #0f172a;   /* sheets */
   --surface-3: #1e293b;   /* hover */
+
+  --bg-soft: var(--surface-3);
 
   /* =====================================================
      TEXT

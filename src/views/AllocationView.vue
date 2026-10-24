@@ -314,11 +314,14 @@ const isLocked =
     );
   });
 
-const canSaveDraft =
+/*
+  Échec de la dernière sauvegarde automatique du draft.
+*/
+const saveError =
   computed(() =>
     allocation.value
-      ?.canSaveDraft.value ??
-    false
+      ?.saveError.value ??
+    null
   );
 
 /* =========================
@@ -662,19 +665,6 @@ async function commitAllocation(
   await resetAmountToRemaining();
 }
 
-async function onSaveDraft() {
-  if (!allocation.value) {
-    return;
-  }
-
-  await allocation.value
-    .saveDraft();
-
-  await router.push({
-    name: "spending",
-  });
-}
-
 async function onRemoveAllocation(
   index: number
 ) {
@@ -724,30 +714,6 @@ function onEditAllocation(
     allocation.value
       .allocationDate.value !==
     null;
-}
-
-async function closeView() {
-  if (busy.value) {
-    return;
-  }
-
-  if (
-    allocation.value
-      ?.hasUnsavedChanges.value
-  ) {
-    const confirmed =
-      confirm(
-        "Discard unsaved allocation changes?"
-      );
-
-    if (!confirmed) {
-      return;
-    }
-  }
-
-  await router.push({
-    name: "spending",
-  });
 }
 </script>
 
@@ -1141,43 +1107,15 @@ async function closeView() {
     </section>
 
     <!-- =========================
-         Footer
+         Save error
     ========================== -->
 
-    <footer class="allocation-footer">
-      <div class="footer-actions">
-        <button
-          type="button"
-          :disabled="
-            busy ||
-            !canSaveDraft
-          "
-          @click="onSaveDraft"
-        >
-          <template
-            v-if="
-              busy &&
-              busyAction === 'save'
-            "
-          >
-            Saving…
-          </template>
-
-          <template v-else>
-            Save draft
-          </template>
-        </button>
-
-        <button
-          type="button"
-          class="secondary"
-          :disabled="busy"
-          @click="closeView"
-        >
-          Close
-        </button>
-      </div>
-    </footer>
+    <p
+      v-if="saveError"
+      class="save-error"
+    >
+      Draft not saved: {{ saveError }}
+    </p>
   </div>
 </template>
 
@@ -1467,13 +1405,14 @@ async function closeView() {
 }
 
 /* =========================================================
-   Footer
+   Save error
 ========================================================= */
 
-.footer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
+.save-error {
+  margin: 0.75rem 0 0;
+
+  color: var(--negative);
+  font-size: var(--font-size-sm);
 }
 
 /* =========================================================

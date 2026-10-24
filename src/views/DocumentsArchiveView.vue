@@ -9,6 +9,7 @@ import {
 import PageHeader from "@/components/PageHeader.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
+import StatusPill from "@/components/ui/StatusPill.vue";
 import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
@@ -2127,9 +2128,9 @@ onBeforeUnmount(() => {
         <div class="archive-separator"></div>
 
         <div class="archive-counter">
-          <span class="status-pill">
+          <StatusPill tone="primary">
             {{ headerCountLabel }}
-          </span>
+          </StatusPill>
         </div>
 
         <div class="archive-separator"></div>
@@ -2823,30 +2824,6 @@ onBeforeUnmount(() => {
 
   padding:
     4px 0;
-}
-
-.status-pill {
-  padding:
-    2px 10px;
-
-  border-radius:
-    999px;
-
-  border:
-    1px solid
-    var(--primary);
-
-  background:
-    var(--primary-soft);
-
-  color:
-    var(--primary);
-
-  font-size:
-    0.7rem;
-
-  font-weight:
-    600;
 }
 
 /* =========================================================

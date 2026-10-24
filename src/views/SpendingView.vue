@@ -13,6 +13,8 @@ import PageHeader from "@/components/PageHeader.vue";
 import AppIcon from "@/components/AppIcon.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
+import StatusPill from "@/components/ui/StatusPill.vue";
+import type { StatusTone } from "@/components/ui/StatusPill.vue";
 import DateChip from "@/components/DateChip.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
@@ -281,6 +283,14 @@ const ownerFilterArray =
 /* =========================
    Status filters
 ========================= */
+
+const STATUS_TONES:
+  Record<AllocationStatus, StatusTone> = {
+    none: "neutral",
+    partial: "warning",
+    draft: "primary",
+    released: "positive",
+  };
 
 const allStatuses:
   AllocationStatus[] = [
@@ -1443,18 +1453,20 @@ onBeforeUnmount(() => {
               </td>
 
               <td>
-                <span
-                  :class="[
-                    'status-pill',
-                    record
-                      .allocationStatus
-                  ]"
+                <StatusPill
+                  class="allocation-status"
+                  :tone="
+                    STATUS_TONES[
+                      record
+                        .allocationStatus
+                    ]
+                  "
                 >
                   {{
                     record
                       .allocationStatus
                   }}
-                </span>
+                </StatusPill>
               </td>
 
               <td class="currency-cell">
@@ -1813,7 +1825,7 @@ onBeforeUnmount(() => {
 .btn-download-card24 {
   background: transparent;
   border: none;
-  color: #555;
+  color: var(--text-soft);
   cursor: pointer;
   font-size: 0.75rem;
   padding: 0 4px;
@@ -1824,7 +1836,7 @@ onBeforeUnmount(() => {
 
 .btn-download-card24:hover {
   opacity: 1;
-  color: #aaa;
+  color: var(--primary);
 }
 
 /* =========================================================
@@ -1906,53 +1918,9 @@ onBeforeUnmount(() => {
    STATUS
 ========================================================= */
 
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  border: 1px solid transparent;
+.allocation-status {
   margin: 0 auto;
-}
-
-.status-pill.none {
-  background: var(--bg-soft);
-  color: var(--text-soft);
-  border-color: var(--border);
-}
-
-.status-pill.partial {
-  background:
-    color-mix(
-      in srgb,
-      var(--warning) 15%,
-      transparent
-    );
-
-  color: var(--warning);
-  border-color: var(--warning);
-}
-
-.status-pill.draft {
-  background: var(--primary-soft);
-  color: var(--primary);
-  border-color: var(--primary);
-}
-
-.status-pill.released {
-  background:
-    color-mix(
-      in srgb,
-      var(--positive) 15%,
-      transparent
-    );
-
-  color: var(--positive);
-  border-color: var(--positive);
+  text-transform: uppercase;
 }
 
 /* =========================================================

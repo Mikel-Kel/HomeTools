@@ -1,10 +1,19 @@
 import { ref, computed } from "vue";
 
 import {
+  deleteFileFromFolder,
   listFiles,
   loadJSONFromFolder,
   saveJSONToFolder
 } from "@/services/driveAdapter";
+
+import {
+  useStorageBackend
+} from "@/composables/useStorageBackend";
+
+import {
+  publishS3StoragePullRequest
+} from "@/services/s3/s3StorageAdapter";
 
 export interface Allocation {
   id: string;
@@ -30,6 +39,8 @@ const loading = ref(true);
   commentaire.
 */
 const DEFAULT_COMMENT = "Please comment";
+
+const DRAFTS_FOLDER = "allocations/drafts";
 
 /* =========================
    Helpers
@@ -92,7 +103,15 @@ export function useAllocation(
   */
   const editingAllocationId = ref<string | null>(null);
 
-  const lastSavedSnapshot = ref<string>("[]");
+  /*
+    Un draft existe sur le stockage pour ce mouvement.
+  */
+  const draftExists = ref(false);
+
+  /*
+    Échec de la dernière sauvegarde automatique.
+  */
+  const saveError = ref<string | null>(null);
 
   const draftMode = ref<"INSERT" | "UPDATE">("INSERT");
 
@@ -131,12 +150,6 @@ export function useAllocation(
     allocations.value.length > 0
   );
 
-  const canSaveDraft = computed(() =>
-    hasDraft.value &&
-    state.value !== "READONLY" &&
-    state.value !== "BUSY"
-  );
-
   const canRelease = computed(() =>
     hasDraft.value &&
     isBalanced.value &&
@@ -162,17 +175,13 @@ export function useAllocation(
         : "EDITING";
   }
 
-  const hasUnsavedChanges = computed(() =>
-    buildSnapshot() !== lastSavedSnapshot.value
-  );
-
   /* =========================
      Draft persistence
   ========================= */
 
   async function saveDraftInternal() {
     await saveJSONToFolder(
-      "allocations/drafts",
+      DRAFTS_FOLDER,
       `${spendingId}.json`,
       {
         version: 1,
@@ -185,7 +194,69 @@ export function useAllocation(
         allocations: allocations.value
       }
     );
-    lastSavedSnapshot.value = buildSnapshot();
+
+    draftExists.value = true;
+  }
+
+  /*
+    Plus aucune allocation : le draft est retiré du
+    stockage. En Object Storage, le Mac est prévenu de
+    supprimer sa copie.
+  */
+  async function deleteDraftInternal() {
+    if (!draftExists.value) return;
+
+    const fileName = `${spendingId}.json`;
+
+    await deleteFileFromFolder(
+      DRAFTS_FOLDER,
+      fileName
+    );
+
+    draftExists.value = false;
+
+    const { backend } = useStorageBackend();
+
+    if (backend.value === "OBJECT_STORAGE") {
+      await publishS3StoragePullRequest({
+        downloadPaths: [],
+        deletePaths: [`${DRAFTS_FOLDER}/${fileName}`],
+        reason: "ALLOCATION_DRAFT_DELETED"
+      });
+    }
+  }
+
+  /*
+    Sauvegarde automatique après chaque changement des
+    allocations.
+  */
+  async function persistDraft() {
+    if (state.value === "READONLY") return;
+
+    busy.value = true;
+    busyAction.value = "save";
+    state.value = "BUSY";
+
+    try {
+      if (allocations.value.length) {
+        await saveDraftInternal();
+      } else {
+        await deleteDraftInternal();
+      }
+
+      saveError.value = null;
+
+    } catch (err) {
+      saveError.value =
+        err instanceof Error
+          ? err.message
+          : String(err);
+
+    } finally {
+      busy.value = false;
+      busyAction.value = null;
+      recomputeLocalState();
+    }
   }
 
   /* =========================
@@ -203,12 +274,12 @@ export function useAllocation(
         const filename = `${spendingId}.json`;
 
         const draftFile =
-          await findFileByName("allocations/drafts", filename);
+          await findFileByName(DRAFTS_FOLDER, filename);
 
         if (draftFile) {
           const raw =
             await loadJSONFromFolder<any>(
-              "allocations/drafts",
+              DRAFTS_FOLDER,
               filename
             );
 
@@ -227,9 +298,10 @@ export function useAllocation(
                 }))
               : [];
 
+          draftExists.value = true;
+
           recomputeLocalState();
           presetAmount();
-          lastSavedSnapshot.value = buildSnapshot();
           return;
         }
 
@@ -298,19 +370,7 @@ export function useAllocation(
       resetForm();
       recomputeLocalState();
 
-      if (isBalanced.value) {
-        busy.value = true;
-        busyAction.value = "save";
-        state.value = "BUSY";
-
-        try {
-          await saveDraftInternal();
-        } finally {
-          busy.value = false;
-          busyAction.value = null;
-          recomputeLocalState();
-        }
-      }
+      await persistDraft();
     });
   }
 
@@ -376,24 +436,8 @@ export function useAllocation(
       }
 
       recomputeLocalState();
-    });
-  }
 
-  async function saveDraft() {
-    return runExclusive(async () => {
-      if (!canSaveDraft.value) return;
-
-      busy.value = true;
-      busyAction.value = "save";
-      state.value = "BUSY";
-
-      try {
-        await saveDraftInternal();
-      } finally {
-        busy.value = false;
-        busyAction.value = null;
-        recomputeLocalState();
-      }
+      await persistDraft();
     });
   }
 
@@ -406,20 +450,6 @@ export function useAllocation(
       Number(
         Math.abs(remainingAmount.value).toFixed(2)
       );
-  }
-
-  function buildSnapshot() {
-    return JSON.stringify({
-      mode: draftMode.value,
-      allocations: allocations.value.map(a => ({
-        categoryID: a.categoryID,
-        subCategoryID: a.subCategoryID,
-        comment: a.comment,
-        amount: a.amount,
-        allocationDate: a.allocationDate,
-        allocatedTagID: a.allocatedTagID
-      }))
-    });
   }
 
   function resetForm() {
@@ -455,9 +485,8 @@ export function useAllocation(
     isBalanced,
 
     hasDraft,
-    canSaveDraft,
     canRelease,
-    hasUnsavedChanges,
+    saveError,
 
     loading,
     busy,
@@ -468,7 +497,6 @@ export function useAllocation(
     replaceAllocation,
     editAllocation,
     cancelEdit,
-    removeAllocation,
-    saveDraft
+    removeAllocation
   };
 }

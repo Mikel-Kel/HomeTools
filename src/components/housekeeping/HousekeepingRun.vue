@@ -31,6 +31,7 @@ import {
 } from "@/utils/deviceDetection";
 
 import PillButton from "@/components/ui/PillButton.vue";
+import StatusPill from "@/components/ui/StatusPill.vue";
 
 /* =========================
    Data contract
@@ -501,26 +502,20 @@ const requestMessage =
             {{ step.label }}
           </span>
 
-          <span
-            v-if="!step.manual"
-            class="step-badge"
-          >
+          <StatusPill v-if="!step.manual">
             Nightly only
-          </span>
+          </StatusPill>
 
-          <span
-            v-else-if="isForced(step)"
-            class="step-badge"
-          >
+          <StatusPill v-else-if="isForced(step)">
             Required by {{ forcedBy.get(step.key) }}
-          </span>
+          </StatusPill>
 
-          <span
+          <StatusPill
             v-else-if="!step.nightly"
-            class="step-badge muted"
+            dashed
           >
             Off at night
-          </span>
+          </StatusPill>
         </label>
       </section>
 
@@ -613,20 +608,6 @@ const requestMessage =
 
 .step-row.disabled {
   cursor: default;
-}
-
-.step-badge {
-  padding: 1px 8px;
-
-  border-radius: 999px;
-  border: 1px solid var(--border);
-
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-}
-
-.step-badge.muted {
-  border-style: dashed;
 }
 
 /* =========================================================

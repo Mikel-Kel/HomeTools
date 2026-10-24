@@ -8,6 +8,7 @@ import {
 
 import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
+import StatusPill from "@/components/ui/StatusPill.vue";
 
 import {
   useRemoteJson,
@@ -617,19 +618,19 @@ async function goToProblem(
           v-if="currentRun"
           class="level-counts"
         >
-          <span
-            class="count-badge error"
-            :class="{ none: !levelCounts.error }"
+          <StatusPill
+            tone="negative"
+            :class="{ faded: !levelCounts.error }"
           >
             {{ levelCounts.error }} ERR
-          </span>
+          </StatusPill>
 
-          <span
-            class="count-badge warning"
-            :class="{ none: !levelCounts.warning }"
+          <StatusPill
+            tone="warning"
+            :class="{ faded: !levelCounts.warning }"
           >
             {{ levelCounts.warning }} WARN
-          </span>
+          </StatusPill>
         </span>
       </div>
 
@@ -920,26 +921,7 @@ async function goToProblem(
   gap: 0.4rem;
 }
 
-.count-badge {
-  padding: 1px 8px;
-
-  border-radius: 999px;
-
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-}
-
-.count-badge.error {
-  background: color-mix(in srgb, var(--negative) 15%, transparent);
-  color: var(--negative);
-}
-
-.count-badge.warning {
-  background: color-mix(in srgb, var(--warning) 18%, transparent);
-  color: var(--warning);
-}
-
-.count-badge.none {
+.faded {
   opacity: 0.45;
 }
 
