@@ -6,7 +6,11 @@ import { loadJSONFromFolder } from "@/services/driveAdapter";
 ========================= */
 
 export type CategoryNature = "-" | "I" | "E";
-export type CategoryDisplayScope = "P" | "S" | "X";
+/*
+  P : catégorie affichée ; X : catégorie technique, masquée
+  dans le suivi (To allocate, Off B/S…).
+*/
+export type CategoryDisplayScope = "P" | "X";
 
 export interface SubCategory {
   id: number;
