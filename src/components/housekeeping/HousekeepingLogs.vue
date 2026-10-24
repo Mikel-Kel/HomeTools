@@ -7,6 +7,7 @@ import {
 } from "vue";
 
 import ChipSelector from "@/components/ChipSelector.vue";
+import PillButton from "@/components/ui/PillButton.vue";
 
 import {
   useRemoteJson,
@@ -652,20 +653,18 @@ async function goToProblem(
         <div class="log-filters">
           <div class="filter-row">
             <div class="level-filter">
-              <button
+              <PillButton
                 v-for="option in [
                   { id: 'all', label: 'All lines' },
                   { id: 'problems', label: 'Warnings & errors' },
                   { id: 'errors', label: 'Errors only' },
                 ]"
                 :key="option.id"
-                type="button"
-                class="filter-btn"
-                :class="{ active: levelFilter === option.id }"
+                :active="levelFilter === option.id"
                 @click="levelFilter = option.id as LevelFilter"
               >
                 {{ option.label }}
-              </button>
+              </PillButton>
             </div>
 
             <label class="routine-toggle">
@@ -710,14 +709,12 @@ async function goToProblem(
               </button>
             </div>
 
-            <button
+            <PillButton
               v-if="filtersActive"
-              type="button"
-              class="reset-btn"
               @click="resetFilters"
             >
               Reset
-            </button>
+            </PillButton>
           </div>
 
           <ChipSelector
@@ -916,34 +913,6 @@ async function goToProblem(
 .level-filter {
   display: inline-flex;
   gap: 0.25rem;
-}
-
-.filter-btn,
-.reset-btn {
-  padding: 4px 12px;
-
-  border-radius: 999px;
-  border: 1px solid var(--border);
-
-  background: var(--surface-soft);
-  color: var(--text-soft);
-
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-
-  cursor: pointer;
-}
-
-.filter-btn.active {
-  border-color: var(--primary);
-
-  background: var(--primary-soft);
-  color: var(--primary);
-}
-
-.reset-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
 }
 
 .level-counts {

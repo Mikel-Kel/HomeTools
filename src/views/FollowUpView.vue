@@ -12,6 +12,7 @@ import FollowUpBar from "@/components/followup/FollowUpBar.vue";
 import CategorySheet from "@/components/followup/CategorySheet.vue";
 import FollowUpDetails from "@/components/followup/FollowUpDetails.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
+import PillButton from "@/components/ui/PillButton.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useRemoteJson } from "@/composables/useRemoteJson";
@@ -212,9 +213,6 @@ const filtersOpen =
 const natureFilter =
   ref<NatureFilter>("E");
 
-const showSecondaryCategories =
-  ref(false);
-
 const followUpSpreadLimit =
   ref(10);
 
@@ -328,14 +326,6 @@ function isCategoryVisible(
     return false;
   }
 
-  if (
-    meta.displayScope ===
-      "S" &&
-    !showSecondaryCategories.value
-  ) {
-    return false;
-  }
-
   return true;
 }
 
@@ -394,14 +384,6 @@ const categoryChipItems =
         label: "All",
       },
       ...base,
-      {
-        id: "__TOGGLE__",
-
-        label:
-          showSecondaryCategories.value
-            ? "←"
-            : "→",
-      },
     ];
   });
 
@@ -517,13 +499,6 @@ function selectCategory(
 function onCategorySelect(
   id: string
 ) {
-  if (id === "__TOGGLE__") {
-    showSecondaryCategories.value =
-      !showSecondaryCategories.value;
-
-    return;
-  }
-
   if (id === "*") {
     selectAllCategories();
     return;
@@ -869,9 +844,6 @@ function resetFilters() {
 
   includeOffBudget.value =
     true;
-
-  showSecondaryCategories.value =
-    false;
 
   labelFilter.value =
     "";
@@ -1523,16 +1495,14 @@ watch(
 
           <h2>Filters</h2>
 
-          <button
+          <PillButton
             v-if="filtersOpen"
-            type="button"
-            class="reset-button"
             @click.stop="
               resetFilters
             "
           >
             Reset
-          </button>
+          </PillButton>
         </header>
 
         <div
@@ -2049,47 +2019,6 @@ watch(
 
   color:
     var(--text-soft);
-}
-
-.reset-button {
-  padding:
-    2px 20px;
-
-  border-radius:
-    999px;
-
-  border:
-    1px solid
-    var(--border);
-
-  background:
-    var(--surface-soft);
-
-  color:
-    var(--text-soft);
-
-  font-size:
-    var(--font-size-xs);
-
-  font-weight:
-    600;
-
-  cursor:
-    pointer;
-
-  transition:
-    all 0.15s ease;
-}
-
-.reset-button:hover {
-  background:
-    var(--primary-soft);
-
-  border-color:
-    var(--primary);
-
-  color:
-    var(--primary);
 }
 
 .filters-body {

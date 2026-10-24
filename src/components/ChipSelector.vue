@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue"
+import { computed } from "vue"
+
+import PillButton from "@/components/ui/PillButton.vue"
+import ScrollRow from "@/components/ui/ScrollRow.vue"
 
 /* =========================
    Props
@@ -87,49 +90,6 @@ const isAllActive = computed(() => {
   }
   return props.modelValue === null
 })
-
-/* =========================
-   Scroll logic
-========================= */
-const scrollRef = ref<HTMLElement | null>(null)
-
-const canScrollLeft = ref(false)
-const canScrollRight = ref(false)
-
-function updateScrollState() {
-  const el = scrollRef.value
-  if (!el) return
-  const maxScrollLeft = el.scrollWidth - el.clientWidth
-  canScrollLeft.value = el.scrollLeft > 1
-  canScrollRight.value = el.scrollLeft < maxScrollLeft - 1
-}
-
-function scroll(direction: number) {
-  if (props.disabled) return
-
-  const el = scrollRef.value
-  if (!el) return
-
-  const amount = el.clientWidth * 0.7
-
-  el.scrollBy({
-    left: direction * amount,
-    behavior: "smooth"
-  })
-
-  setTimeout(updateScrollState, 250)
-}
-
-/* =========================
-   Lifecycle
-========================= */
-onMounted(() => {
-  setTimeout(updateScrollState, 0)
-})
-
-watch(() => props.items, () => {
-  setTimeout(updateScrollState, 0)
-})
 </script>
 
 <template>
@@ -143,54 +103,28 @@ watch(() => props.items, () => {
   >
     <span class="label">{{ label }}</span>
 
-    <div class="chip-layout">
-      <div class="chip-fixed">
-        <button
-          v-if="showAll && !items.some(i => i.id === '*')"  
-          class="chip"
-          :class="{ active: isAllActive }"
+    <ScrollRow :disabled="disabled">
+      <template #fixed>
+        <PillButton
+          v-if="showAll && !items.some(i => i.id === '*')"
+          :active="isAllActive"
           :disabled="disabled"
           @click="selectAll"
         >
           All
-        </button>
+        </PillButton>
+      </template>
 
-        <button
-          v-if="canScrollLeft"
-          class="scroll-btn inside"
-          :disabled="disabled"
-          @click="scroll(-1)"
-        >
-          ‹
-        </button>
-      </div>
-
-      <div
-        class="chip-scroll"
-        ref="scrollRef"
-        @scroll="updateScrollState"
-      >
-        <button
-          v-for="item in items"
-          :key="item.id"
-          class="chip"
-          :class="{ active: isActive(item.id) }"
-          :disabled="disabled"
-          @click="toggleItem(item.id)"
-        >
-          {{ item.label }}
-        </button>
-      </div>
-
-      <button
-        v-if="canScrollRight"
-        class="scroll-btn right"
+      <PillButton
+        v-for="item in items"
+        :key="item.id"
+        :active="isActive(item.id)"
         :disabled="disabled"
-        @click="scroll(1)"
+        @click="toggleItem(item.id)"
       >
-        ›
-      </button>
-    </div>
+        {{ item.label }}
+      </PillButton>
+    </ScrollRow>
   </div>
 </template>
 
@@ -210,8 +144,16 @@ watch(() => props.items, () => {
   align-items: flex-start;
 }
 
+/*
+  Le sélecteur entier est estompé : ses boutons ne le sont
+  pas une seconde fois.
+*/
 .chip-selector.disabled {
   opacity: 0.45;
+}
+
+.chip-selector.disabled :deep(.pill-button:disabled) {
+  opacity: 1;
 }
 
 /* =========================================================
@@ -221,94 +163,6 @@ watch(() => props.items, () => {
 .label {
   font-size: 0.9rem;
   color: var(--text-soft);
-}
-
-/* =========================================================
-   CHIP STRUCTURE
-========================================================= */
-
-.chip-layout {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.chip-fixed {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.chip-scroll {
-  display: flex;
-  gap: 6px;
-  overflow-x: hidden;
-  scroll-behavior: smooth;
-  min-width: 0;
-}
-
-/* =========================================================
-   CHIPS
-========================================================= */
-
-.chip {
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.75rem;
-  font-weight: 600;
-  opacity: 0.7;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s ease;
-}
-
-.chip:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.chip.active {
-  opacity: 1;
-  background: var(--primary-soft);
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.chip:disabled {
-  cursor: default;
-}
-
-/* =========================================================
-   SCROLL BUTTONS
-========================================================= */
-.scroll-btn {
-  border: none;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 18px;
-  font-weight: 700;
-  opacity: 0.85;
-  padding: 0 6px;
-  border-radius: 999px;
-}
-
-.scroll-btn:hover:not(:disabled) {
-  opacity: 1;
-  color: var(--primary);
-  background: var(--primary-soft);
-}
-
-.scroll-btn:disabled {
-  cursor: default;
-}
-
-.scroll-btn.inside {
-  margin-left: 2px;
 }
 
 </style>

@@ -30,6 +30,8 @@ import {
   detectDevice,
 } from "@/utils/deviceDetection";
 
+import PillButton from "@/components/ui/PillButton.vue";
+
 /* =========================
    Data contract
 
@@ -439,32 +441,26 @@ const requestMessage =
       <!-- Presets -->
 
       <div class="presets">
-        <button
-          type="button"
-          class="preset-btn"
+        <PillButton
           :disabled="requestInProgress"
           @click="selectNightly"
         >
           As nightly
-        </button>
+        </PillButton>
 
-        <button
-          type="button"
-          class="preset-btn"
+        <PillButton
           :disabled="requestInProgress"
           @click="selectAll"
         >
           All
-        </button>
+        </PillButton>
 
-        <button
-          type="button"
-          class="preset-btn"
+        <PillButton
           :disabled="requestInProgress"
           @click="selectNone"
         >
           None
-        </button>
+        </PillButton>
       </div>
 
       <!-- Steps -->
@@ -531,9 +527,8 @@ const requestMessage =
       <!-- Run -->
 
       <div class="run-bar">
-        <button
-          type="button"
-          class="run-btn"
+        <PillButton
+          variant="primary"
           :disabled="!canRun"
           @click="runHousekeeping"
         >
@@ -541,7 +536,7 @@ const requestMessage =
           <span v-if="selectedSteps.length">
             ({{ selectedSteps.length }})
           </span>
-        </button>
+        </PillButton>
 
         <span
           v-if="requestMessage"
@@ -582,31 +577,6 @@ const requestMessage =
   display: flex;
   gap: 0.5rem;
   margin-bottom: 1rem;
-}
-
-.preset-btn {
-  padding: 4px 14px;
-
-  border-radius: 999px;
-  border: 1px solid var(--border);
-
-  background: var(--surface-soft);
-  color: var(--text-soft);
-
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-
-  cursor: pointer;
-}
-
-.preset-btn:hover:not(:disabled) {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.preset-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 /* =========================================================
@@ -670,26 +640,6 @@ const requestMessage =
   flex-wrap: wrap;
 
   margin-top: 1.25rem;
-}
-
-.run-btn {
-  padding: 8px 20px;
-
-  border-radius: 999px;
-  border: 1px solid var(--primary);
-
-  background: var(--primary-soft);
-  color: var(--primary);
-
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-
-  cursor: pointer;
-}
-
-.run-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .request-message {

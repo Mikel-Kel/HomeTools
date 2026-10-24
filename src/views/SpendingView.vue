@@ -12,6 +12,7 @@ import { useRouter } from "vue-router";
 import PageHeader from "@/components/PageHeader.vue";
 import AppIcon from "@/components/AppIcon.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
+import PillButton from "@/components/ui/PillButton.vue";
 import DateChip from "@/components/DateChip.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
@@ -1221,16 +1222,14 @@ onBeforeUnmount(() => {
 
           <h2>Filters</h2>
 
-          <button
+          <PillButton
             v-if="filtersOpen"
-            type="button"
-            class="reset-button"
             @click.stop="
               resetFilters
             "
           >
             Reset
-          </button>
+          </PillButton>
         </header>
 
         <div
@@ -1660,24 +1659,6 @@ onBeforeUnmount(() => {
 .dates-row {
   display: flex;
   gap: 10px;
-}
-
-.reset-button {
-  padding: 2px 20px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-soft);
-  color: var(--text-soft);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.reset-button:hover {
-  background: var(--primary-soft);
-  border-color: var(--primary);
-  color: var(--primary);
 }
 
 .filters-body {

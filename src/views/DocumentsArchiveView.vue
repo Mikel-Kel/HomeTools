@@ -8,6 +8,7 @@ import {
 
 import PageHeader from "@/components/PageHeader.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
+import PillButton from "@/components/ui/PillButton.vue";
 import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
@@ -1942,16 +1943,14 @@ onBeforeUnmount(() => {
             Filters
           </span>
 
-          <button
+          <PillButton
             v-if="filtersOpen"
-            type="button"
-            class="reset-button"
             @click.stop="
               resetFilters
             "
           >
             Reset
-          </button>
+          </PillButton>
         </header>
 
         <div
@@ -2447,47 +2446,6 @@ onBeforeUnmount(() => {
 
   color:
     var(--text-soft);
-}
-
-.reset-button {
-  padding:
-    2px 20px;
-
-  border-radius:
-    999px;
-
-  border:
-    1px solid
-    var(--border);
-
-  background:
-    var(--surface-soft);
-
-  color:
-    var(--text-soft);
-
-  font-size:
-    var(--font-size-xs);
-
-  font-weight:
-    600;
-
-  cursor:
-    pointer;
-
-  transition:
-    all 0.15s ease;
-}
-
-.reset-button:hover {
-  background:
-    var(--primary-soft);
-
-  border-color:
-    var(--primary);
-
-  color:
-    var(--primary);
 }
 
 /* =========================================================

@@ -1295,8 +1295,7 @@ async function closeView() {
 }
 
 :deep(.allocation-form .chip-selector) {
-  width: min(650px, 100%);
-  max-width: 100%;
+  width: 100%;
 }
 
 :deep(.field-short) {
