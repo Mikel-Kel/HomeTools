@@ -96,6 +96,9 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   Le backend reconstruit `archivetoc` et les tags à partir de ces noms (`scripts/python/archive_reconcile.py`) :
   ne pas changer cette grammaire sans adapter le script. Tags séparés par `_`.
 
+- Budget (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/budget-contract.md`
+  (section `years` de `budget.json`, événements `PWA-BUD_…`, journal `budgetLog-<année>.json`).
+
 ## Points ouverts connus
 
 - `VITE_PROXY_API_KEY` est en clair dans le bundle public. Objectif : la retirer du build et la stocker dans un coffre chiffré

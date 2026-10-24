@@ -13,6 +13,8 @@ import AllocationView from "../views/AllocationView.vue";
 import FollowUpView from "../views/FollowUpView.vue";
 import DocumentsArchiveView from "../views/DocumentsArchiveView.vue";
 import HousekeepingView from "../views/HousekeepingView.vue";
+import BudgetView from "../views/BudgetView.vue";
+import { detectDevice } from "@/utils/deviceDetection";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -97,6 +99,17 @@ const router = createRouter({
       },
     },
     {
+      path: "/budget",
+      name: "budget",
+      component: BudgetView,
+      meta: {
+        level: 1,
+        title: "Budget",
+        requiresDrive: true,
+        macOnly: true,
+      },
+    },
+    {
       /* Ancienne adresse de la page des journaux. */
       path: "/events",
       redirect: "/housekeeping",
@@ -112,6 +125,16 @@ router.beforeEach(async (to, _from, next) => {
   document.title =
     (to.meta?.title as string) ??
     "HomeTools";
+
+  /*
+    Pages réservées au Mac (saisie sur grand écran).
+  */
+  if (
+    to.meta?.macOnly === true &&
+    detectDevice() !== "Mac"
+  ) {
+    return next({ name: "home" });
+  }
 
   const backend =
     detectStorageBackend();

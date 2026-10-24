@@ -571,6 +571,38 @@ function performanceClass(
 
           <li>
             <router-link
+              v-if="device === 'Mac'"
+              to="/budget"
+              class="menu-item"
+            >
+              <AppIcon
+                name="budget"
+                :size="32"
+              />
+
+              <span>
+                Budget
+              </span>
+            </router-link>
+
+            <div
+              v-else
+              class="menu-item unavailable"
+              title="Available on the Mac only"
+            >
+              <AppIcon
+                name="budget"
+                :size="32"
+              />
+
+              <span>
+                Budget
+              </span>
+            </div>
+          </li>
+
+          <li>
+            <router-link
               to="/documentsArchive"
               class="menu-item"
             >
@@ -1069,6 +1101,16 @@ function performanceClass(
 
 .menu-item.dev {
   opacity: 0.6;
+}
+
+.menu-item.unavailable {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.menu-item.unavailable:hover {
+  background: none;
+  color: var(--text);
 }
 
 /* =========================
