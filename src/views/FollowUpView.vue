@@ -13,6 +13,7 @@ import CategorySheet from "@/components/followup/CategorySheet.vue";
 import FollowUpDetails from "@/components/followup/FollowUpDetails.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
+import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useRemoteJson } from "@/composables/useRemoteJson";
@@ -242,6 +243,41 @@ const isCurrentYear =
   computed(() =>
     year.value === currentYear
   );
+
+const yearOptions =
+  computed(() =>
+    availableYears.value.map(
+      availableYear => ({
+        value: availableYear,
+        label: String(availableYear),
+      })
+    )
+  );
+
+/*
+  MTD et YTD n’ont de sens que pour l’année en cours.
+*/
+const scopeOptions =
+  computed(() =>
+    (["FULL", "MTD", "YTD"] as AnalysisScope[]).map(
+      scope => ({
+        value: scope,
+        label: scope,
+        disabled:
+          !isCurrentYear.value &&
+          scope !== "FULL",
+      })
+    )
+  );
+
+const natureOptions: {
+  value: NatureFilter;
+  label: string;
+}[] = [
+  { value: "ALL", label: "All" },
+  { value: "I", label: "Income" },
+  { value: "E", label: "Expenses" },
+];
 
 watch(
   year,
@@ -1510,119 +1546,24 @@ watch(
           class="filters-body"
         >
           <div class="primary-group">
-            <div class="year-segmented">
-              <button
-                v-for="
-                  availableYear
-                  in availableYears
-                "
-                :key="
-                  availableYear
-                "
-                class="year-segment"
-                :class="{
-                  active:
-                    year ===
-                    availableYear
-                }"
-                @click="
-                  year =
-                    availableYear
-                "
-              >
-                {{ availableYear }}
-              </button>
-            </div>
+            <SegmentedControl
+              v-model="year"
+              :options="yearOptions"
+            />
 
-            <div class="scope-selector">
-              <button
-                v-for="
-                  scope
-                  in [
-                    'FULL',
-                    'MTD',
-                    'YTD'
-                  ]
-                "
-                :key="scope"
-                class="scope-btn"
-                :class="{
-                  active:
-                    analysisScope ===
-                    scope,
+            <SegmentedControl
+              v-model="analysisScope"
+              :options="scopeOptions"
+            />
 
-                  disabled:
-                    !isCurrentYear &&
-                    scope !==
-                      'FULL'
-                }"
-                :disabled="
-                  !isCurrentYear &&
-                  scope !== 'FULL'
-                "
-                @click="
-                  analysisScope =
-                    scope as
-                      AnalysisScope
-                "
-              >
-                {{ scope }}
-              </button>
-            </div>
+            <SegmentedControl
+              v-model="natureFilter"
+              :options="natureOptions"
+            />
 
-            <div class="scope-selector">
-              <button
-                class="scope-btn"
-                :class="{
-                  active:
-                    natureFilter ===
-                    'ALL'
-                }"
-                @click="
-                  natureFilter =
-                    'ALL'
-                "
-              >
-                All
-              </button>
-
-              <button
-                class="scope-btn"
-                :class="{
-                  active:
-                    natureFilter ===
-                    'I'
-                }"
-                @click="
-                  natureFilter =
-                    'I'
-                "
-              >
-                Income
-              </button>
-
-              <button
-                class="scope-btn"
-                :class="{
-                  active:
-                    natureFilter ===
-                    'E'
-                }"
-                @click="
-                  natureFilter =
-                    'E'
-                "
-              >
-                Expenses
-              </button>
-            </div>
-
-            <button
-              class="scope-btn offbudget-toggle"
-              :class="{
-                active:
-                  includeOffBudget
-              }"
+            <PillButton
+              class="offbudget-toggle"
+              :active="includeOffBudget"
               :title="
                 includeOffBudget
                   ? 'Off-budget included'
@@ -1634,7 +1575,7 @@ watch(
               "
             >
               Off-Budget
-            </button>
+            </PillButton>
           </div>
 
           <div class="text-filter-row">
@@ -1646,13 +1587,8 @@ watch(
               autocomplete="off"
             />
 
-            <button
-              type="button"
-              class="scope-btn pending-toggle"
-              :class="{
-                active:
-                  pendingOnly
-              }"
+            <PillButton
+              :active="pendingOnly"
               :title="
                 pendingOnly
                   ? 'Only pending reallocations'
@@ -1670,7 +1606,7 @@ watch(
                     ? "1 pending"
                     : `${pendingCount} pendings`
               }}
-            </button>
+            </PillButton>
           </div>
 
           <div class="category-block">
@@ -2307,158 +2243,6 @@ watch(
 /* =========================================================
    6. CONTROLS
 ========================================================= */
-
-.year-segmented {
-  display:
-    inline-flex;
-
-  padding:
-    2px;
-
-  gap:
-    2px;
-
-  background:
-    var(--bg-soft);
-
-  border-radius:
-    999px;
-
-  border:
-    1px solid
-    var(--border);
-}
-
-.year-segment {
-  padding:
-    6px 16px;
-
-  border-radius:
-    999px;
-
-  border:
-    none;
-
-  background:
-    transparent;
-
-  font-size:
-    var(--font-size-xs);
-
-  font-weight:
-    600;
-
-  color:
-    var(--text-soft);
-
-  opacity:
-    0.6;
-
-  cursor:
-    pointer;
-
-  user-select:
-    none;
-
-  transition:
-    all 0.15s ease;
-}
-
-.year-segment.active {
-  background:
-    var(--primary-soft);
-
-  border:
-    1px solid
-    var(--primary);
-
-  color:
-    var(--primary);
-
-  opacity:
-    1;
-
-  box-shadow:
-    var(--shadow-sm);
-}
-
-.scope-selector {
-  display:
-    inline-flex;
-
-  gap:
-    4px;
-
-  padding:
-    2px;
-
-  background:
-    var(--bg-soft);
-
-  border-radius:
-    999px;
-}
-
-.scope-btn {
-  padding:
-    6px 14px;
-
-  border-radius:
-    999px;
-
-  border:
-    1px solid
-    transparent;
-
-  font-size:
-    var(--font-size-xs);
-
-  font-weight:
-    600;
-
-  color:
-    var(--text-soft);
-
-  background:
-    transparent;
-
-  opacity:
-    0.6;
-
-  cursor:
-    pointer;
-
-  user-select:
-    none;
-
-  transition:
-    all 0.15s ease;
-}
-
-.scope-btn.active {
-  background:
-    var(--primary-soft);
-
-  border-color:
-    var(--primary);
-
-  color:
-    var(--primary);
-
-  opacity:
-    1;
-
-  box-shadow:
-    var(--shadow-sm);
-}
-
-.scope-btn.disabled {
-  opacity:
-    0.35;
-
-  cursor:
-    not-allowed;
-}
 
 /* =========================================================
    7. STATUS & STATES
