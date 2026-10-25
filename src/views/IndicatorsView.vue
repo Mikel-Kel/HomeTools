@@ -480,6 +480,17 @@ const newMonthMessage =
       </StatusPill>
 
       <PillButton
+        @click="
+          $router.push({
+            name: 'indicatorHistory',
+            query: { family: String(familyId) },
+          })
+        "
+      >
+        History
+      </PillButton>
+
+      <PillButton
         v-if="canStartMonth"
         @click="startMonth"
       >

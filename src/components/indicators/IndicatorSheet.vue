@@ -7,6 +7,8 @@ import {
   watch,
 } from "vue";
 
+import { useRouter } from "vue-router";
+
 import PillButton from "@/components/ui/PillButton.vue";
 
 import { useEventRequest } from "@/composables/useEventRequest";
@@ -57,6 +59,19 @@ const NO_ANSWER_DELAY_MS =
   2 * 60 * 1000;
 
 const HISTORY_SIZE = 6;
+
+const router =
+  useRouter();
+
+function openHistory() {
+  router.push({
+    name: "indicatorHistory",
+    query: {
+      family: String(props.familyId),
+      item: String(props.item.itemId),
+    },
+  });
+}
 
 /* =========================
    Saisie
@@ -625,7 +640,13 @@ onBeforeUnmount(() => {
       v-if="recentValues.length"
       class="history"
     >
-      <h3>Previous readings</h3>
+      <div class="history-header">
+        <h3>Previous readings</h3>
+
+        <PillButton @click="openHistory">
+          History charts
+        </PillButton>
+      </div>
 
       <table>
         <tbody>
@@ -835,6 +856,17 @@ h3 {
   padding-top: 10px;
 
   border-top: 1px solid var(--border);
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.history-header h3 {
+  margin: 0;
 }
 
 .history table {

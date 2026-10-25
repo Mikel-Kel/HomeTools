@@ -19,6 +19,20 @@
   /* aliases (compatibilité avec ton code existant) */
   --bg: var(--surface-0);
   --bg-soft: #f2f2f2;
+
+  /*
+    Années des graphiques d'historique : les années
+    précédentes, de la plus ancienne (1) à la plus récente
+    (5), en une teinte du clair au foncé (rampe ordinale
+    validée sur fond blanc) ; la dernière année affichée
+    ressort en orange.
+  */
+  --chart-year-1: #86b6ef;
+  --chart-year-2: #5598e7;
+  --chart-year-3: #2a78d6;
+  --chart-year-4: #1f63b5;
+  --chart-year-5: #0d366b;
+  --chart-year-latest: #eb6834;
   --surface: var(--surface-1);
   --surface-soft: var(--surface-2);
 
@@ -178,6 +192,14 @@ textarea {
   --surface-3: #1e293b;   /* hover */
 
   --bg-soft: var(--surface-3);
+
+  /* Sur fond sombre, la plus récente est la plus claire. */
+  --chart-year-1: #184f95;
+  --chart-year-2: #256abf;
+  --chart-year-3: #3987e5;
+  --chart-year-4: #6da7ec;
+  --chart-year-5: #b7d3f6;
+  --chart-year-latest: #d95926;
 
   /* =====================================================
      TEXT
