@@ -14,7 +14,6 @@ import FollowUpView from "../views/FollowUpView.vue";
 import DocumentsArchiveView from "../views/DocumentsArchiveView.vue";
 import HousekeepingView from "../views/HousekeepingView.vue";
 import BudgetView from "../views/BudgetView.vue";
-import { detectDevice } from "@/utils/deviceDetection";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -106,7 +105,6 @@ const router = createRouter({
         level: 1,
         title: "Budget",
         requiresDrive: true,
-        macOnly: true,
       },
     },
     {
@@ -125,16 +123,6 @@ router.beforeEach(async (to, _from, next) => {
   document.title =
     (to.meta?.title as string) ??
     "HomeTools";
-
-  /*
-    Pages réservées au Mac (saisie sur grand écran).
-  */
-  if (
-    to.meta?.macOnly === true &&
-    detectDevice() !== "Mac"
-  ) {
-    return next({ name: "home" });
-  }
 
   const backend =
     detectStorageBackend();

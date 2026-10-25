@@ -143,6 +143,25 @@ textarea {
   color: var(--text);
 }
 
+/*
+  Coin replié : l'élément porte un mémo (comme un
+  commentaire de tableur). L'élément doit être positionné
+  (relative, sticky…).
+*/
+.memo-corner::after {
+  content: "";
+
+  position: absolute;
+  top: 0;
+  right: 0;
+
+  border-style: solid;
+  border-width: 0 7px 7px 0;
+  border-color: transparent var(--text-muted) transparent transparent;
+
+  pointer-events: none;
+}
+
 /* =========================================================
    DARK THEME
 ========================================================= */

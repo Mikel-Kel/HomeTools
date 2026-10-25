@@ -13,11 +13,13 @@ import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import BudgetLineSheet from "@/components/budget/BudgetLineSheet.vue";
+import MemoTooltip from "@/components/budget/MemoTooltip.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useEventRequest } from "@/composables/useEventRequest";
+import { useMemoTooltip } from "@/composables/useMemoTooltip";
 
 import {
   useCategories,
@@ -35,13 +37,16 @@ import { formatInteger } from "@/utils/amountFormat";
 import { detectDevice } from "@/utils/deviceDetection";
 
 /* =========================
-   Page Budget (Mac uniquement)
+   Page Budget
 
    Budget mensuel par sous-catégorie, lu dans budget.json.
    Contrat : src/contracts/budget.ts.
 
    « Open » : montants encore à confirmer. Ces lignes sont
    mises en évidence ; « Open only » ne montre qu'elles.
+
+   Saisie (fiches, nouvelle année) réservée au Mac ; les
+   autres appareils consultent, mémos compris.
 ========================= */
 
 type NatureFilter =
@@ -77,6 +82,9 @@ const NEW_YEAR_FROM_MONTH = 9;
 
 const NO_ANSWER_DELAY_MS =
   2 * 60 * 1000;
+
+const readonly =
+  detectDevice() !== "Mac";
 
 const natureOptions: {
   value: NatureFilter;
@@ -236,6 +244,7 @@ const newYearWaiting =
 
 const canCreateNewYear =
   computed(() =>
+    !readonly &&
     latestYear.value !== null &&
     Date.now() >=
       new Date(
@@ -528,10 +537,19 @@ const editedLine =
     categoryLabel: string;
   } | null>(null);
 
+/*
+  Mémo au survol du libellé (Mac) ; au toucher, la fiche
+  l'affiche.
+*/
+const memoTooltip =
+  useMemoTooltip();
+
 function openLine(
   row: BudgetRow,
   group: BudgetGroup
 ) {
+  memoTooltip.hide();
+
   editedLine.value = {
     row,
     categoryLabel: group.label,
@@ -889,10 +907,15 @@ watch(
             :key="row.line.subCategoryId"
             class="line-row"
             :class="{ 'to-confirm': row.line.open }"
-            title="Edit this line"
+            :title="readonly ? 'View this line' : 'Edit this line'"
             @click="openLine(row, group)"
           >
-            <th class="label-cell">
+            <th
+              class="label-cell"
+              :class="{ 'memo-corner': row.line.memo }"
+              @mouseenter="memoTooltip.show($event, row.line.memo)"
+              @mouseleave="memoTooltip.hide()"
+            >
               {{ row.label }}
             </th>
 
@@ -940,6 +963,8 @@ watch(
     </section>
   </main>
 
+  <MemoTooltip :tooltip="memoTooltip.tooltip.value" />
+
   <BudgetLineSheet
     v-if="editedLine"
     :key="`${year}-${editedLine.row.line.subCategoryId}`"
@@ -948,6 +973,7 @@ watch(
     :label="editedLine.row.label"
     :category-label="editedLine.categoryLabel"
     :nature-label="natureLabelOf(editedLine.row.line)"
+    :readonly="readonly"
     @close="editedLine = null"
   />
 </template>

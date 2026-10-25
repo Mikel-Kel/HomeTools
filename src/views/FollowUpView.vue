@@ -15,6 +15,9 @@ import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
+import BudgetMemoSheet from "@/components/budget/BudgetMemoSheet.vue";
+import MemoTooltip from "@/components/budget/MemoTooltip.vue";
+import { useMemoTooltip } from "@/composables/useMemoTooltip";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useRemoteJson } from "@/composables/useRemoteJson";
@@ -902,6 +905,71 @@ function resetFilters() {
    Budget computation
 ========================= */
 
+/*
+  Mémo budget d'une sous-catégorie pour l'année affichée
+  (lignes de sous-catégories seulement).
+*/
+function budgetMemoOf(
+  item: FollowUpItem
+): string | null {
+  if (
+    selectedCategory.value === "*" ||
+    !budgetRaw.value
+  ) {
+    return null;
+  }
+
+  const subCategoryId =
+    Number(item.id);
+
+  return (
+    budgetRaw.value.memos.find(
+      memo =>
+        memo.year === year.value &&
+        memo.subCategoryId === subCategoryId
+    )?.memo ??
+    null
+  );
+}
+
+/*
+  Mémo au survol du libellé de la sous-catégorie (Mac),
+  ou au toucher (iPad).
+*/
+const memoTooltip =
+  useMemoTooltip();
+
+const shownMemo =
+  ref<{
+    title: string;
+    subtitle: string;
+    memo: string;
+  } | null>(null);
+
+function showBudgetMemo(
+  item: FollowUpItem
+) {
+  const memo =
+    budgetMemoOf(item);
+
+  if (!memo) {
+    return;
+  }
+
+  memoTooltip.hide();
+
+  const categoryLabel =
+    categoriesStore.getCategory(
+      Number(selectedCategory.value)
+    )?.label ?? "";
+
+  shownMemo.value = {
+    title: item.label,
+    subtitle: `Budget memo · ${categoryLabel} · ${year.value}`,
+    memo,
+  };
+}
+
 function displayedBudget(
   item: FollowUpItem
 ): number | undefined {
@@ -1771,7 +1839,21 @@ watch(
         :key="item.id"
         class="followup-grid followup-row"
       >
-        <div class="label">
+        <div
+          class="label"
+          :class="{
+            'memo-corner has-memo':
+              budgetMemoOf(item)
+          }"
+          @mouseenter="
+            memoTooltip.show(
+              $event,
+              budgetMemoOf(item)
+            )
+          "
+          @mouseleave="memoTooltip.hide()"
+          @click="showBudgetMemo(item)"
+        >
           {{ item.label }}
         </div>
 
@@ -1840,6 +1922,16 @@ watch(
         </div>
       </div>
     </div>
+
+    <MemoTooltip :tooltip="memoTooltip.tooltip.value" />
+
+    <BudgetMemoSheet
+      v-if="shownMemo"
+      :title="shownMemo.title"
+      :subtitle="shownMemo.subtitle"
+      :memo="shownMemo.memo"
+      @close="shownMemo = null"
+    />
 
     <CategorySheet
       v-model="
@@ -2222,6 +2314,13 @@ watch(
 .col-allocated,
 .col-budget,
 .allocated,
+.label.has-memo {
+  position: relative;
+  padding-right: 12px;
+
+  cursor: pointer;
+}
+
 .budget {
   text-align:
     right;

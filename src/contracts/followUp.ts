@@ -146,7 +146,14 @@ export function readFollowUp(
      { "budgets": [
          { "year": 2026, "month": 1,
            "items": [ { "categoryId": 1, "subCategoryId": 6,
-                        "amount": 0 } ] } ] }
+                        "amount": 0 } ] } ],
+       "years": [ { "year": 2026,
+                    "subCategories": [ { "subCategoryId": 4,
+                                         "open": true,
+                                         "memo": "…" | null } ] } ] }
+
+   Follow-up n'utilise de years que les mémos ; la page
+   Budget lit le tout (src/contracts/budget.ts).
 ========================= */
 
 export interface BudgetItem {
@@ -161,9 +168,16 @@ export interface BudgetMonth {
   items: BudgetItem[];
 }
 
+export interface BudgetMemo {
+  year: number;
+  subCategoryId: number;
+  memo: string;
+}
+
 export interface BudgetFile {
   updatedAt: string | null;
   budgets: BudgetMonth[];
+  memos: BudgetMemo[];
 }
 
 export function readBudget(
@@ -199,6 +213,23 @@ export function readBudget(
               })
             ),
         })
+      ),
+
+    memos:
+      objects(file?.years).flatMap(
+        entry =>
+          objects(entry.subCategories)
+            .map(item => ({
+              year:
+                asNumber(entry.year),
+
+              subCategoryId:
+                asNumber(item.subCategoryId),
+
+              memo:
+                asString(item.memo),
+            }))
+            .filter(item => item.memo)
       ),
   };
 }

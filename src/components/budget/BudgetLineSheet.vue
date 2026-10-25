@@ -9,6 +9,7 @@ import {
 
 import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
+import StatusPill from "@/components/ui/StatusPill.vue";
 
 import { useEventRequest } from "@/composables/useEventRequest";
 
@@ -29,6 +30,9 @@ import { detectDevice } from "@/utils/deviceDetection";
                     "open", "memo", "source" } }
    puis se ferme une fois la demande traitée (budget.json
    republié).
+
+   readonly : consultation seule (iPad, iPhone) ; la
+   saisie est réservée au Mac.
 ========================= */
 
 const props = defineProps<{
@@ -37,6 +41,7 @@ const props = defineProps<{
   label: string;
   categoryLabel: string;
   natureLabel: string;
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -178,6 +183,7 @@ const waitingElsewhere =
 
 const canSave =
   computed(() =>
+    !props.readonly &&
     changed.value &&
     !updateRequest.inProgress.value &&
     !waitingElsewhere.value
@@ -248,6 +254,7 @@ const requestMessage =
 
 function close() {
   if (
+    !props.readonly &&
     changed.value &&
     !updateRequest.inProgress.value &&
     !confirm("Discard the changes of this line?")
@@ -319,6 +326,7 @@ onBeforeUnmount(() => {
       <h3>Monthly amounts</h3>
 
       <PillButton
+        v-if="!readonly"
         :disabled="updateRequest.inProgress.value"
         @click="copyJanuary"
       >
@@ -339,6 +347,7 @@ onBeforeUnmount(() => {
           type="text"
           inputmode="numeric"
           placeholder="0"
+          :readonly="readonly"
           :disabled="updateRequest.inProgress.value"
           @blur="normalizeMonth(index)"
         />
@@ -354,7 +363,15 @@ onBeforeUnmount(() => {
     <div class="field-row">
       <h3>Status</h3>
 
+      <StatusPill
+        v-if="readonly"
+        :tone="status === 'open' ? 'warning' : 'positive'"
+      >
+        {{ status === "open" ? "Open (to confirm)" : "Confirmed" }}
+      </StatusPill>
+
       <SegmentedControl
+        v-else
         v-model="status"
         :options="statusOptions"
       />
@@ -365,7 +382,13 @@ onBeforeUnmount(() => {
     <label class="memo-field">
       <h3>Memo {{ year }}</h3>
 
+      <pre
+        v-if="readonly"
+        class="memo-text"
+      >{{ memo || "No memo." }}</pre>
+
       <textarea
+        v-else
         v-model="memo"
         rows="8"
         :disabled="updateRequest.inProgress.value"
@@ -374,7 +397,23 @@ onBeforeUnmount(() => {
 
     <!-- Actions -->
 
-    <footer class="sheet-footer">
+    <footer
+      v-if="readonly"
+      class="sheet-footer"
+    >
+      <span class="request-message">
+        Read-only on this device — edit on the Mac.
+      </span>
+
+      <PillButton @click="close">
+        Close
+      </PillButton>
+    </footer>
+
+    <footer
+      v-else
+      class="sheet-footer"
+    >
       <span
         class="request-message"
         :class="updateRequest.request.value?.phase"
@@ -551,6 +590,7 @@ h3 {
   Police à chasse fixe : les mémos alignent des montants
   avec des espaces.
 */
+.memo-text,
 .memo-field textarea {
   box-sizing: border-box;
   width: 100%;
@@ -565,6 +605,15 @@ h3 {
   line-height: 1.4;
 
   resize: vertical;
+}
+
+.memo-text {
+  margin: 0;
+
+  background: var(--surface-soft);
+  color: var(--text);
+
+  white-space: pre-wrap;
 }
 
 /* =========================
