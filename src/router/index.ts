@@ -14,6 +14,7 @@ import FollowUpView from "../views/FollowUpView.vue";
 import DocumentsArchiveView from "../views/DocumentsArchiveView.vue";
 import HousekeepingView from "../views/HousekeepingView.vue";
 import BudgetView from "../views/BudgetView.vue";
+import IndicatorsView from "../views/IndicatorsView.vue";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -104,6 +105,16 @@ const router = createRouter({
       meta: {
         level: 1,
         title: "Budget",
+        requiresDrive: true,
+      },
+    },
+    {
+      path: "/indicators",
+      name: "indicators",
+      component: IndicatorsView,
+      meta: {
+        level: 1,
+        title: "Indicators",
         requiresDrive: true,
       },
     },

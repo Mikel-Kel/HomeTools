@@ -44,3 +44,19 @@ export function formatInteger(
     .round(value)
     .toLocaleString(NUMBER_LOCALE)
 }
+
+/*
+  Valeur mesurée (compteur, température…) : entière si
+  elle l'est, sinon jusqu'à deux décimales.
+*/
+export function formatMeasure(
+  value: number | null | undefined
+): string {
+
+  if (value == null) return ""
+
+  return value.toLocaleString(NUMBER_LOCALE, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  })
+}

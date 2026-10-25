@@ -587,6 +587,22 @@ function performanceClass(
 
           <li>
             <router-link
+              to="/indicators"
+              class="menu-item"
+            >
+              <AppIcon
+                name="calendar"
+                :size="32"
+              />
+
+              <span>
+                Indicators
+              </span>
+            </router-link>
+          </li>
+
+          <li>
+            <router-link
               to="/documentsArchive"
               class="menu-item"
             >
