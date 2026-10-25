@@ -73,6 +73,23 @@ export function eventFilePattern(
 }
 
 /*
+  Noms déjà émis par cette session : deux événements de
+  même type et même suffixe dans la même seconde
+  porteraient le même nom, le second écraserait le premier.
+*/
+const emittedNames =
+  new Set<string>();
+
+function nextSecond(): Promise<void> {
+  return new Promise(resolve =>
+    window.setTimeout(
+      resolve,
+      1000 - new Date().getMilliseconds()
+    )
+  );
+}
+
+/*
   Écrit l’événement dans events/ et retourne le nom du
   fichier, qui sert ensuite à suivre son statut.
 */
@@ -81,11 +98,23 @@ export async function emitEvent(
   event: object,
   suffix?: string
 ): Promise<string> {
-  const fileName =
+  let fileName =
     buildEventFileName(
       trigram,
       suffix
     );
+
+  while (emittedNames.has(fileName)) {
+    await nextSecond();
+
+    fileName =
+      buildEventFileName(
+        trigram,
+        suffix
+      );
+  }
+
+  emittedNames.add(fileName);
 
   await saveJSONToFolder(
     EVENTS_FOLDER,

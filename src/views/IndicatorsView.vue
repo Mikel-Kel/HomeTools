@@ -9,8 +9,10 @@ import PageHeader from "@/components/PageHeader.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
+import IndicatorSheet from "@/components/indicators/IndicatorSheet.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
+import { useEventRequest } from "@/composables/useEventRequest";
 
 import {
   ENTRY_FAMILY_IDS,
@@ -31,6 +33,7 @@ import {
 } from "@/utils/amountFormat";
 
 import { formatDate } from "@/utils/dateFormat";
+import { detectDevice } from "@/utils/deviceDetection";
 
 /* =========================
    Page Indicators
@@ -321,12 +324,105 @@ const toReadCount =
       row => row.toRead
     ).length
   );
+
+/* =========================
+   Indicator sheet
+========================= */
+
+const editedRow =
+  ref<IndicatorRow | null>(null);
+
+/* =========================
+   New month (ancien « + »)
+
+   events/PWA-IND_<AAAAMMJJHHMMSS>_NEWMONTH.json : pour le
+   mois affiché, le Mac recopie la dernière valeur des
+   compteurs actifs sans valeur (« <- last known value »),
+   dans toutes les familles saisies.
+========================= */
+
+const newMonthRequest =
+  useEventRequest({
+    trigram: "IND",
+    noAnswerDelayMs: 2 * 60 * 1000,
+  });
+
+const missingCounters =
+  computed(() =>
+    rows.value.filter(
+      row =>
+        row.item.cumulative &&
+        !row.current
+    ).length
+  );
+
+const canStartMonth =
+  computed(() =>
+    missingCounters.value > 0 &&
+    !newMonthRequest.inProgress.value
+  );
+
+async function startMonth() {
+  if (!canStartMonth.value || !month.value) {
+    return;
+  }
+
+  const confirmed =
+    confirm(
+      `Start ${monthLabel.value}?\n\n` +
+      "The last known value of every active counter without a " +
+      `${monthLabel.value} value is copied, marked “last known value”.`
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  await newMonthRequest.send(
+    {
+      eventType: "INDICATOR_MONTH_CREATED",
+      version: 1,
+      timestamp: new Date().toISOString(),
+      payload: {
+        date: month.value,
+        familyIds: ENTRY_FAMILY_IDS,
+        source: detectDevice(),
+      },
+    },
+    "NEWMONTH"
+  );
+}
+
+const newMonthMessage =
+  computed(() => {
+    const current =
+      newMonthRequest.request.value;
+
+    switch (current?.phase) {
+      case "requested":
+        return newMonthRequest.noAnswerYet.value
+          ? "Requested — no answer from the Mac yet. Check that it is on and reachable."
+          : "Requested — waiting for the Mac…";
+
+      case "started":
+        return "Copying the last known values on the Mac…";
+
+      case "completed":
+        return "Month started.";
+
+      case "error":
+        return `Rejected: ${current.message ?? "unknown error"}`;
+
+      default:
+        return "";
+    }
+  });
 </script>
 
 <template>
   <PageHeader
     title="Indicators"
-    icon="calendar"
+    icon="indicators"
   />
 
   <div
@@ -382,6 +478,21 @@ const toReadCount =
       >
         {{ toReadCount }} to read
       </StatusPill>
+
+      <PillButton
+        v-if="canStartMonth"
+        @click="startMonth"
+      >
+        + Start {{ monthLabel }}
+      </PillButton>
+
+      <span
+        v-if="newMonthMessage"
+        class="request-message"
+        :class="newMonthRequest.request.value?.phase"
+      >
+        {{ newMonthMessage }}
+      </span>
     </section>
 
     <!-- Values -->
@@ -409,7 +520,10 @@ const toReadCount =
           <tr
             v-for="row in rows"
             :key="row.item.itemId"
+            class="indicator-row"
             :class="{ 'to-read': row.toRead }"
+            title="Enter or correct this value"
+            @click="editedRow = row"
           >
             <th class="label-cell">
               {{ row.item.label }}
@@ -482,6 +596,18 @@ const toReadCount =
       </table>
     </section>
   </main>
+
+  <IndicatorSheet
+    v-if="editedRow && month"
+    :key="`${familyId}-${editedRow.item.itemId}-${month}`"
+    :family-id="familyId"
+    :date="month"
+    :month-label="monthLabel"
+    :item="editedRow.item"
+    :current="editedRow.current"
+    :history="valuesByItem.get(editedRow.item.itemId) ?? []"
+    @close="editedRow = null"
+  />
 </template>
 
 <style scoped>
@@ -603,6 +729,28 @@ const toReadCount =
 .overdue {
   color: var(--negative);
   font-weight: 700;
+}
+
+.request-message {
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.request-message.completed {
+  color: var(--positive);
+}
+
+.request-message.error {
+  color: var(--negative);
+}
+
+.indicator-row {
+  cursor: pointer;
+}
+
+.indicator-row:hover th,
+.indicator-row:hover td {
+  background: var(--primary-soft);
 }
 
 /*

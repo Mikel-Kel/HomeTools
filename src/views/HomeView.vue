@@ -591,7 +591,7 @@ function performanceClass(
               class="menu-item"
             >
               <AppIcon
-                name="calendar"
+                name="indicators"
                 :size="32"
               />
 
