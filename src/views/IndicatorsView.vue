@@ -5,12 +5,13 @@ import {
   watch,
 } from "vue";
 
+import { useRouter } from "vue-router";
+
 import PageHeader from "@/components/PageHeader.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import IndicatorSheet from "@/components/indicators/IndicatorSheet.vue";
-import MarketQuotes from "@/components/indicators/MarketQuotes.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useEventRequest } from "@/composables/useEventRequest";
@@ -83,6 +84,9 @@ interface IndicatorRow {
    Data
 ========================= */
 
+const router =
+  useRouter();
+
 const familyId =
   ref<number>(VEHICLES_FAMILY_ID);
 
@@ -96,10 +100,7 @@ const indicatorsFile =
 const valuesFile =
   useRemoteJson({
     folder: INDICATORS_FOLDER,
-    file: () =>
-      familyId.value === MARKET_FAMILY_ID
-        ? null
-        : indicatorValuesFile(familyId.value),
+    file: () => indicatorValuesFile(familyId.value),
     read: readIndicatorValues,
   });
 
@@ -138,13 +139,23 @@ const familyOptions =
   );
 
 /*
-  Market data : derniers cours en consultation
-  (MarketQuotes.vue), sans mois ni saisie.
+  Market data : cours importés par le backend, sans
+  saisie ; le choix ouvre directement leurs courbes.
 */
-const isMarket =
-  computed(() =>
-    familyId.value === MARKET_FAMILY_ID
-  );
+function selectFamily(
+  id: number
+) {
+  if (id === MARKET_FAMILY_ID) {
+    router.push({
+      name: "indicatorHistory",
+      query: { family: String(MARKET_FAMILY_ID) },
+    });
+
+    return;
+  }
+
+  familyId.value = id;
+}
 
 const isVehicles =
   computed(() =>
@@ -514,75 +525,69 @@ const newMonthMessage =
 
     <section class="filters">
       <SegmentedControl
-        v-model="familyId"
+        :model-value="familyId"
         :options="familyOptions"
+        @update:model-value="selectFamily"
       />
 
-      <template v-if="!isMarket">
-        <div class="month-nav">
-          <PillButton
-            aria-label="Previous month"
-            @click="goToMonth(-1)"
-          >
-            ‹
-          </PillButton>
-
-          <span class="month-label">
-            {{ monthLabel }}
-          </span>
-
-          <PillButton
-            aria-label="Next month"
-            :disabled="!canGoNext"
-            @click="goToMonth(1)"
-          >
-            ›
-          </PillButton>
-        </div>
-
-        <StatusPill
-          v-if="toReadCount"
-          tone="warning"
-        >
-          {{ toReadCount }} to read
-        </StatusPill>
-
+      <div class="month-nav">
         <PillButton
-          @click="
-            $router.push({
-              name: 'indicatorHistory',
-              query: { family: String(familyId) },
-            })
-          "
+          aria-label="Previous month"
+          @click="goToMonth(-1)"
         >
-          History
+          ‹
         </PillButton>
 
-        <PillButton
-          v-if="canStartMonth"
-          @click="startMonth"
-        >
-          + Start {{ monthLabel }}
-        </PillButton>
-
-        <span
-          v-if="newMonthMessage"
-          class="request-message"
-          :class="newMonthRequest.request.value?.phase"
-        >
-          {{ newMonthMessage }}
+        <span class="month-label">
+          {{ monthLabel }}
         </span>
-      </template>
+
+        <PillButton
+          aria-label="Next month"
+          :disabled="!canGoNext"
+          @click="goToMonth(1)"
+        >
+          ›
+        </PillButton>
+      </div>
+
+      <StatusPill
+        v-if="toReadCount"
+        tone="warning"
+      >
+        {{ toReadCount }} to read
+      </StatusPill>
+
+      <PillButton
+        @click="
+          $router.push({
+            name: 'indicatorHistory',
+            query: { family: String(familyId) },
+          })
+        "
+      >
+        History
+      </PillButton>
+
+      <PillButton
+        v-if="canStartMonth"
+        @click="startMonth"
+      >
+        + Start {{ monthLabel }}
+      </PillButton>
+
+      <span
+        v-if="newMonthMessage"
+        class="request-message"
+        :class="newMonthRequest.request.value?.phase"
+      >
+        {{ newMonthMessage }}
+      </span>
     </section>
 
     <!-- Values -->
 
-    <MarketQuotes v-if="isMarket" />
-
-    <section
-      v-else
-      class="table-wrapper"
-    >
+    <section class="table-wrapper">
       <table class="indicators-table">
         <thead>
           <tr>
