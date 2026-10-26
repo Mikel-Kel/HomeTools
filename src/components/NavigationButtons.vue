@@ -14,11 +14,6 @@ function goBack() {
   router.back();
 }
 
-function goHome() {
-  if (props.disabled) return;
-  router.push("/");
-}
-
 const level = (route.meta.level as number) ?? 0;
 const showBack = level >= 2;
 </script>
@@ -35,14 +30,6 @@ const showBack = level >= 2;
       <AppIcon name="back" :size="32" />
     </button>
 
-    <button
-      class="nav-btn"
-      @click="goHome"
-      title="Home"
-      :disabled="disabled"
-    >
-      <AppIcon name="home" :size="32" />
-    </button>
   </div>
 </template>
 

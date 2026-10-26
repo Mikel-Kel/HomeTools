@@ -92,13 +92,18 @@ import {
 } from "@/composables/useRemoteJson";
 
 import {
+  useHousekeepingHealth,
+} from "@/composables/useHousekeepingHealth";
+
+import {
+  NAVIGATION_ITEMS,
+} from "@/config/navigation";
+
+import {
   APP_PARAMETERS_FILE,
   APP_PARAMETERS_FOLDER,
-  HOME_MESSAGES_FILE,
-  HOME_MESSAGES_FOLDER,
   HOME_SUMMARY_FILE,
   HOME_SUMMARY_FOLDER,
-  readHomeMessages,
   readHomeSummary,
   readSecurityParameters,
   type SecurityQuote,
@@ -170,27 +175,12 @@ const securityParameters =
   });
 
 /*
-  Messages du jour : réinitialisés par le housekeeping de la
-  nuit, puis complétés par chaque avertissement ou erreur de
-  la journée (événements, exécutions manuelles). Ils ne sont
-  plus affichés, mais donnent l’état de la pastille du menu
-  Housekeeping. Un problème de lecture est sans effet sur le
-  reste de la page.
+  Pastille d'état du menu Housekeeping (messages du jour).
 */
-const messages =
-  useRemoteJson({
-    folder:
-      HOME_MESSAGES_FOLDER,
-
-    file:
-      HOME_MESSAGES_FILE,
-
-    read:
-      readHomeMessages,
-
-    optional:
-      true,
-  });
+const {
+  health: housekeepingHealth,
+  title: housekeepingHealthTitle,
+} = useHousekeepingHealth();
 
 const markets =
   computed(() =>
@@ -255,67 +245,6 @@ const securities =
         (security): security is SecuritySummary =>
           security !== null
       );
-  });
-
-const homeMessages =
-  computed(() =>
-    messages.data.value ?? []
-  );
-
-/*
-  État général de la journée : le niveau le plus grave des
-  messages. Aucun message = pas de pastille.
-*/
-const housekeepingHealth =
-  computed(() => {
-    const levels =
-      homeMessages.value.map(
-        message => message.level
-      );
-
-    if (!levels.length) {
-      return null;
-    }
-
-    if (levels.includes("error")) {
-      return "error";
-    }
-
-    return levels.includes("warning")
-      ? "warning"
-      : "ok";
-  });
-
-const housekeepingHealthTitle =
-  computed(() => {
-    const errors =
-      homeMessages.value.filter(
-        message =>
-          message.level === "error"
-      ).length;
-
-    const warnings =
-      homeMessages.value.filter(
-        message =>
-          message.level === "warning"
-      ).length;
-
-    if (!errors && !warnings) {
-      return "No problem since the nightly run";
-    }
-
-    return [
-      errors
-        ? `${errors} error${errors > 1 ? "s" : ""}`
-        : "",
-
-      warnings
-        ? `${warnings} warning${warnings > 1 ? "s" : ""}`
-        : "",
-    ]
-      .filter(Boolean)
-      .join(", ") +
-      " since the nightly run";
   });
 
 const asOf =
@@ -478,20 +407,36 @@ function performanceClass(
         </div>
       </div>
 
-      <button
-        type="button"
-        class="theme-toggle"
-        @click="toggle"
-      >
-        <AppIcon
-          :name="
-            theme === 'dark'
-              ? 'sun'
-              : 'moon'
-          "
-          :size="24"
-        />
-      </button>
+      <div class="header-actions">
+        <router-link
+          to="/authentication"
+          class="header-btn"
+          title="Authentication"
+          aria-label="Authentication"
+        >
+          <AppIcon
+            name="locker"
+            :size="24"
+          />
+        </router-link>
+
+        <button
+          type="button"
+          class="header-btn"
+          :title="theme === 'dark' ? 'Light mode' : 'Dark mode'"
+          :aria-label="theme === 'dark' ? 'Light mode' : 'Dark mode'"
+          @click="toggle"
+        >
+          <AppIcon
+            :name="
+              theme === 'dark'
+                ? 'sun'
+                : 'moon'
+            "
+            :size="24"
+          />
+        </button>
+      </div>
     </div>
 
     <!-- =========================
@@ -521,118 +466,25 @@ function performanceClass(
 
       <div class="home-left">
         <ul class="menu">
-          <li>
+          <li
+            v-for="item in NAVIGATION_ITEMS"
+            :key="item.path"
+          >
             <router-link
-              to="/authentication"
+              :to="item.path"
               class="menu-item"
             >
               <AppIcon
-                name="locker"
+                :name="item.icon"
                 :size="32"
               />
 
               <span>
-                Authentication
-              </span>
-            </router-link>
-          </li>
-
-          <li>
-            <router-link
-              to="/spending"
-              class="menu-item"
-            >
-              <AppIcon
-                name="spending"
-                :size="32"
-              />
-
-              <span>
-                Spending
-              </span>
-            </router-link>
-          </li>
-
-          <li>
-            <router-link
-              to="/follow-up"
-              class="menu-item"
-            >
-              <AppIcon
-                name="followup"
-                :size="32"
-              />
-
-              <span>
-                Follow-up
-              </span>
-            </router-link>
-          </li>
-
-          <li>
-            <router-link
-              to="/budget"
-              class="menu-item"
-            >
-              <AppIcon
-                name="budget"
-                :size="32"
-              />
-
-              <span>
-                Budget
-              </span>
-            </router-link>
-          </li>
-
-          <li>
-            <router-link
-              to="/indicators"
-              class="menu-item"
-            >
-              <AppIcon
-                name="indicators"
-                :size="32"
-              />
-
-              <span>
-                Indicators
-              </span>
-            </router-link>
-          </li>
-
-          <li>
-            <router-link
-              to="/documentsArchive"
-              class="menu-item"
-            >
-              <AppIcon
-                name="bookshelf"
-                :size="32"
-              />
-
-              <span>
-                Archives
-              </span>
-            </router-link>
-          </li>
-
-          <li>
-            <router-link
-              to="/housekeeping"
-              class="menu-item"
-            >
-              <AppIcon
-                name="pages_warning"
-                :size="32"
-              />
-
-              <span>
-                Housekeeping
+                {{ item.label }}
               </span>
 
               <span
-                v-if="housekeepingHealth"
+                v-if="item.health && housekeepingHealth"
                 class="status-dot menu-status-dot"
                 :class="housekeepingHealth"
                 :title="housekeepingHealthTitle"
@@ -1002,10 +854,19 @@ function performanceClass(
 }
 
 /* =========================
-   Theme
+   Header actions
+   (authentification, jour / nuit)
 ========================= */
 
-.theme-toggle {
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header-btn {
+  display: inline-flex;
+
   padding: 6px;
 
   border: 1px solid transparent;
@@ -1016,7 +877,7 @@ function performanceClass(
   cursor: pointer;
 }
 
-.theme-toggle:hover {
+.header-btn:hover {
   background: var(--primary-soft);
 }
 
@@ -1064,14 +925,14 @@ function performanceClass(
 ========================= */
 
 .menu {
-  margin-top: 1.5rem;
+  margin-top: 1rem;
   padding: 0;
 
   list-style: none;
 }
 
 .menu li {
-  margin-bottom: 1.2rem;
+  margin-bottom: 0.8rem;
 }
 
 .menu-item {
@@ -1079,7 +940,7 @@ function performanceClass(
   align-items: center;
   gap: 16px;
 
-  padding: 18px 20px;
+  padding: 12px 20px;
 
   border-radius: 12px;
 

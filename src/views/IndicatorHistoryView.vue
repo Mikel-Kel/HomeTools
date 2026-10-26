@@ -20,53 +20,30 @@ import { useRemoteJson } from "@/composables/useRemoteJson";
 import {
   ENTRY_FAMILY_IDS,
   INDICATORS_FILE,
-  type IndicatorItem,
   INDICATORS_FOLDER,
   VEHICLES_FAMILY_ID,
-  indicatorValuesFile,
-  isMeasuredDuring,
-  readIndicatorValues,
+  indicatorHistoryFile,
+  readIndicatorHistory,
   readIndicators,
+  type HistoryYear,
 } from "@/contracts/indicators";
-
-import {
-  monthlyValuesByYear,
-  quarterValues,
-  sumMonthlyValues,
-  yearAverage,
-} from "@/utils/indicatorHistory";
 
 import { formatMeasure } from "@/utils/amountFormat";
 
 /* =========================
-   Historique d'un indicateur
+   Historique des indicateurs
 
-   Six années se terminant à l'année choisie (année en
-   cours par défaut), la dernière en couleur d'accent : vue
-   mensuelle avec la moyenne mensuelle, ou vue
-   trimestrielle. Règles de calcul :
-   src/utils/indicatorHistory.ts.
-
-   Seuls les tags de regroupement (groupTag) sont présentés :
-   un tag réunit un ou plusieurs indicateurs, additionnés
-   (par exemple les compteurs électriques successifs). Un
-   indicateur sans tag n'apparaît pas.
+   Affiche tel quel l'historique préparé par le backend
+   (indicators/history-<famille>.json) : un groupe par tag
+   de regroupement, valeurs mensuelles, trimestres et
+   moyennes déjà calculés. Six années se terminant à
+   l'année choisie (année en cours par défaut), la dernière
+   en couleur d'accent ; vue mensuelle ou trimestrielle.
 
    Adresse : /indicators/history?family=2&group=Electricité
 ========================= */
 
 const YEAR_COUNT = 6;
-
-/*
-  Groupe présenté : indicateurs de même groupTag.
-*/
-interface HistoryGroup {
-  tag: string;
-  description: string;
-  cumulative: boolean;
-  seq: number;
-  members: IndicatorItem[];
-}
 
 type ChartView =
   | "monthly"
@@ -85,6 +62,10 @@ const MONTH_LABELS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
+const QUARTER_LABELS = [
+  "Q1", "Q2", "Q3", "Q4",
+];
+
 const route =
   useRoute();
 
@@ -94,33 +75,25 @@ const router =
 const currentYear =
   new Date().getFullYear();
 
-function queryNumber(
-  value: unknown
-): number | null {
-  const number =
-    Number(value);
-
-  return typeof value === "string" &&
-    Number.isInteger(number)
-    ? number
-    : null;
-}
-
 /* =========================
    Selection
 ========================= */
 
+const queryFamily =
+  Number(route.query.family);
+
 const familyId =
   ref<number>(
-    queryNumber(route.query.family) ??
-    VEHICLES_FAMILY_ID
+    ENTRY_FAMILY_IDS.includes(queryFamily)
+      ? queryFamily
+      : VEHICLES_FAMILY_ID
   );
 
 const groupTag =
   ref<string | null>(
     typeof route.query.group === "string" &&
     route.query.group
-      ? route.query.group
+      ? route.query.group.trim()
       : null
   );
 
@@ -154,17 +127,17 @@ const indicatorsFile =
     read: readIndicators,
   });
 
-const valuesFile =
+const historyFile =
   useRemoteJson({
     folder: INDICATORS_FOLDER,
-    file: () => indicatorValuesFile(familyId.value),
-    read: readIndicatorValues,
+    file: () => indicatorHistoryFile(familyId.value),
+    read: readIndicatorHistory,
   });
 
 const loadError =
   computed(() =>
     indicatorsFile.error.value ??
-    valuesFile.error.value
+    historyFile.error.value
   );
 
 const familyOptions =
@@ -183,73 +156,13 @@ const familyOptions =
       )
   );
 
-/*
-  Indicateurs mesurés pendant au moins une partie des six
-  années affichées.
-*/
-const familyItems =
-  computed(() =>
-    (indicatorsFile.data.value?.items ?? [])
-      .filter(
-        item =>
-          item.familyId === familyId.value &&
-          isMeasuredDuring(
-            item,
-            `${endYear.value - YEAR_COUNT + 1}-01-01`,
-            `${endYear.value}-12-31`
-          )
-      )
-      .sort((a, b) =>
-        a.seq - b.seq ||
-        a.label.localeCompare(b.label)
-      )
-  );
-
-/*
-  Un groupe par groupTag, dans l'ordre d'affichage du
-  premier de ses indicateurs.
-*/
 const groups =
-  computed<HistoryGroup[]>(() => {
-    const byTag =
-      new Map<string, HistoryGroup>();
-
-    for (const item of familyItems.value) {
-      if (!item.groupTag) {
-        continue;
-      }
-
-      let group =
-        byTag.get(item.groupTag);
-
-      if (!group) {
-        group = {
-          tag: item.groupTag,
-          description: "",
-          cumulative: item.cumulative,
-          seq: item.seq,
-          members: [],
-        };
-
-        byTag.set(item.groupTag, group);
-      }
-
-      group.members.push(item);
-      group.seq = Math.min(group.seq, item.seq);
-    }
-
-    for (const group of byTag.values()) {
-      group.description =
-        group.members.length === 1
-          ? group.members[0].description
-          : `Sum of ${group.members.map(member => member.label).join(", ")}`;
-    }
-
-    return [...byTag.values()].sort((a, b) =>
+  computed(() =>
+    [...(historyFile.data.value ?? [])].sort((a, b) =>
       a.seq - b.seq ||
       a.tag.localeCompare(b.tag)
-    );
-  });
+    )
+  );
 
 const groupOptions =
   computed(() =>
@@ -262,9 +175,8 @@ const groupOptions =
   );
 
 /*
-  Groupe absent de la famille ou de la période
-  (changement de famille, adresse ancienne) : le premier
-  de la liste.
+  Tag absent de la famille (changement de famille,
+  adresse ancienne) : le premier de la liste.
 */
 watch(
   groups,
@@ -296,21 +208,12 @@ const group =
 ========================= */
 
 /*
-  De l'année en cours à la première mesure de la famille :
-  les indicateurs clôturés depuis longtemps restent
-  consultables.
+  De l'année en cours à la première année du groupe.
 */
 const endYearOptions =
   computed(() => {
-    const firstDate =
-      (valuesFile.data.value ?? []).reduce(
-        (min, value) =>
-          !min || value.date < min ? value.date : min,
-        ""
-      );
-
     const first =
-      Number(firstDate.slice(0, 4)) ||
+      group.value?.years[0]?.year ??
       currentYear;
 
     const years: number[] = [];
@@ -327,6 +230,16 @@ const years =
     Array.from(
       { length: YEAR_COUNT },
       (_, index) => endYear.value - YEAR_COUNT + 1 + index
+    )
+  );
+
+const yearData =
+  computed(() =>
+    years.value.map(
+      year =>
+        group.value?.years.find(
+          item => item.year === year
+        ) ?? null
     )
   );
 
@@ -351,92 +264,46 @@ const series =
    Charts
 ========================= */
 
-/*
-  Valeurs mensuelles de chaque indicateur de la sélection,
-  additionnées (un seul indicateur hors groupe).
-*/
-const monthsByYear =
-  computed(() => {
-    const values =
-      valuesFile.data.value ?? [];
-
-    return sumMonthlyValues(
-      (group.value?.members ?? []).map(
-        member =>
-          monthlyValuesByYear(
-            member,
-            values
-              .filter(value => value.itemId === member.itemId)
-              .sort((a, b) => a.date.localeCompare(b.date)),
-            years.value
-          )
-      ),
-      years.value
-    );
-  });
-
-const monthlyGroups =
-  computed(() => [
-    ...MONTH_LABELS.map(
-      (label, month) => ({
+function chartGroups(
+  labels: string[],
+  values: (year: HistoryYear) => (number | null)[],
+  average: (year: HistoryYear) => number | null
+) {
+  return [
+    ...labels.map(
+      (label, index) => ({
         label,
-        values: years.value.map(
-          year =>
-            monthsByYear.value.get(year)?.[month] ?? null
+        values: yearData.value.map(
+          year => (year ? values(year)[index] : null)
         ),
       })
     ),
     {
       label: "AVG",
-      values: years.value.map(
-        year =>
-          yearAverage(
-            monthsByYear.value.get(year) ?? []
-          )
+      values: yearData.value.map(
+        year => (year ? average(year) : null)
       ),
     },
-  ]);
+  ];
+}
 
-/*
-  Trimestres de chaque année, puis « AVG » : moyenne des
-  trimestres renseignés.
-*/
-const quartersByYear =
+const monthlyGroups =
   computed(() =>
-    new Map(
-      years.value.map(year => [
-        year,
-        group.value
-          ? quarterValues(
-              group.value,
-              monthsByYear.value.get(year) ?? []
-            )
-          : [null, null, null, null],
-      ])
+    chartGroups(
+      MONTH_LABELS,
+      year => year.months,
+      year => year.monthAverage
     )
   );
 
 const quarterGroups =
-  computed(() => [
-    ...["Q1", "Q2", "Q3", "Q4"].map(
-      (label, quarter) => ({
-        label,
-        values: years.value.map(
-          year =>
-            quartersByYear.value.get(year)?.[quarter] ?? null
-        ),
-      })
-    ),
-    {
-      label: "AVG",
-      values: years.value.map(
-        year =>
-          yearAverage(
-            quartersByYear.value.get(year) ?? []
-          )
-      ),
-    },
-  ]);
+  computed(() =>
+    chartGroups(
+      QUARTER_LABELS,
+      year => year.quarters,
+      year => year.quarterAverage
+    )
+  );
 
 const measureLabel =
   computed(() =>
@@ -482,7 +349,7 @@ const vehicleNote =
   </div>
 
   <div
-    v-else-if="!indicatorsFile.data.value"
+    v-else-if="!indicatorsFile.data.value || !historyFile.data.value"
     class="state-message"
   >
     Loading indicators…
@@ -533,7 +400,7 @@ const vehicleNote =
       v-if="!groups.length"
       class="state-message"
     >
-      No grouping tag in this family for these years.
+      No grouping tag in this family.
     </p>
 
     <!-- Title -->

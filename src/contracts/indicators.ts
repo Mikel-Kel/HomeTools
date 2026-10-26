@@ -181,7 +181,7 @@ export function readIndicators(
             seq: asNumber(item.seq, Number.MAX_SAFE_INTEGER),
             cumulative: asBoolean(item.cumulative),
             objectId: nullableString(item.objectId),
-            groupTag: nullableString(item.groupTag),
+            groupTag: asString(item.groupTag).trim() || null,
 
             service:
               service
@@ -257,4 +257,84 @@ export function readIndicatorValues(
     .filter(
       value => value.date !== ""
     );
+}
+
+/* =========================
+   indicators/history-<familyId>.json
+
+   Historique préparé par le backend, affiché tel quel :
+     { "familyId": 2,
+       "groups": [ { "tag": "Electricité",
+                     "description": "…",
+                     "cumulative": true, "seq": 4,
+                     "members": [4, 5, 7, 10, 11],
+                     "years": [ { "year": 2026,
+                                  "months": [12 × nombre | null],
+                                  "monthAverage": 1403 | null,
+                                  "quarters": [4 × nombre | null],
+                                  "quarterAverage": 4209 | null } ] } ] }
+
+   Un groupe par tag de regroupement ; règles de calcul dans
+   le contrat (../Backend/docs/indicators-contract.md).
+========================= */
+
+export function indicatorHistoryFile(
+  familyId: number
+): string {
+  return `history-${familyId}.json`;
+}
+
+export interface HistoryYear {
+  year: number;
+  months: (number | null)[];
+  monthAverage: number | null;
+  quarters: (number | null)[];
+  quarterAverage: number | null;
+}
+
+export interface HistoryGroup {
+  tag: string;
+  description: string;
+  cumulative: boolean;
+  seq: number;
+  years: HistoryYear[];
+}
+
+function nullableNumbers(
+  value: unknown,
+  length: number
+): (number | null)[] {
+  const values =
+    asArray(value);
+
+  return Array.from(
+    { length },
+    (_, index) => nullableNumber(values[index])
+  );
+}
+
+export function readIndicatorHistory(
+  raw: unknown
+): HistoryGroup[] {
+  return objects(
+    asObject(raw)?.groups
+  ).map(
+    group => ({
+      tag: asString(group.tag).trim(),
+      description: asString(group.description).trim(),
+      cumulative: asBoolean(group.cumulative),
+      seq: asNumber(group.seq, Number.MAX_SAFE_INTEGER),
+
+      years:
+        objects(group.years).map(
+          year => ({
+            year: asNumber(year.year),
+            months: nullableNumbers(year.months, 12),
+            monthAverage: nullableNumber(year.monthAverage),
+            quarters: nullableNumbers(year.quarters, 4),
+            quarterAverage: nullableNumber(year.quarterAverage),
+          })
+        ),
+    })
+  );
 }

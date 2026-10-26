@@ -20,6 +20,9 @@
   --bg: var(--surface-0);
   --bg-soft: #f2f2f2;
 
+  /* Largeur de la barre de navigation (AppNavRail). */
+  --nav-rail-width: 60px;
+
   /*
     Années des graphiques d'historique : les années
     précédentes, de la plus ancienne (1) à la plus récente
