@@ -10,6 +10,7 @@ import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import IndicatorSheet from "@/components/indicators/IndicatorSheet.vue";
+import MarketQuotes from "@/components/indicators/MarketQuotes.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useEventRequest } from "@/composables/useEventRequest";
@@ -18,6 +19,8 @@ import {
   ENTRY_FAMILY_IDS,
   INDICATORS_FILE,
   INDICATORS_FOLDER,
+  MARKET_FAMILY_ID,
+  MARKET_FAMILY_LABEL,
   VEHICLES_FAMILY_ID,
   indicatorValuesFile,
   isCarriedForward,
@@ -93,7 +96,10 @@ const indicatorsFile =
 const valuesFile =
   useRemoteJson({
     folder: INDICATORS_FOLDER,
-    file: () => indicatorValuesFile(familyId.value),
+    file: () =>
+      familyId.value === MARKET_FAMILY_ID
+        ? null
+        : indicatorValuesFile(familyId.value),
     read: readIndicatorValues,
   });
 
@@ -125,6 +131,19 @@ const familyOptions =
           label: family.label,
         })
       )
+      .concat({
+        value: MARKET_FAMILY_ID,
+        label: MARKET_FAMILY_LABEL,
+      })
+  );
+
+/*
+  Market data : derniers cours en consultation
+  (MarketQuotes.vue), sans mois ni saisie.
+*/
+const isMarket =
+  computed(() =>
+    familyId.value === MARKET_FAMILY_ID
   );
 
 const isVehicles =
@@ -499,64 +518,71 @@ const newMonthMessage =
         :options="familyOptions"
       />
 
-      <div class="month-nav">
-        <PillButton
-          aria-label="Previous month"
-          @click="goToMonth(-1)"
+      <template v-if="!isMarket">
+        <div class="month-nav">
+          <PillButton
+            aria-label="Previous month"
+            @click="goToMonth(-1)"
+          >
+            ‹
+          </PillButton>
+
+          <span class="month-label">
+            {{ monthLabel }}
+          </span>
+
+          <PillButton
+            aria-label="Next month"
+            :disabled="!canGoNext"
+            @click="goToMonth(1)"
+          >
+            ›
+          </PillButton>
+        </div>
+
+        <StatusPill
+          v-if="toReadCount"
+          tone="warning"
         >
-          ‹
+          {{ toReadCount }} to read
+        </StatusPill>
+
+        <PillButton
+          @click="
+            $router.push({
+              name: 'indicatorHistory',
+              query: { family: String(familyId) },
+            })
+          "
+        >
+          History
         </PillButton>
 
-        <span class="month-label">
-          {{ monthLabel }}
+        <PillButton
+          v-if="canStartMonth"
+          @click="startMonth"
+        >
+          + Start {{ monthLabel }}
+        </PillButton>
+
+        <span
+          v-if="newMonthMessage"
+          class="request-message"
+          :class="newMonthRequest.request.value?.phase"
+        >
+          {{ newMonthMessage }}
         </span>
-
-        <PillButton
-          aria-label="Next month"
-          :disabled="!canGoNext"
-          @click="goToMonth(1)"
-        >
-          ›
-        </PillButton>
-      </div>
-
-      <StatusPill
-        v-if="toReadCount"
-        tone="warning"
-      >
-        {{ toReadCount }} to read
-      </StatusPill>
-
-      <PillButton
-        @click="
-          $router.push({
-            name: 'indicatorHistory',
-            query: { family: String(familyId) },
-          })
-        "
-      >
-        History
-      </PillButton>
-
-      <PillButton
-        v-if="canStartMonth"
-        @click="startMonth"
-      >
-        + Start {{ monthLabel }}
-      </PillButton>
-
-      <span
-        v-if="newMonthMessage"
-        class="request-message"
-        :class="newMonthRequest.request.value?.phase"
-      >
-        {{ newMonthMessage }}
-      </span>
+      </template>
     </section>
 
     <!-- Values -->
 
-    <section class="table-wrapper">
+    <MarketQuotes v-if="isMarket" />
+
+    <section
+      v-else
+      class="table-wrapper"
+    >
       <table class="indicators-table">
         <thead>
           <tr>

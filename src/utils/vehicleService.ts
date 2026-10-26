@@ -1,5 +1,7 @@
 import type { VehicleService } from "@/contracts/indicators";
 
+import { addMonths } from "@/utils/dateMath";
+
 /* =========================
    Échéances d'entretien des véhicules
 
@@ -34,40 +36,6 @@ const SERVICE_MARGIN_MONTHS = 1;
 
 const SAN_DEFAULT_YEARS = 2;
 const SAN_WARNING_MONTHS = 1;
-
-function pad(
-  value: number
-): string {
-  return String(value).padStart(2, "0");
-}
-
-/*
-  Date ISO décalée de n mois ; le jour est ramené au
-  dernier jour du mois si besoin (31.01 + 1 mois = 28.02).
-*/
-export function addMonths(
-  date: string,
-  months: number
-): string {
-  const [year, month, day] =
-    date.split("-").map(Number);
-
-  const target =
-    new Date(year, month - 1 + months, 1);
-
-  const lastDay =
-    new Date(
-      target.getFullYear(),
-      target.getMonth() + 1,
-      0
-    ).getDate();
-
-  return (
-    `${target.getFullYear()}-` +
-    `${pad(target.getMonth() + 1)}-` +
-    `${pad(Math.min(day, lastDay))}`
-  );
-}
 
 export function serviceKmState(
   remainingKm: number | null,

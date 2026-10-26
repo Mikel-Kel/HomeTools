@@ -14,6 +14,7 @@ import PageHeader from "@/components/PageHeader.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import GroupedBarChart from "@/components/charts/GroupedBarChart.vue";
+import MarketHistory from "@/components/indicators/MarketHistory.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 
@@ -21,6 +22,8 @@ import {
   ENTRY_FAMILY_IDS,
   INDICATORS_FILE,
   INDICATORS_FOLDER,
+  MARKET_FAMILY_ID,
+  MARKET_FAMILY_LABEL,
   VEHICLES_FAMILY_ID,
   indicatorHistoryFile,
   readIndicatorHistory,
@@ -39,6 +42,9 @@ import { formatMeasure } from "@/utils/amountFormat";
    moyennes déjà calculés. Six années se terminant à
    l'année choisie (année en cours par défaut), la dernière
    en couleur d'accent ; vue mensuelle ou trimestrielle.
+
+   Famille « Market data » : courbes des cours quotidiens
+   (MarketHistory.vue).
 
    Adresse : /indicators/history?family=2&group=Electricité
 ========================= */
@@ -84,9 +90,15 @@ const queryFamily =
 
 const familyId =
   ref<number>(
-    ENTRY_FAMILY_IDS.includes(queryFamily)
+    ENTRY_FAMILY_IDS.includes(queryFamily) ||
+    queryFamily === MARKET_FAMILY_ID
       ? queryFamily
       : VEHICLES_FAMILY_ID
+  );
+
+const isMarket =
+  computed(() =>
+    familyId.value === MARKET_FAMILY_ID
   );
 
 const groupTag =
@@ -107,6 +119,11 @@ watch(
   [familyId, groupTag],
 
   ([family, tag]) => {
+    /* La famille Market data gère son adresse. */
+    if (family === MARKET_FAMILY_ID) {
+      return;
+    }
+
     router.replace({
       query: {
         family: String(family),
@@ -130,7 +147,10 @@ const indicatorsFile =
 const historyFile =
   useRemoteJson({
     folder: INDICATORS_FOLDER,
-    file: () => indicatorHistoryFile(familyId.value),
+    file: () =>
+      isMarket.value
+        ? null
+        : indicatorHistoryFile(familyId.value),
     read: readIndicatorHistory,
   });
 
@@ -154,6 +174,10 @@ const familyOptions =
           label: family.label,
         })
       )
+      .concat({
+        value: MARKET_FAMILY_ID,
+        label: MARKET_FAMILY_LABEL,
+      })
   );
 
 const groups =
@@ -349,7 +373,10 @@ const vehicleNote =
   </div>
 
   <div
-    v-else-if="!indicatorsFile.data.value || !historyFile.data.value"
+    v-else-if="
+      !indicatorsFile.data.value ||
+      (!isMarket && !historyFile.data.value)
+    "
     class="state-message"
   >
     Loading indicators…
@@ -367,90 +394,98 @@ const vehicleNote =
           v-model="familyId"
           :options="familyOptions"
         />
-
-        <SegmentedControl
-          v-model="view"
-          :options="viewOptions"
-        />
-
-        <label class="end-year">
-          <span>Up to</span>
-
-          <select v-model.number="endYear">
-            <option
-              v-for="year in endYearOptions"
-              :key="year"
-              :value="year"
-            >
-              {{ year === currentYear ? `Current year (${year})` : year }}
-            </option>
-          </select>
-        </label>
       </div>
-
-      <ChipSelector
-        v-model="groupTag"
-        label="Indicator"
-        :items="groupOptions"
-        :show-all="false"
-      />
     </section>
 
-    <p
-      v-if="!groups.length"
-      class="state-message"
-    >
-      No grouping tag in this family.
-    </p>
+    <MarketHistory v-if="isMarket" />
 
-    <!-- Title -->
+    <template v-else>
+      <section class="filters">
+        <div class="filter-line">
+          <SegmentedControl
+            v-model="view"
+            :options="viewOptions"
+          />
 
-    <header
-      v-if="group"
-      class="history-title"
-    >
-      <h2>{{ group.tag }}</h2>
+          <label class="end-year">
+            <span>Up to</span>
 
-      <p>
-        {{ group.description }}
-        <template v-if="vehicleNote"> · {{ vehicleNote }}</template>
+            <select v-model.number="endYear">
+              <option
+                v-for="year in endYearOptions"
+                :key="year"
+                :value="year"
+              >
+                {{ year === currentYear ? `Current year (${year})` : year }}
+              </option>
+            </select>
+          </label>
+        </div>
+
+        <ChipSelector
+          v-model="groupTag"
+          label="Indicator"
+          :items="groupOptions"
+          :show-all="false"
+        />
+      </section>
+
+      <p
+        v-if="!groups.length"
+        class="state-message"
+      >
+        No grouping tag in this family.
       </p>
-    </header>
 
-    <!-- Charts -->
+      <!-- Title -->
 
-    <section
-      v-if="group"
-      class="charts"
-    >
-      <div
-        v-if="view === 'monthly'"
-        class="chart-card"
+      <header
+        v-if="group"
+        class="history-title"
       >
-        <h3>{{ measureLabel }}</h3>
+        <h2>{{ group.tag }}</h2>
 
-        <GroupedBarChart
-          :groups="monthlyGroups"
-          :series="series"
-          :format-value="formatValue"
-          :summary="`${group.tag}: ${measureLabel}, ${years[0]}–${years[years.length - 1]}`"
-        />
-      </div>
+        <p>
+          {{ group.description }}
+          <template v-if="vehicleNote"> · {{ vehicleNote }}</template>
+        </p>
+      </header>
 
-      <div
-        v-else
-        class="chart-card"
+      <!-- Charts -->
+
+      <section
+        v-if="group"
+        class="charts"
       >
-        <h3>{{ quarterLabel }}</h3>
+        <div
+          v-if="view === 'monthly'"
+          class="chart-card"
+        >
+          <h3>{{ measureLabel }}</h3>
 
-        <GroupedBarChart
-          :groups="quarterGroups"
-          :series="series"
-          :format-value="formatValue"
-          :summary="`${group.tag}: ${quarterLabel}, ${years[0]}–${years[years.length - 1]}`"
-        />
-      </div>
-    </section>
+          <GroupedBarChart
+            :groups="monthlyGroups"
+            :series="series"
+            :format-value="formatValue"
+            :summary="`${group.tag}: ${measureLabel}, ${years[0]}–${years[years.length - 1]}`"
+          />
+        </div>
+
+        <div
+          v-else
+          class="chart-card"
+        >
+          <h3>{{ quarterLabel }}</h3>
+
+          <GroupedBarChart
+            :groups="quarterGroups"
+            :series="series"
+            :format-value="formatValue"
+            :summary="`${group.tag}: ${quarterLabel}, ${years[0]}–${years[years.length - 1]}`"
+          />
+        </div>
+      </section>
+    </template>
   </main>
 </template>
 

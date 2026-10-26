@@ -27,6 +27,15 @@ export const ENTRY_FAMILY_IDS = [1, 2, 3];
 
 export const VEHICLES_FAMILY_ID = 1;
 
+/*
+  Famille « Market data » (StockMarket) : cours quotidiens
+  importés par le backend, en consultation seule
+  (indicators/market-history.json).
+*/
+export const MARKET_FAMILY_ID = 5;
+export const MARKET_FAMILY_LABEL = "Market data";
+export const MARKET_HISTORY_FILE = "market-history.json";
+
 export function indicatorValuesFile(
   familyId: number
 ): string {
@@ -336,5 +345,76 @@ export function readIndicatorHistory(
           })
         ),
     })
+  );
+}
+
+/* =========================
+   indicators/market-history.json
+
+     { "familyId": 5,
+       "series": [ { "itemId": 1, "label": "SMI",
+                     "description": "…", "group": "Indices",
+                     "seq": 100, "first": "2016-04-19",
+                     "last": "2026-10-23",
+                     "lastValue": 14462.36,
+                     "previousValue": 14547.97 | null,
+                     "points": [ ["2016-04-19", 8152.76], … ] } ] }
+
+   Points quotidiens (jours de cotation), dates croissantes.
+========================= */
+
+export interface MarketSeries {
+  itemId: number;
+  label: string;
+  description: string;
+  group: string;
+  seq: number;
+  first: string;
+  last: string;
+  lastValue: number | null;
+  previousValue: number | null;
+
+  /* Points en deux listes parallèles (date ISO, valeur). */
+  dates: string[];
+  values: number[];
+}
+
+export function readMarketHistory(
+  raw: unknown
+): MarketSeries[] {
+  return objects(
+    asObject(raw)?.series
+  ).map(
+    series => {
+      const dates: string[] = [];
+      const values: number[] = [];
+
+      for (const point of asArray(series.points)) {
+        const [date, value] =
+          asArray(point);
+
+        if (
+          typeof date === "string" &&
+          typeof value === "number"
+        ) {
+          dates.push(date);
+          values.push(value);
+        }
+      }
+
+      return {
+        itemId: asNumber(series.itemId),
+        label: asString(series.label),
+        description: asString(series.description).trim(),
+        group: asString(series.group, "Other") || "Other",
+        seq: asNumber(series.seq, Number.MAX_SAFE_INTEGER),
+        first: asString(series.first),
+        last: asString(series.last),
+        lastValue: nullableNumber(series.lastValue),
+        previousValue: nullableNumber(series.previousValue),
+        dates,
+        values,
+      };
+    }
   );
 }

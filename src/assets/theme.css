@@ -36,6 +36,18 @@
   --chart-year-4: #1f63b5;
   --chart-year-5: #0d366b;
   --chart-year-latest: #eb6834;
+
+  /*
+    Séries distinctes (courbes de cours), dans cet ordre
+    fixe : palette catégorielle validée (daltonisme compris)
+    sur fond blanc et sur fond sombre.
+  */
+  --chart-series-1: #2a78d6;
+  --chart-series-2: #eb6834;
+  --chart-series-3: #1baf7a;
+  --chart-series-4: #eda100;
+  --chart-series-5: #e87ba4;
+  --chart-series-6: #008300;
   --surface: var(--surface-1);
   --surface-soft: var(--surface-2);
 
@@ -203,6 +215,13 @@ textarea {
   --chart-year-4: #6da7ec;
   --chart-year-5: #b7d3f6;
   --chart-year-latest: #d95926;
+
+  --chart-series-1: #3987e5;
+  --chart-series-2: #d95926;
+  --chart-series-3: #199e70;
+  --chart-series-4: #c98500;
+  --chart-series-5: #d55181;
+  --chart-series-6: #008300;
 
   /* =====================================================
      TEXT

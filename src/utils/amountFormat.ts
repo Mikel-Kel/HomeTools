@@ -60,3 +60,42 @@ export function formatMeasure(
     maximumFractionDigits: 2
   })
 }
+
+/*
+  Cours de marché : quatre décimales sous 10 (devises),
+  deux au-delà (indices, fonds).
+*/
+export function formatQuote(
+  value: number | null | undefined
+): string {
+
+  if (value == null) return ""
+
+  const decimals = Math.abs(value) < 10 ? 4 : 2
+
+  return value.toLocaleString(NUMBER_LOCALE, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  })
+}
+
+/*
+  Variation en pour cent, toujours signée : +1.25 %.
+*/
+export function formatPercent(
+  value: number | null | undefined
+): string {
+
+  if (value == null) return ""
+
+  const sign = value > 0 ? "+" : ""
+
+  return (
+    sign +
+    value.toLocaleString(NUMBER_LOCALE, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }) +
+    " %"
+  )
+}

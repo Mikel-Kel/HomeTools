@@ -6,6 +6,8 @@ import {
   ref,
 } from "vue";
 
+import { niceScale } from "@/utils/chartScale";
+
 /* =========================
    Barres groupées (SVG)
 
@@ -101,72 +103,22 @@ const plotHeight =
 /* =========================
    Échelle
 
-   Domaine arrondi à des graduations propres, zéro toujours
-   inclus (valeurs négatives possibles : températures).
+   Graduations propres, zéro toujours inclus (valeurs
+   négatives possibles : températures).
 ========================= */
 
-function niceStep(
-  range: number
-): number {
-  const rough =
-    range / 4;
-
-  const power =
-    10 ** Math.floor(Math.log10(rough));
-
-  const fraction =
-    rough / power;
-
-  const nice =
-    fraction <= 1 ? 1 :
-    fraction <= 2 ? 2 :
-    fraction <= 2.5 ? 2.5 :
-    fraction <= 5 ? 5 : 10;
-
-  return nice * power;
-}
-
 const scale =
-  computed(() => {
-    const values =
+  computed(() =>
+    niceScale(
       props.groups
         .flatMap(group => group.values)
         .filter(
           (value): value is number =>
             value !== null
-        );
-
-    const rawMin =
-      Math.min(0, ...values);
-
-    const rawMax =
-      Math.max(0, ...values);
-
-    const step =
-      niceStep(
-        rawMax - rawMin || 1
-      );
-
-    const min =
-      Math.floor(rawMin / step) * step;
-
-    const max =
-      Math.ceil(rawMax / step) * step || step;
-
-    const ticks: number[] = [];
-
-    for (
-      let tick = min;
-      tick <= max + step / 2;
-      tick += step
-    ) {
-      ticks.push(
-        Number(tick.toFixed(10))
-      );
-    }
-
-    return { min, max, ticks };
-  });
+        ),
+      true
+    )
+  );
 
 function y(
   value: number
