@@ -35,6 +35,14 @@ import {
 import { formatDate } from "@/utils/dateFormat";
 import { detectDevice } from "@/utils/deviceDetection";
 
+import {
+  sanDue,
+  serviceDateDue,
+  serviceKmState,
+  type DateDue,
+  type DueState,
+} from "@/utils/vehicleService";
+
 /* =========================
    Page Indicators
 
@@ -58,6 +66,11 @@ interface IndicatorRow {
 
   /* Véhicules : prochain service moins le kilométrage. */
   remainingKm: number | null;
+
+  /* Véhicules : échéances à la date du relevé. */
+  kmState: DueState;
+  serviceDate: DateDue;
+  san: DateDue;
 }
 
 /* =========================
@@ -293,6 +306,12 @@ const rows =
           item.service?.nextServiceKm ??
           null;
 
+        const remainingKm =
+          nextServiceKm !== null &&
+          lastKnown !== null
+            ? nextServiceKm - lastKnown
+            : null;
+
         return {
           item,
           current,
@@ -309,14 +328,40 @@ const rows =
             !current ||
             isCarriedForward(current.comment),
 
-          remainingKm:
-            nextServiceKm !== null &&
-            lastKnown !== null
-              ? nextServiceKm - lastKnown
-              : null,
+          remainingKm,
+
+          kmState:
+            serviceKmState(
+              remainingKm,
+              item.service
+            ),
+
+          serviceDate:
+            serviceDateDue(
+              item.service,
+              date
+            ),
+
+          san:
+            sanDue(
+              item.service,
+              date
+            ),
         };
       });
   });
+
+/*
+  Échéance proche ou dépassée : texte en couleur d'état,
+  sans pastille.
+*/
+function dueClass(
+  state: DueState
+): string {
+  return state === "ok"
+    ? ""
+    : `due-${state}`;
+}
 
 const toReadCount =
   computed(() =>
@@ -561,16 +606,45 @@ const newMonthMessage =
                 {{ formatInteger(row.item.service?.nextServiceKm) }}
               </td>
 
-              <td :class="{ overdue: (row.remainingKm ?? 0) < 0 }">
-                {{ formatInteger(row.remainingKm) }}
+              <td>
+                <span
+                  :class="dueClass(row.kmState)"
+                  :title="
+                    row.kmState === 'overdue'
+                      ? 'Service kilometres exceeded'
+                      : row.kmState === 'soon'
+                        ? 'Service kilometres coming up'
+                        : undefined
+                  "
+                >
+                  {{ formatInteger(row.remainingKm) }}
+                </span>
               </td>
 
               <td>
-                {{ formatDate(row.item.service?.lastServiceDate, "short") }}
+                <span
+                  :class="dueClass(row.serviceDate.state)"
+                  :title="
+                    row.serviceDate.due
+                      ? `Yearly service due ${formatDate(row.serviceDate.due, 'short')}`
+                      : undefined
+                  "
+                >
+                  {{ formatDate(row.item.service?.lastServiceDate, "short") }}
+                </span>
               </td>
 
               <td>
-                {{ formatDate(row.item.service?.lastSanVisit, "short") }}
+                <span
+                  :class="dueClass(row.san.state)"
+                  :title="
+                    row.san.due
+                      ? `Periodic inspection (SAN) due ${formatDate(row.san.due, 'short')}`
+                      : undefined
+                  "
+                >
+                  {{ formatDate(row.item.service?.lastSanVisit, "short") }}
+                </span>
               </td>
             </template>
 
@@ -737,11 +811,6 @@ const newMonthMessage =
   white-space: normal;
 }
 
-.overdue {
-  color: var(--negative);
-  font-weight: 700;
-}
-
 .request-message {
   color: var(--text-soft);
   font-size: var(--font-size-sm);
@@ -774,6 +843,16 @@ tr.to-read td {
 
 tr.to-read .label-cell {
   box-shadow: inset 3px 0 0 var(--warning);
+}
+
+.due-soon {
+  color: var(--warning);
+  font-weight: 700;
+}
+
+.due-overdue {
+  color: var(--negative);
+  font-weight: 700;
 }
 
 .empty-cell {

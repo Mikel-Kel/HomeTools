@@ -89,7 +89,8 @@ function nullableString(
                                  "lastServiceDate": "2025-07-24",
                                  "lastServiceKm": 48721,
                                  "nextServiceKm": 60000,
-                                 "lastSanVisit": "2024-11-08" }
+                                 "lastSanVisit": "2024-11-08",
+                                 "sanFrequencyYears": 2 }
                                | null } ] }
 ========================= */
 
@@ -107,6 +108,9 @@ export interface VehicleService {
   lastServiceKm: number | null;
   nextServiceKm: number | null;
   lastSanVisit: string | null;
+
+  /* Délai du contrôle périodique (SAN), en années. */
+  sanFrequencyYears: number | null;
 }
 
 export interface IndicatorItem {
@@ -166,6 +170,7 @@ export function readIndicators(
                     lastServiceKm: nullableNumber(service.lastServiceKm),
                     nextServiceKm: nullableNumber(service.nextServiceKm),
                     lastSanVisit: nullableString(service.lastSanVisit),
+                    sanFrequencyYears: nullableNumber(service.sanFrequencyYears),
                   }
                 : null,
           };
