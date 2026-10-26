@@ -23,6 +23,7 @@ import {
   INDICATORS_FOLDER,
   VEHICLES_FAMILY_ID,
   indicatorValuesFile,
+  isMeasuredDuring,
   readIndicatorValues,
   readIndicators,
 } from "@/contracts/indicators";
@@ -161,13 +162,21 @@ const familyOptions =
       )
   );
 
+/*
+  Indicateurs mesurés pendant au moins une partie des six
+  années affichées.
+*/
 const familyItems =
   computed(() =>
     (indicatorsFile.data.value?.items ?? [])
       .filter(
         item =>
           item.familyId === familyId.value &&
-          item.active
+          isMeasuredDuring(
+            item,
+            `${endYear.value - YEAR_COUNT + 1}-01-01`,
+            `${endYear.value}-12-31`
+          )
       )
       .sort((a, b) =>
         a.seq - b.seq ||
@@ -225,10 +234,22 @@ const itemValues =
    Period
 ========================= */
 
+/*
+  De l'année en cours à la première mesure de la famille :
+  les indicateurs clôturés depuis longtemps restent
+  consultables.
+*/
 const endYearOptions =
   computed(() => {
+    const firstDate =
+      (valuesFile.data.value ?? []).reduce(
+        (min, value) =>
+          !min || value.date < min ? value.date : min,
+        ""
+      );
+
     const first =
-      Number(itemValues.value[0]?.date.slice(0, 4)) ||
+      Number(firstDate.slice(0, 4)) ||
       currentYear;
 
     const years: number[] = [];

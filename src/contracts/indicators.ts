@@ -83,6 +83,8 @@ function nullableString(
                     "label": "BMW Bagger",
                     "description": "Moto Michel",
                     "active": true, "seq": 4,
+                    "openingDate": "2018-05-31",
+                    "closingDate": null,
                     "cumulative": true,
                     "objectId": "878267" | null,
                     "groupTag": "Electricité" | null,
@@ -120,8 +122,16 @@ export interface IndicatorItem {
   itemId: number;
   label: string;
   description: string;
-  active: boolean;
   seq: number;
+
+  /*
+    Période de mesure : première mesure, et dernière mesure
+    d'un indicateur clôturé (null s'il est encore mesuré).
+    Remplace l'attribut « actif » de l'export.
+  */
+  openingDate: string | null;
+  closingDate: string | null;
+
   cumulative: boolean;
 
   /* Référence de l'objet mesuré (n° de compteur, plaque…). */
@@ -166,7 +176,8 @@ export function readIndicators(
             itemId: asNumber(item.itemId),
             label: asString(item.label),
             description: asString(item.description),
-            active: asBoolean(item.active),
+            openingDate: nullableString(item.openingDate),
+            closingDate: nullableString(item.closingDate),
             seq: asNumber(item.seq, Number.MAX_SAFE_INTEGER),
             cumulative: asBoolean(item.cumulative),
             objectId: nullableString(item.objectId),
@@ -188,6 +199,23 @@ export function readIndicators(
         }
       ),
   };
+}
+
+/*
+  Indicateur mesuré pendant la période (dates ISO
+  incluses) : ouvert au plus tard à la fin de la période,
+  pas clôturé avant son début. Une date absente ne limite
+  pas.
+*/
+export function isMeasuredDuring(
+  item: IndicatorItem,
+  from: string,
+  to: string
+): boolean {
+  return (
+    (item.openingDate === null || item.openingDate <= to) &&
+    (item.closingDate === null || item.closingDate >= from)
+  );
 }
 
 /* =========================

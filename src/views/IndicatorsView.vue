@@ -21,6 +21,7 @@ import {
   VEHICLES_FAMILY_ID,
   indicatorValuesFile,
   isCarriedForward,
+  isMeasuredDuring,
   readIndicatorValues,
   readIndicators,
   type IndicatorItem,
@@ -46,7 +47,9 @@ import {
 /* =========================
    Page Indicators
 
-   Valeurs d'une famille à une fin de mois. Contrat :
+   Valeurs d'une famille à une fin de mois, pour les
+   indicateurs mesurés ce mois-là (entre leur date
+   d'ouverture et leur date de clôture). Contrat :
    src/contracts/indicators.ts.
 
    Relevé à faire : valeur absente, ou recopiée du mois
@@ -272,7 +275,7 @@ const rows =
       .filter(
         item =>
           item.familyId === familyId.value &&
-          item.active
+          isMeasuredDuring(item, date, date)
       )
       .sort((a, b) =>
         a.seq - b.seq ||
@@ -674,7 +677,7 @@ const newMonthMessage =
               class="empty-cell"
               :colspan="isVehicles ? 8 : 4"
             >
-              No active indicator in this family.
+              No indicator of this family is measured this month.
             </td>
           </tr>
         </tbody>
