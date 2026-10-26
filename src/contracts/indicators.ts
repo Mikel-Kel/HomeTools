@@ -84,6 +84,8 @@ function nullableString(
                     "description": "Moto Michel",
                     "active": true, "seq": 4,
                     "cumulative": true,
+                    "objectId": "878267" | null,
+                    "groupTag": "Electricité" | null,
                     "service": { "intervalKm": 10000,
                                  "initialReviewKm": 1000,
                                  "lastServiceDate": "2025-07-24",
@@ -121,6 +123,13 @@ export interface IndicatorItem {
   active: boolean;
   seq: number;
   cumulative: boolean;
+
+  /* Référence de l'objet mesuré (n° de compteur, plaque…). */
+  objectId: string | null;
+
+  /* Regroupement pour le reporting (somme de plusieurs indicateurs). */
+  groupTag: string | null;
+
   service: VehicleService | null;
 }
 
@@ -160,6 +169,8 @@ export function readIndicators(
             active: asBoolean(item.active),
             seq: asNumber(item.seq, Number.MAX_SAFE_INTEGER),
             cumulative: asBoolean(item.cumulative),
+            objectId: nullableString(item.objectId),
+            groupTag: nullableString(item.groupTag),
 
             service:
               service

@@ -490,6 +490,21 @@ onBeforeUnmount(() => {
         <div class="sheet-subtitle">
           {{ item.description }} · {{ monthLabel }}
         </div>
+
+        <div
+          v-if="item.objectId || item.groupTag"
+          class="item-details"
+        >
+          <span v-if="item.objectId">
+            <span class="detail-label">Object ID</span>
+            {{ item.objectId }}
+          </span>
+
+          <span v-if="item.groupTag">
+            <span class="detail-label">Group</span>
+            {{ item.groupTag }}
+          </span>
+        </div>
       </div>
 
       <button
@@ -751,6 +766,24 @@ onBeforeUnmount(() => {
 
   color: var(--text-soft);
   font-size: var(--font-size-sm);
+}
+
+.item-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+
+  margin-top: 6px;
+
+  color: var(--text);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-label {
+  margin-right: 4px;
+
+  color: var(--text-muted);
 }
 
 h3 {
