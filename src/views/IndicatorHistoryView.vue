@@ -20,6 +20,7 @@ import { useRemoteJson } from "@/composables/useRemoteJson";
 import {
   ENTRY_FAMILY_IDS,
   INDICATORS_FILE,
+  type IndicatorItem,
   INDICATORS_FOLDER,
   VEHICLES_FAMILY_ID,
   indicatorValuesFile,
@@ -31,6 +32,7 @@ import {
 import {
   monthlyValuesByYear,
   quarterValues,
+  sumMonthlyValues,
   yearAverage,
 } from "@/utils/indicatorHistory";
 
@@ -45,10 +47,26 @@ import { formatMeasure } from "@/utils/amountFormat";
    trimestrielle. Règles de calcul :
    src/utils/indicatorHistory.ts.
 
-   Adresse : /indicators/history?family=2&item=1
+   Seuls les tags de regroupement (groupTag) sont présentés :
+   un tag réunit un ou plusieurs indicateurs, additionnés
+   (par exemple les compteurs électriques successifs). Un
+   indicateur sans tag n'apparaît pas.
+
+   Adresse : /indicators/history?family=2&group=Electricité
 ========================= */
 
 const YEAR_COUNT = 6;
+
+/*
+  Groupe présenté : indicateurs de même groupTag.
+*/
+interface HistoryGroup {
+  tag: string;
+  description: string;
+  cumulative: boolean;
+  seq: number;
+  members: IndicatorItem[];
+}
 
 type ChartView =
   | "monthly"
@@ -98,9 +116,12 @@ const familyId =
     VEHICLES_FAMILY_ID
   );
 
-const itemId =
-  ref<number | null>(
-    queryNumber(route.query.item)
+const groupTag =
+  ref<string | null>(
+    typeof route.query.group === "string" &&
+    route.query.group
+      ? route.query.group
+      : null
   );
 
 const endYear =
@@ -110,13 +131,13 @@ const view =
   ref<ChartView>("monthly");
 
 watch(
-  [familyId, itemId],
+  [familyId, groupTag],
 
-  ([family, item]) => {
+  ([family, tag]) => {
     router.replace({
       query: {
         family: String(family),
-        ...(item === null ? {} : { item: String(item) }),
+        ...(tag === null ? {} : { group: tag }),
       },
     });
   }
@@ -184,30 +205,77 @@ const familyItems =
       )
   );
 
-const itemOptions =
+/*
+  Un groupe par groupTag, dans l'ordre d'affichage du
+  premier de ses indicateurs.
+*/
+const groups =
+  computed<HistoryGroup[]>(() => {
+    const byTag =
+      new Map<string, HistoryGroup>();
+
+    for (const item of familyItems.value) {
+      if (!item.groupTag) {
+        continue;
+      }
+
+      let group =
+        byTag.get(item.groupTag);
+
+      if (!group) {
+        group = {
+          tag: item.groupTag,
+          description: "",
+          cumulative: item.cumulative,
+          seq: item.seq,
+          members: [],
+        };
+
+        byTag.set(item.groupTag, group);
+      }
+
+      group.members.push(item);
+      group.seq = Math.min(group.seq, item.seq);
+    }
+
+    for (const group of byTag.values()) {
+      group.description =
+        group.members.length === 1
+          ? group.members[0].description
+          : `Sum of ${group.members.map(member => member.label).join(", ")}`;
+    }
+
+    return [...byTag.values()].sort((a, b) =>
+      a.seq - b.seq ||
+      a.tag.localeCompare(b.tag)
+    );
+  });
+
+const groupOptions =
   computed(() =>
-    familyItems.value.map(
-      item => ({
-        id: item.itemId,
-        label: item.label,
+    groups.value.map(
+      group => ({
+        id: group.tag,
+        label: group.tag,
       })
     )
   );
 
 /*
-  Indicateur absent de la famille (changement de famille,
-  adresse ancienne) : le premier de la liste.
+  Groupe absent de la famille ou de la période
+  (changement de famille, adresse ancienne) : le premier
+  de la liste.
 */
 watch(
-  familyItems,
+  groups,
 
-  items => {
+  list => {
     if (
-      items.length &&
-      !items.some(item => item.itemId === itemId.value)
+      list.length &&
+      !list.some(group => group.tag === groupTag.value)
     ) {
-      itemId.value =
-        items[0].itemId;
+      groupTag.value =
+        list[0].tag;
     }
   },
 
@@ -216,18 +284,11 @@ watch(
   }
 );
 
-const item =
+const group =
   computed(() =>
-    familyItems.value.find(
-      candidate => candidate.itemId === itemId.value
+    groups.value.find(
+      candidate => candidate.tag === groupTag.value
     ) ?? null
-  );
-
-const itemValues =
-  computed(() =>
-    (valuesFile.data.value ?? [])
-      .filter(value => value.itemId === itemId.value)
-      .sort((a, b) => a.date.localeCompare(b.date))
   );
 
 /* =========================
@@ -290,16 +351,29 @@ const series =
    Charts
 ========================= */
 
+/*
+  Valeurs mensuelles de chaque indicateur de la sélection,
+  additionnées (un seul indicateur hors groupe).
+*/
 const monthsByYear =
-  computed(() =>
-    item.value
-      ? monthlyValuesByYear(
-          item.value,
-          itemValues.value,
-          years.value
-        )
-      : new Map<number, (number | null)[]>()
-  );
+  computed(() => {
+    const values =
+      valuesFile.data.value ?? [];
+
+    return sumMonthlyValues(
+      (group.value?.members ?? []).map(
+        member =>
+          monthlyValuesByYear(
+            member,
+            values
+              .filter(value => value.itemId === member.itemId)
+              .sort((a, b) => a.date.localeCompare(b.date)),
+            years.value
+          )
+      ),
+      years.value
+    );
+  });
 
 const monthlyGroups =
   computed(() => [
@@ -332,9 +406,9 @@ const quartersByYear =
     new Map(
       years.value.map(year => [
         year,
-        item.value
+        group.value
           ? quarterValues(
-              item.value,
+              group.value,
               monthsByYear.value.get(year) ?? []
             )
           : [null, null, null, null],
@@ -366,14 +440,14 @@ const quarterGroups =
 
 const measureLabel =
   computed(() =>
-    item.value?.cumulative
+    group.value?.cumulative
       ? "Monthly consumption (difference between readings)"
       : "Monthly value"
   );
 
 const quarterLabel =
   computed(() =>
-    item.value?.cumulative
+    group.value?.cumulative
       ? "Quarter total"
       : "Quarter average"
   );
@@ -448,23 +522,30 @@ const vehicleNote =
       </div>
 
       <ChipSelector
-        v-model="itemId"
+        v-model="groupTag"
         label="Indicator"
-        :items="itemOptions"
+        :items="groupOptions"
         :show-all="false"
       />
     </section>
 
+    <p
+      v-if="!groups.length"
+      class="state-message"
+    >
+      No grouping tag in this family for these years.
+    </p>
+
     <!-- Title -->
 
     <header
-      v-if="item"
+      v-if="group"
       class="history-title"
     >
-      <h2>{{ item.label }}</h2>
+      <h2>{{ group.tag }}</h2>
 
       <p>
-        {{ item.description }}
+        {{ group.description }}
         <template v-if="vehicleNote"> · {{ vehicleNote }}</template>
       </p>
     </header>
@@ -472,7 +553,7 @@ const vehicleNote =
     <!-- Charts -->
 
     <section
-      v-if="item"
+      v-if="group"
       class="charts"
     >
       <div
@@ -485,7 +566,7 @@ const vehicleNote =
           :groups="monthlyGroups"
           :series="series"
           :format-value="formatValue"
-          :summary="`${item.label}: ${measureLabel}, ${years[0]}–${years[years.length - 1]}`"
+          :summary="`${group.tag}: ${measureLabel}, ${years[0]}–${years[years.length - 1]}`"
         />
       </div>
 
@@ -499,7 +580,7 @@ const vehicleNote =
           :groups="quarterGroups"
           :series="series"
           :format-value="formatValue"
-          :summary="`${item.label}: ${quarterLabel}, ${years[0]}–${years[years.length - 1]}`"
+          :summary="`${group.tag}: ${quarterLabel}, ${years[0]}–${years[years.length - 1]}`"
         />
       </div>
     </section>

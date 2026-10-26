@@ -1,5 +1,4 @@
 import type {
-  IndicatorItem,
   IndicatorValue,
 } from "@/contracts/indicators";
 
@@ -15,9 +14,16 @@ import type {
    moyenne.
    « AVG » : moyenne des mois (ou des trimestres) renseignés
    de l'année.
+   Groupe (même groupTag) : somme, mois par mois, des
+   valeurs de ses indicateurs.
 ========================= */
 
 export type MonthlyValues = (number | null)[];
+
+/* Seule la règle de cumul compte pour les calculs. */
+interface Measured {
+  cumulative: boolean;
+}
 
 function average(
   values: (number | null)[]
@@ -52,7 +58,7 @@ function sum(
   ancien au plus récent.
 */
 export function monthlyValuesByYear(
-  item: IndicatorItem,
+  item: Measured,
   values: IndicatorValue[],
   years: number[]
 ): Map<number, MonthlyValues> {
@@ -103,7 +109,7 @@ export function yearAverage(
 }
 
 export function quarterValues(
-  item: IndicatorItem,
+  item: Measured,
   months: MonthlyValues
 ): (number | null)[] {
   return [0, 1, 2, 3].map(
@@ -115,5 +121,30 @@ export function quarterValues(
         ? sum(slice)
         : average(slice);
     }
+  );
+}
+
+/*
+  Somme, mois par mois, des valeurs de plusieurs
+  indicateurs ; un mois sans aucune valeur reste vide.
+*/
+export function sumMonthlyValues(
+  sources: Map<number, MonthlyValues>[],
+  years: number[]
+): Map<number, MonthlyValues> {
+  return new Map(
+    years.map(year => [
+      year,
+      Array.from(
+        { length: 12 },
+        (_, month) =>
+          sum(
+            sources.map(
+              source =>
+                source.get(year)?.[month] ?? null
+            )
+          )
+      ),
+    ])
   );
 }

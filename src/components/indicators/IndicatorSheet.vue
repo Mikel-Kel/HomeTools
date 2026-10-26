@@ -63,12 +63,20 @@ const HISTORY_SIZE = 6;
 const router =
   useRouter();
 
+/*
+  L'historique présente les tags de regroupement : celui
+  de l'indicateur (sans tag, pas d'historique).
+*/
 function openHistory() {
+  if (!props.item.groupTag) {
+    return;
+  }
+
   router.push({
     name: "indicatorHistory",
     query: {
       family: String(props.familyId),
-      item: String(props.item.itemId),
+      group: props.item.groupTag,
     },
   });
 }
@@ -658,7 +666,10 @@ onBeforeUnmount(() => {
       <div class="history-header">
         <h3>Previous readings</h3>
 
-        <PillButton @click="openHistory">
+        <PillButton
+          v-if="item.groupTag"
+          @click="openHistory"
+        >
           History charts
         </PillButton>
       </div>
