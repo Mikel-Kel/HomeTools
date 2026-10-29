@@ -16,6 +16,7 @@ import HousekeepingView from "../views/HousekeepingView.vue";
 import BudgetView from "../views/BudgetView.vue";
 import IndicatorsView from "../views/IndicatorsView.vue";
 import IndicatorHistoryView from "../views/IndicatorHistoryView.vue";
+import MasterDataView from "../views/MasterDataView.vue";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -126,6 +127,16 @@ const router = createRouter({
       meta: {
         level: 2,
         title: "Indicator history",
+        requiresDrive: true,
+      },
+    },
+    {
+      path: "/master-data",
+      name: "masterData",
+      component: MasterDataView,
+      meta: {
+        level: 1,
+        title: "Master data",
         requiresDrive: true,
       },
     },

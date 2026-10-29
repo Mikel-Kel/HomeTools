@@ -470,7 +470,10 @@ const categories =
       .filter(
         category =>
           category.nature ===
-          allowedNature.value
+            allowedNature.value &&
+          categoriesStore
+            .getActiveSubcategories(category.id)
+            .length > 0
       )
   );
 
@@ -484,7 +487,7 @@ const subCategories =
     }
 
     return categoriesStore
-      .getSubcategories(
+      .getActiveSubcategories(
         categoryID.value
       );
   });

@@ -1,51 +1,21 @@
 import { ref, computed, type Ref } from "vue";
 import { loadJSONFromFolder } from "@/services/driveAdapter";
 
-/* =========================
-   Types
-========================= */
+import {
+  CATEGORIES_FILE,
+  CATEGORIES_FOLDER,
+  readCategories,
+  type Category,
+  type SubCategory,
+} from "@/contracts/categories";
 
-export type CategoryNature = "-" | "I" | "E";
-/*
-  P : catégorie affichée ; X : catégorie technique, masquée
-  dans le suivi (To allocate, Off B/S…).
-*/
-export type CategoryDisplayScope = "P" | "X";
-
-export interface SubCategory {
-  id: number;
-  seq: number;
-  label: string;
-  budgets?: BudgetYear[];
-}
-
-export interface Category {
-  id: number;
-  seq: number;
-  label: string;
-
-  /* 👇 nouveaux champs métier */
-  nature: CategoryNature;
-  displayScope: CategoryDisplayScope;
-
-  subcategories: SubCategory[];
-  budgets?: BudgetYear[];
-}
-
-interface CategoriesFile {
-  version: number;
-  updatedAt?: string;
-  categories: Category[];
-}
-
-export interface BudgetItem {
-  budget: number;
-}
-
-export interface BudgetYear {
-  year: number;
-  items: BudgetItem[];
-}
+export type {
+  Category,
+  CategoryDisplayScope,
+  CategoryNature,
+  SubCategory,
+  SubCategoryStatus,
+} from "@/contracts/categories";
 
 /* =========================
    State (singleton)
@@ -60,31 +30,20 @@ const categories: Ref<Category[]> = ref([]);
 export function useCategories() {
 
   async function load(): Promise<void> {
-
-    const raw = await loadJSONFromFolder<CategoriesFile>(
-      "settings",
-      "categories.json"
+    categories.value = readCategories(
+      await loadJSONFromFolder<unknown>(
+        CATEGORIES_FOLDER,
+        CATEGORIES_FILE
+      )
     );
+  }
 
-    if (
-      !raw ||
-      raw.version !== 1 ||
-      !Array.isArray(raw.categories)
-    ) {
-      throw new Error("Invalid categories.json format");
-    }
-
-    /* JSON already matches Category interface */
-    categories.value = raw.categories
-      .map(c => ({
-        ...c,
-        subcategories: (c.subcategories ?? [])
-          .slice()
-          .sort((a, b) => a.seq - b.seq)
-      }))
-      .slice()
-      .sort((a, b) => a.seq - b.seq);
-
+  /*
+    Liste relue par la page Master data quand categories.json
+    change : les autres pages en profitent sans recharger.
+  */
+  function set(list: Category[]): void {
+    categories.value = list;
   }
 
   function getCategory(id: number): Category | undefined {
@@ -95,6 +54,10 @@ export function useCategories() {
     return getCategory(categoryId)?.subcategories ?? [];
   }
 
+  function getActiveSubcategories(categoryId: number): SubCategory[] {
+    return getSubcategories(categoryId).filter(s => s.status === "A");
+  }
+
   const allSubcategories = computed<SubCategory[]>(() =>
     categories.value.flatMap(c => c.subcategories)
   );
@@ -102,8 +65,10 @@ export function useCategories() {
   return {
     categories,
     load,
+    set,
     getCategory,
     getSubcategories,
+    getActiveSubcategories,
     allSubcategories,
   };
 

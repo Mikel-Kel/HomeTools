@@ -33,5 +33,6 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
   { path: "/budget", label: "Budget", icon: "budget" },
   { path: "/indicators", label: "Indicators", icon: "indicators" },
   { path: "/documentsArchive", label: "Archives", icon: "bookshelf" },
+  { path: "/master-data", label: "Master data", icon: "process" },
   { path: "/housekeeping", label: "Housekeeping", icon: "pages_warning", health: true },
 ];
