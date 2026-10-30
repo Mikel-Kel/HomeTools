@@ -40,6 +40,7 @@ import { formatAmount, formatInteger } from "@/utils/amountFormat";
 
 import type {
   CategoryNature,
+  SubCategory,
 } from "@/composables/useCategories";
 
 /* =========================
@@ -475,6 +476,53 @@ const activeCategory =
       );
   });
 
+/*
+  Sous-catégories de la catégorie choisie qui ont un montant
+  dans l'année : une sous-catégorie clôturée n'est affichée
+  (pastille et barre) que si elle en a un.
+*/
+const subCategoriesWithAmount =
+  computed(() => {
+    const ids =
+      new Set<number>();
+
+    const category =
+      followUpRaw.value?.categories.find(
+        item =>
+          item.categoryId ===
+          activeCategory.value?.id
+      );
+
+    const yearData =
+      category?.years.find(
+        item =>
+          item.year ===
+          year.value
+      );
+
+    for (const item of yearData?.items ?? []) {
+      if (
+        item.amount ||
+        item.amountOffBudget
+      ) {
+        ids.add(item.subCategoryId);
+      }
+    }
+
+    return ids;
+  });
+
+function isSubCategoryShown(
+  subCategory: SubCategory
+): boolean {
+  return (
+    subCategory.status === "A" ||
+    subCategoriesWithAmount.value.has(
+      subCategory.id
+    )
+  );
+}
+
 const subCategoryChips =
   computed(() => {
     if (!activeCategory.value) {
@@ -485,7 +533,9 @@ const subCategoryChips =
       .getSubcategories(
         activeCategory.value.id
       )
-      .slice()
+      .filter(
+        isSubCategoryShown
+      )
       .sort(
         (a, b) =>
           a.seq - b.seq
@@ -789,6 +839,9 @@ function computeSubCategoryItems():
     if (
       !subTotals.has(
         subCategory.id
+      ) ||
+      !isSubCategoryShown(
+        subCategory
       )
     ) {
       continue;
