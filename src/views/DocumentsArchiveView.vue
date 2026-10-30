@@ -48,6 +48,7 @@ import type {
   DocumentTag,
 } from "@/composables/archives/useDocumentTags";
 import { alertDialog } from "@/services/dialog/appDialog";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Types
@@ -179,22 +180,22 @@ const filtersOpen =
   ref(true);
 
 const selectedFolder =
-  ref<string | null>(null);
+  usePersistentRef<string | null>("archives.selectedFolder", null);
 
 const selectedSubFolder =
-  ref<number | null>(null);
+  usePersistentRef<number | null>("archives.selectedSubFolder", null);
 
 const selectedDTADate =
-  ref<string | null>(null);
+  usePersistentRef<string | null>("archives.selectedDTADate", null);
 
 const selectedTags =
-  ref<number[]>([]);
+  usePersistentRef<number[]>("archives.selectedTags", []);
 
 const searchText =
-  ref("");
+  usePersistentRef("archives.searchText", "");
 
 const selectedQuarterOffset =
-  ref(0);
+  usePersistentRef("archives.selectedQuarterOffset", 0);
 
 const selectedItem =
   ref<ArchiveItem | null>(null);
@@ -1083,6 +1084,16 @@ function selectDefaultPayDateForQuarter() {
 
   if (
     dates.length === 0
+  ) {
+    return;
+  }
+
+  /* Date déjà choisie dans ce trimestre (filtres retrouvés de la session) : gardée. */
+  if (
+    selectedDTADate.value !== null &&
+    dates.includes(
+      selectedDTADate.value
+    )
   ) {
     return;
   }

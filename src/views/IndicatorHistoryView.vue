@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
   computed,
-  ref,
   watch,
 } from "vue";
 
@@ -32,6 +31,7 @@ import {
 } from "@/contracts/indicators";
 
 import { formatMeasure } from "@/utils/amountFormat";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Historique des indicateurs
@@ -85,35 +85,47 @@ const currentYear =
    Selection
 ========================= */
 
+/*
+  Famille et groupe : ceux de l'adresse (lien depuis
+  Indicators), sinon le dernier choix de la session.
+*/
+const familyId =
+  usePersistentRef<number>("indicatorHistory.familyId", VEHICLES_FAMILY_ID);
+
+const groupTag =
+  usePersistentRef<string | null>("indicatorHistory.groupTag", null);
+
 const queryFamily =
   Number(route.query.family);
 
-const familyId =
-  ref<number>(
-    ENTRY_FAMILY_IDS.includes(queryFamily) ||
-    queryFamily === MARKET_FAMILY_ID
-      ? queryFamily
-      : VEHICLES_FAMILY_ID
-  );
+const queryGroup =
+  typeof route.query.group === "string" &&
+  route.query.group
+    ? route.query.group.trim()
+    : null;
+
+if (
+  ENTRY_FAMILY_IDS.includes(queryFamily) ||
+  queryFamily === MARKET_FAMILY_ID
+) {
+  groupTag.value =
+    queryGroup ??
+    (queryFamily === familyId.value ? groupTag.value : null);
+
+  familyId.value =
+    queryFamily;
+}
 
 const isMarket =
   computed(() =>
     familyId.value === MARKET_FAMILY_ID
   );
 
-const groupTag =
-  ref<string | null>(
-    typeof route.query.group === "string" &&
-    route.query.group
-      ? route.query.group.trim()
-      : null
-  );
-
 const endYear =
-  ref<number>(currentYear);
+  usePersistentRef<number>("indicatorHistory.endYear", currentYear);
 
 const view =
-  ref<ChartView>("monthly");
+  usePersistentRef<ChartView>("indicatorHistory.view", "monthly");
 
 watch(
   [familyId, groupTag],

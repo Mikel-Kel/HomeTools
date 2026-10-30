@@ -15,6 +15,7 @@ import type {
   CategoryNature,
   SubCategory,
 } from "@/contracts/categories";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Section « Categories » de la page Master data
@@ -36,10 +37,10 @@ const NATURE_LABELS: Record<CategoryNature, string> = {
 };
 
 const selectedId =
-  ref<number | null>(null);
+  usePersistentRef<number | null>("masterData.categories.selectedId", null);
 
 const showClosed =
-  ref(false);
+  usePersistentRef("masterData.categories.showClosed", false);
 
 /*
   Panneau en cours de réordonnancement ; le choix de la

@@ -36,6 +36,7 @@ import {
 import { formatInteger } from "@/utils/amountFormat";
 import { detectDevice } from "@/utils/deviceDetection";
 import { confirmDialog } from "@/services/dialog/appDialog";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Page Budget
@@ -163,18 +164,19 @@ const initialized =
 ========================= */
 
 const year =
-  ref<number>(
+  usePersistentRef<number>(
+    "budget.year",
     new Date().getFullYear()
   );
 
 const nature =
-  ref<NatureFilter>("-");
+  usePersistentRef<NatureFilter>("budget.nature", "-");
 
 const categoryId =
-  ref<number | null>(null);
+  usePersistentRef<number | null>("budget.categoryId", null);
 
 const openOnly =
-  ref(false);
+  usePersistentRef("budget.openOnly", false);
 
 const budgetYears =
   computed(() =>
@@ -508,6 +510,7 @@ watch(
 
   items => {
     if (
+      items.length &&
       categoryId.value !== null &&
       !items.some(
         item => item.id === categoryId.value

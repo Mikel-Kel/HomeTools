@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref } from "vue";
-
 import PageHeader from "@/components/PageHeader.vue";
 import HousekeepingRun from "@/components/housekeeping/HousekeepingRun.vue";
 import HousekeepingLogs from "@/components/housekeeping/HousekeepingLogs.vue";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Tabs
@@ -18,7 +17,7 @@ type HousekeepingTab =
   | "logs";
 
 const activeTab =
-  ref<HousekeepingTab>("run");
+  usePersistentRef<HousekeepingTab>("housekeeping.activeTab", "run");
 </script>
 
 <template>

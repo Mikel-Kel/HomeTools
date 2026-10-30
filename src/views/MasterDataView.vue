@@ -26,6 +26,7 @@ import {
   PARTIES_FOLDER,
   readParties,
 } from "@/contracts/parties";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Données de base (Master data)
@@ -50,7 +51,7 @@ const sectionOptions: {
 ];
 
 const section =
-  ref<MasterDataSection>("parties");
+  usePersistentRef<MasterDataSection>("masterData.section", "parties");
 
 const categoriesStore =
   useCategories();

@@ -48,6 +48,7 @@ import {
   type DueState,
 } from "@/utils/vehicleService";
 import { confirmDialog } from "@/services/dialog/appDialog";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Page Indicators
@@ -89,7 +90,7 @@ const router =
   useRouter();
 
 const familyId =
-  ref<number>(VEHICLES_FAMILY_ID);
+  usePersistentRef<number>("indicators.familyId", VEHICLES_FAMILY_ID);
 
 const indicatorsFile =
   useRemoteJson({
@@ -203,7 +204,7 @@ const currentMonthEnd =
   );
 
 const month =
-  ref<string | null>(null);
+  usePersistentRef<string | null>("indicators.month", null);
 
 /*
   Premier chargement : le dernier mois qui a des valeurs

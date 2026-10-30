@@ -42,6 +42,7 @@ import type {
   CategoryNature,
   SubCategory,
 } from "@/composables/useCategories";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Types
@@ -116,18 +117,19 @@ const categorySheetOpen =
   ref(false);
 
 const year =
-  ref<number>(
+  usePersistentRef<number>(
+    "followUp.year",
     new Date().getFullYear()
   );
 
 const selectedCategory =
-  ref<string>("*");
+  usePersistentRef<string>("followUp.selectedCategory", "*");
 
 const selectedSubCategory =
-  ref<string | null>(null);
+  usePersistentRef<string | null>("followUp.selectedSubCategory", null);
 
 const includeOffBudget =
-  ref(true);
+  usePersistentRef("followUp.includeOffBudget", true);
 
 /*
   Agrégats et budget, relus dès qu’ils changent sur le
@@ -185,19 +187,19 @@ const initialized =
   );
 
 const analysisScope =
-  ref<AnalysisScope>("YTD");
+  usePersistentRef<AnalysisScope>("followUp.analysisScope", "YTD");
 
 const labelFilter =
-  ref("");
+  usePersistentRef("followUp.labelFilter", "");
 
 const pendingOnly =
-  ref(false);
+  usePersistentRef("followUp.pendingOnly", false);
 
 /*
   Tags retenus pour les allocations : vide = tous.
 */
 const tagFilter =
-  ref<number[]>([]);
+  usePersistentRef<number[]>("followUp.tagFilter", []);
 
 const {
   tags: allocationTags,
@@ -217,7 +219,7 @@ const filtersOpen =
   ref(true);
 
 const natureFilter =
-  ref<NatureFilter>("E");
+  usePersistentRef<NatureFilter>("followUp.natureFilter", "E");
 
 const followUpSpreadLimit =
   ref(10);
@@ -1561,6 +1563,80 @@ watch(
       year.value =
         availableYears.value[0];
     }
+  }
+);
+
+/*
+  Filtres retrouvés de la session : la catégorie, la
+  sous-catégorie et les tags doivent encore exister.
+*/
+watch(
+  categoryChips,
+
+  chips => {
+    if (
+      chips.length &&
+      selectedCategory.value !== "*" &&
+      !chips.some(
+        category =>
+          String(category.id) ===
+          selectedCategory.value
+      )
+    ) {
+      selectAllCategories();
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
+watch(
+  subCategoryChips,
+
+  chips => {
+    if (
+      chips.length &&
+      selectedSubCategory.value !== null &&
+      !chips.some(
+        subCategory =>
+          String(subCategory.id) ===
+          selectedSubCategory.value
+      )
+    ) {
+      selectedSubCategory.value =
+        null;
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
+watch(
+  allocationTags,
+
+  tags => {
+    if (!tags.length) {
+      return;
+    }
+
+    const kept =
+      tagFilter.value.filter(
+        id =>
+          tags.some(tag => tag.id === id)
+      );
+
+    if (kept.length !== tagFilter.value.length) {
+      tagFilter.value =
+        kept;
+    }
+  },
+
+  {
+    immediate: true,
   }
 );
 

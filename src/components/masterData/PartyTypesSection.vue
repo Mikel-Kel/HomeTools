@@ -25,6 +25,7 @@ import {
 } from "@/contracts/parties";
 
 import { formatInteger } from "@/utils/amountFormat";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Section « Party types » de la page Master data
@@ -61,7 +62,7 @@ const familyOptions: {
 ];
 
 const family =
-  ref<PartyFamily>("standard");
+  usePersistentRef<PartyFamily>("masterData.partyTypes.family", "standard");
 
 const folderTypeId =
   computed(() =>

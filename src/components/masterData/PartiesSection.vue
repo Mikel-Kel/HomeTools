@@ -19,6 +19,7 @@ import {
 } from "@/contracts/parties";
 
 import { formatInteger } from "@/utils/amountFormat";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Section « Parties » de la page Master data
@@ -45,11 +46,11 @@ const props = defineProps<{
 const BANK_TEXT_MIN_LENGTH = 4;
 
 const query =
-  ref("");
+  usePersistentRef("masterData.parties.query", "");
 
 /* Type choisi, null = tous. */
 const typeFilter =
-  ref<number | null>(null);
+  usePersistentRef<number | null>("masterData.parties.typeFilter", null);
 
 const typeItems =
   computed(() =>
@@ -59,8 +60,27 @@ const typeItems =
       .map(type => ({ id: type.id, label: type.label }))
   );
 
+/* Type retrouvé de la session mais supprimé depuis : tous. */
+watch(
+  typeItems,
+
+  items => {
+    if (
+      typeFilter.value !== null &&
+      !items.some(item => item.id === typeFilter.value)
+    ) {
+      typeFilter.value =
+        null;
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
 const unusedOnly =
-  ref(false);
+  usePersistentRef("masterData.parties.unusedOnly", false);
 
 const selectedId =
   ref<number | null>(null);
