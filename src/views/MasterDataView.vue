@@ -36,21 +36,21 @@ import {
 ========================= */
 
 type MasterDataSection =
-  | "categories"
   | "parties"
-  | "partyTypes";
+  | "partyTypes"
+  | "categories";
 
 const sectionOptions: {
   value: MasterDataSection;
   label: string;
 }[] = [
-  { value: "categories", label: "Categories" },
   { value: "parties", label: "Parties" },
   { value: "partyTypes", label: "Party types" },
+  { value: "categories", label: "Categories" },
 ];
 
 const section =
-  ref<MasterDataSection>("categories");
+  ref<MasterDataSection>("parties");
 
 const categoriesStore =
   useCategories();
@@ -76,6 +76,10 @@ watch(
     if (value === "parties" || value === "partyTypes") {
       partiesWanted.value = true;
     }
+  },
+
+  {
+    immediate: true,
   }
 );
 
