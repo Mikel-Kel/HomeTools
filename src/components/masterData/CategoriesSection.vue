@@ -8,7 +8,7 @@ import {
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import CategorySheet from "@/components/masterData/CategorySheet.vue";
-import CategoryOrderEditor from "@/components/masterData/CategoryOrderEditor.vue";
+import OrderEditor from "@/components/masterData/OrderEditor.vue";
 
 import type {
   Category,
@@ -22,7 +22,7 @@ import type {
    À gauche les catégories, dans l'ordre d'affichage ; à
    droite les sous-catégories de la catégorie choisie, les
    clôturées masquées par défaut. Création et modification
-   par fiche (CategorySheet), ordre par CategoryOrderEditor.
+   par fiche (CategorySheet), ordre par OrderEditor.
 ========================= */
 
 const props = defineProps<{
@@ -132,9 +132,11 @@ function activeCount(
         </span>
       </header>
 
-      <CategoryOrderEditor
+      <OrderEditor
         v-if="reordering === 'categories'"
-        :category-id="null"
+        trigram="CAT"
+        event-type="CATEGORY_ORDER_SAVED"
+        :scope="{ categoryId: null }"
         :items="categories"
         @close="reordering = null"
       />
@@ -218,9 +220,11 @@ function activeCount(
         </span>
       </header>
 
-      <CategoryOrderEditor
+      <OrderEditor
         v-if="reordering === 'subcategories' && selected"
-        :category-id="selected.id"
+        trigram="CAT"
+        event-type="CATEGORY_ORDER_SAVED"
+        :scope="{ categoryId: selected.id }"
         :items="
           selected.subcategories.map(sub => ({
             id: sub.id,

@@ -6,6 +6,7 @@ const { loadSettings } = useAppBootstrap()
 import { useAppParameters } from "@/composables/useAppParameters"
 
 import { useParties } from "@/composables/useParties"
+import { isVisibleParty } from "@/contracts/parties"
 import ChipSelector from "@/components/ChipSelector.vue"
 import { useTourismFolders } from "@/composables/archives/useTourismFolders"
 import { useVariousFolders } from "@/composables/archives/useVariousFolders"
@@ -111,8 +112,9 @@ const folderItems = computed(() =>
   }))
 )
 
+/* Parties réservées (-1 N/A, 0 To assign) jamais proposées */
 const parties = computed(() =>
-  partiesStore.parties.value
+  partiesStore.parties.value.filter(isVisibleParty)
 )
 
 const relationItems = computed(() => {
@@ -177,7 +179,7 @@ const isValid = computed(() =>
 /* ---------- Party map ---------- */
 const partyMap = computed(() => {
   const map = new Map<number, string>()
-  for (const p of parties.value) {
+  for (const p of partiesStore.parties.value) {
     map.set(p.id, p.label)
   }
   return map

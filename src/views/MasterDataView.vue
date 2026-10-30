@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  computed,
   ref,
   watch,
 } from "vue";
@@ -7,15 +8,24 @@ import {
 import PageHeader from "@/components/PageHeader.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import CategoriesSection from "@/components/masterData/CategoriesSection.vue";
+import PartiesSection from "@/components/masterData/PartiesSection.vue";
+import PartyTypesSection from "@/components/masterData/PartyTypesSection.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useCategories } from "@/composables/useCategories";
+import { useParties } from "@/composables/useParties";
 
 import {
   CATEGORIES_FILE,
   CATEGORIES_FOLDER,
   readCategories,
 } from "@/contracts/categories";
+
+import {
+  PARTIES_FILE,
+  PARTIES_FOLDER,
+  readParties,
+} from "@/contracts/parties";
 
 /* =========================
    Données de base (Master data)
@@ -26,13 +36,17 @@ import {
 ========================= */
 
 type MasterDataSection =
-  | "categories";
+  | "categories"
+  | "parties"
+  | "partyTypes";
 
 const sectionOptions: {
   value: MasterDataSection;
   label: string;
 }[] = [
   { value: "categories", label: "Categories" },
+  { value: "parties", label: "Parties" },
+  { value: "partyTypes", label: "Party types" },
 ];
 
 const section =
@@ -41,6 +55,9 @@ const section =
 const categoriesStore =
   useCategories();
 
+const partiesStore =
+  useParties();
+
 const categoriesFile =
   useRemoteJson({
     folder: CATEGORIES_FOLDER,
@@ -48,8 +65,29 @@ const categoriesFile =
     read: readCategories,
   });
 
+/* Chargé à la première ouverture d'une section des parties. */
+const partiesWanted =
+  ref(false);
+
+watch(
+  section,
+
+  value => {
+    if (value === "parties" || value === "partyTypes") {
+      partiesWanted.value = true;
+    }
+  }
+);
+
+const partiesFile =
+  useRemoteJson({
+    folder: PARTIES_FOLDER,
+    file: () => (partiesWanted.value ? PARTIES_FILE : null),
+    read: readParties,
+  });
+
 /*
-  Les autres pages lisent les catégories dans le store :
+  Les autres pages lisent ces données dans leur store :
   elles voient les changements sans recharger l'application.
 */
 watch(
@@ -61,6 +99,23 @@ watch(
     }
   }
 );
+
+watch(
+  partiesFile.data,
+
+  data => {
+    if (data) {
+      partiesStore.set(data.parties);
+    }
+  }
+);
+
+const current =
+  computed(() =>
+    section.value === "categories"
+      ? categoriesFile
+      : partiesFile
+  );
 </script>
 
 <template>
@@ -69,24 +124,7 @@ watch(
     icon="process"
   />
 
-  <div
-    v-if="categoriesFile.error.value"
-    class="state-message error"
-  >
-    {{ categoriesFile.error.value }}
-  </div>
-
-  <div
-    v-else-if="!categoriesFile.data.value"
-    class="state-message"
-  >
-    Loading master data…
-  </div>
-
-  <main
-    v-else
-    class="master-data-view"
-  >
+  <main class="master-data-view">
     <section class="filters">
       <SegmentedControl
         v-model="section"
@@ -94,10 +132,36 @@ watch(
       />
     </section>
 
-    <CategoriesSection
-      v-if="section === 'categories'"
-      :categories="categoriesFile.data.value"
-    />
+    <div
+      v-if="current.error.value"
+      class="state-message error"
+    >
+      {{ current.error.value }}
+    </div>
+
+    <div
+      v-else-if="!current.data.value"
+      class="state-message"
+    >
+      Loading master data…
+    </div>
+
+    <template v-else>
+      <CategoriesSection
+        v-if="section === 'categories' && categoriesFile.data.value"
+        :categories="categoriesFile.data.value"
+      />
+
+      <PartiesSection
+        v-else-if="section === 'parties' && partiesFile.data.value"
+        :data="partiesFile.data.value"
+      />
+
+      <PartyTypesSection
+        v-else-if="section === 'partyTypes' && partiesFile.data.value"
+        :data="partiesFile.data.value"
+      />
+    </template>
   </main>
 </template>
 
@@ -111,7 +175,7 @@ watch(
 }
 
 .state-message {
-  padding: 2rem 1.5rem;
+  padding: 1rem 0;
 
   color: var(--text-soft);
 }

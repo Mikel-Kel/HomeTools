@@ -13,22 +13,29 @@ import { useEventRequest } from "@/composables/useEventRequest";
 import { detectDevice } from "@/utils/deviceDetection";
 
 /* =========================
-   Ordre d'affichage des catégories ou des sous-catégories
-   d'une catégorie
+   Ordre d'affichage d'une liste de données de base
 
    Remplace la liste du panneau le temps de la saisie (↑ ↓).
    L'enregistrement envoie au Mac :
-     events/PWA-CAT_<AAAAMMJJHHMMSS>_ORDER.json
-       { "eventType": "CATEGORY_ORDER_SAVED",
-         "payload": { "categoryId" | null, "order": [ids],
-                      "source" } }
-   categoryId null : toutes les catégories ; sinon toutes les
-   sous-catégories de la catégorie, clôturées comprises. Le
-   Mac renumérote par pas de 10.
+     events/PWA-<trigram>_<AAAAMMJJHHMMSS>_ORDER.json
+       { "eventType": <eventType>,
+         "payload": { …scope, "order": [ids], "source" } }
+   items contient toute la liste concernée (le Mac refuse un
+   ordre incomplet) et renumérote par pas de 10. Utilisé
+   pour :
+   - CAT / CATEGORY_ORDER_SAVED, scope { categoryId | null }
+     (../Backend/docs/categories-contract.md) ;
+   - PTY / PARTY_ORDER_SAVED, scope { typeId } : sous-dossiers
+     d'archives (../Backend/docs/parties-contract.md).
 ========================= */
 
 const props = defineProps<{
-  categoryId: number | null;
+  trigram: string;
+  eventType: string;
+
+  /* Champs du payload qui désignent la liste. */
+  scope: Record<string, number | null>;
+
   items: {
     id: number;
     label: string;
@@ -94,7 +101,7 @@ function move(
 
 const orderRequest =
   useEventRequest({
-    trigram: "CAT",
+    trigram: props.trigram,
     noAnswerDelayMs: NO_ANSWER_DELAY_MS,
   });
 
@@ -124,11 +131,11 @@ async function save() {
 
   await orderRequest.send(
     {
-      eventType: "CATEGORY_ORDER_SAVED",
+      eventType: props.eventType,
       version: 1,
       timestamp: new Date().toISOString(),
       payload: {
-        categoryId: props.categoryId,
+        ...props.scope,
         order: order.value,
         source: detectDevice(),
       },

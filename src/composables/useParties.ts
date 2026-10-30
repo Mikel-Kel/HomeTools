@@ -1,20 +1,14 @@
 import { ref } from "vue";
 import { loadJSONFromFolder } from "@/services/driveAdapter";
 
-/* =========================
-   Types
-========================= */
+import {
+  PARTIES_FILE,
+  PARTIES_FOLDER,
+  readParties,
+  type Party,
+} from "@/contracts/parties";
 
-export interface Party {
-  id: number;
-  label: string;
-}
-
-interface PartiesFile {
-  version: number;
-  updatedAt?: string;
-  parties: Party[];
-}
+export type { Party } from "@/contracts/parties";
 
 /* =========================
    State
@@ -33,22 +27,24 @@ export function useParties() {
 
     if (loaded.value) return;
 
-    const raw = await loadJSONFromFolder<PartiesFile>(
-      "settings",
-      "parties.json"
-    );
+    parties.value = readParties(
+      await loadJSONFromFolder<unknown>(
+        PARTIES_FOLDER,
+        PARTIES_FILE
+      )
+    ).parties;
 
-    if (
-      !raw ||
-      raw.version !== 1 ||
-      !Array.isArray(raw.parties)
-    ) {
-      throw new Error("Invalid Parties.json format");
-    }
-
-    parties.value = raw.parties;
     loaded.value = true;
 
+  }
+
+  /*
+    Liste relue par la page Master data quand parties.json
+    change : les autres pages en profitent sans recharger.
+  */
+  function set(list: Party[]): void {
+    parties.value = list;
+    loaded.value = true;
   }
 
   function getParty(partyID: number): Party | undefined {
@@ -58,6 +54,7 @@ export function useParties() {
   return {
     parties,
     load,
+    set,
     getParty,
   };
 
