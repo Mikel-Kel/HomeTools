@@ -17,6 +17,7 @@ import BudgetView from "../views/BudgetView.vue";
 import IndicatorsView from "../views/IndicatorsView.vue";
 import IndicatorHistoryView from "../views/IndicatorHistoryView.vue";
 import MasterDataView from "../views/MasterDataView.vue";
+import { alertDialog } from "@/services/dialog/appDialog";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -287,11 +288,12 @@ router.afterEach(async () => {
     await ensureAppVersionChecked();
 
   } catch (err: any) {
-    alert(
-      "⚠️ Application version inconsistency detected.\n\n" +
-      err.message +
-      "\n\nPlease refresh your browser and try again."
-    );
+    await alertDialog({
+      title: "Application version inconsistency",
+      message:
+        `${err.message}\n\n` +
+        "Please refresh your browser and try again.",
+    });
   }
 });
 

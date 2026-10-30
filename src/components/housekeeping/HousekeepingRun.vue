@@ -32,6 +32,7 @@ import {
 
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
+import { confirmDialog } from "@/services/dialog/appDialog";
 
 /* =========================
    Data contract
@@ -323,9 +324,11 @@ async function runHousekeeping() {
       .join("\n");
 
   const confirmed =
-    confirm(
-      `Run housekeeping now?\n\n${labels}`
-    );
+    await confirmDialog({
+      title: "Run housekeeping now?",
+      message: labels,
+      confirmLabel: "Run",
+    });
 
   if (!confirmed) {
     return;

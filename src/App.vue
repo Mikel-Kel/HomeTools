@@ -2,6 +2,7 @@
 import { computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import AppNavRail from "@/components/AppNavRail.vue";
+import AppDialog from "@/components/ui/AppDialog.vue";
 import { initGoogleAPI } from "@/services/google/googleInit";
 import { useStorageBackend } from "@/composables/useStorageBackend";
 import { log } from "./utils/logger";
@@ -49,6 +50,8 @@ onMounted(async () => {
   >
     <router-view />
   </div>
+
+  <AppDialog />
 </template>
 
 <style scoped>

@@ -14,6 +14,7 @@ import { useVariousFolders } from "@/composables/archives/useVariousFolders"
 import DateChip from "@/components/DateChip.vue"
 import { useDocumentTags } from "@/composables/archives/useDocumentTags"
 import { useAmountInput } from "@/composables/useAmountInput"
+import { confirmDialog } from "@/services/dialog/appDialog"
 
 /* =========================
    Emits
@@ -430,10 +431,7 @@ function onCancel() {
 
 function onSave() {
   const partyID = activeRelation.value
-  if (!partyID) {
-    alert("Please select a relation")
-    return
-  }
+  if (!partyID) return
   if (isBillsFolder.value && !localDoc.value.dtaDate?.trim()) return
   emit("save", {
     ...localDoc.value,
@@ -443,10 +441,13 @@ function onSave() {
   emit("close")
 }
 
-function onDelete() {
-  const ok = confirm(
-    "Delete this document?\nThis action cannot be undone."
-  )
+async function onDelete() {
+  const ok = await confirmDialog({
+    title: "Delete this document?",
+    message: "This action cannot be undone.",
+    confirmLabel: "Delete",
+    destructive: true
+  })
   if (!ok) return
   emit("delete", {
     tocid: localDoc.value.tocid

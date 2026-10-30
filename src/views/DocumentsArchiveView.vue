@@ -47,6 +47,7 @@ import {
 import type {
   DocumentTag,
 } from "@/composables/archives/useDocumentTags";
+import { alertDialog } from "@/services/dialog/appDialog";
 
 /* =========================
    Types
@@ -693,9 +694,10 @@ async function openDocument(
     return;
   }
 
-  alert(
-    "This document is not available on this device."
-  );
+  await alertDialog({
+    title: "Document not available",
+    message: "This document is not available on this device.",
+  });
 }
 
 /* =========================

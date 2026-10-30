@@ -20,6 +20,8 @@ import type {
   SubCategoryStatus,
 } from "@/contracts/categories";
 
+import { confirmDialog } from "@/services/dialog/appDialog";
+
 import { detectDevice } from "@/utils/deviceDetection";
 
 /* =========================
@@ -319,11 +321,15 @@ const messageClass =
    Fermeture
 ========================= */
 
-function close() {
+async function close() {
   if (
     changed.value &&
     !saveRequest.inProgress.value &&
-    !confirm("Discard the changes?")
+    !(await confirmDialog({
+      title: "Discard the changes?",
+      confirmLabel: "Discard",
+      destructive: true,
+    }))
   ) {
     return;
   }

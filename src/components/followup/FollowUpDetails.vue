@@ -60,6 +60,7 @@ import {
   formatAmount,
   formatInteger,
 } from "@/utils/amountFormat";
+import { confirmDialog } from "@/services/dialog/appDialog";
 
 /* =========================================================
    TYPES
@@ -399,10 +400,11 @@ async function requestReallocation(
   }
 
   const confirmed =
-    confirm(
-      "Request allocation change for this transaction?\n" +
-      "(back to Spending Drafts)"
-    );
+    await confirmDialog({
+      title: "Request allocation change for this transaction?",
+      message: "It goes back to the Spending drafts.",
+      confirmLabel: "Request",
+    });
 
   if (!confirmed) {
     return;

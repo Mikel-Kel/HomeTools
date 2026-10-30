@@ -35,6 +35,7 @@ import {
 
 import { formatInteger } from "@/utils/amountFormat";
 import { detectDevice } from "@/utils/deviceDetection";
+import { confirmDialog } from "@/services/dialog/appDialog";
 
 /* =========================
    Page Budget
@@ -271,11 +272,13 @@ async function createNewYear() {
     sourceYear + 1;
 
   const confirmed =
-    confirm(
-      `Create the ${targetYear} budget from ${sourceYear}?\n\n` +
-      "Amounts and memos of the active sub-categories are copied; " +
-      "every line starts as Open (to confirm)."
-    );
+    await confirmDialog({
+      title: `Create the ${targetYear} budget from ${sourceYear}?`,
+      message:
+        "Amounts and memos of the active sub-categories are copied; " +
+        "every line starts as Open (to confirm).",
+      confirmLabel: "Create",
+    });
 
   if (!confirmed) {
     return;

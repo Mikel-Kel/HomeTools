@@ -47,6 +47,7 @@ import {
   type DateDue,
   type DueState,
 } from "@/utils/vehicleService";
+import { confirmDialog } from "@/services/dialog/appDialog";
 
 /* =========================
    Page Indicators
@@ -446,11 +447,13 @@ async function startMonth() {
   }
 
   const confirmed =
-    confirm(
-      `Start ${monthLabel.value}?\n\n` +
-      "The last known value of every active counter without a " +
-      `${monthLabel.value} value is copied, marked “last known value”.`
-    );
+    await confirmDialog({
+      title: `Start ${monthLabel.value}?`,
+      message:
+        "The last known value of every active counter without a " +
+        `${monthLabel.value} value is copied, marked “last known value”.`,
+      confirmLabel: "Start",
+    });
 
   if (!confirmed) {
     return;

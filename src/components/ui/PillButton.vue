@@ -4,7 +4,8 @@
 
    - secondary : action ou filtre (Reset, presets, chips) ;
      active = choix sélectionné ;
-   - primary   : action principale de la page.
+   - primary   : action principale de la page ;
+   - danger    : action destructive (suppression).
 
    Les attributs natifs (disabled, title, @click…) sont
    transmis au bouton.
@@ -12,7 +13,7 @@
 
 withDefaults(
   defineProps<{
-    variant?: "secondary" | "primary";
+    variant?: "secondary" | "primary" | "danger";
     active?: boolean;
   }>(),
   {
@@ -75,6 +76,25 @@ withDefaults(
 
   font-size: var(--font-size-sm);
   font-weight: 700;
+}
+
+.pill-button.danger {
+  padding: 8px 20px;
+
+  border-color: var(--negative);
+
+  background: transparent;
+  color: var(--negative);
+
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.pill-button.danger:hover:not(:disabled) {
+  border-color: var(--negative);
+
+  background: var(--negative);
+  color: var(--surface);
 }
 
 .pill-button:disabled {

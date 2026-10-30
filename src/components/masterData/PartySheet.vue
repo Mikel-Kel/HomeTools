@@ -17,6 +17,8 @@ import {
   type Party,
 } from "@/contracts/parties";
 
+import { confirmDialog } from "@/services/dialog/appDialog";
+
 import { detectDevice } from "@/utils/deviceDetection";
 
 /* =========================
@@ -334,7 +336,12 @@ async function remove() {
   if (
     !canDelete ||
     saveRequest.inProgress.value ||
-    !confirm(`Delete the party "${props.party!.label}" and its aliases?`)
+    !(await confirmDialog({
+      title: `Delete the party "${props.party!.label}"?`,
+      message: "Its aliases are deleted too.",
+      confirmLabel: "Delete",
+      destructive: true,
+    }))
   ) {
     return;
   }

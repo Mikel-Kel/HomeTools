@@ -26,6 +26,8 @@ import {
 } from "@/utils/amountFormat";
 
 import { formatDate } from "@/utils/dateFormat";
+import { confirmDialog } from "@/services/dialog/appDialog";
+
 import { detectDevice } from "@/utils/deviceDetection";
 
 /* =========================
@@ -366,7 +368,11 @@ async function deleteValue() {
   if (
     !props.current ||
     inProgress.value ||
-    !confirm(`Delete the ${props.monthLabel} value of ${props.item.label}?`)
+    !(await confirmDialog({
+      title: `Delete the ${props.monthLabel} value of ${props.item.label}?`,
+      confirmLabel: "Delete",
+      destructive: true,
+    }))
   ) {
     return;
   }
@@ -442,12 +448,16 @@ const hasError =
    Fermeture
 ========================= */
 
-function close() {
+async function close() {
   if (
     (valueChanged.value || serviceChanged.value) &&
     !inProgress.value &&
     sentRequests.value.length === 0 &&
-    !confirm("Discard the changes of this indicator?")
+    !(await confirmDialog({
+      title: "Discard the changes of this indicator?",
+      confirmLabel: "Discard",
+      destructive: true,
+    }))
   ) {
     return;
   }

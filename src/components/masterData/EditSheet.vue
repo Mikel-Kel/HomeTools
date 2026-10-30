@@ -9,6 +9,8 @@ import PillButton from "@/components/ui/PillButton.vue";
 
 import type { useEventRequest } from "@/composables/useEventRequest";
 
+import { confirmDialog } from "@/services/dialog/appDialog";
+
 /* =========================
    Cadre d'une fiche de données de base
 
@@ -72,11 +74,15 @@ const messageClass =
     (props.hintIsError ? "error" : "")
   );
 
-function close() {
+async function close() {
   if (
     props.changed &&
     !props.request.inProgress.value &&
-    !confirm("Discard the changes?")
+    !(await confirmDialog({
+      title: "Discard the changes?",
+      confirmLabel: "Discard",
+      destructive: true,
+    }))
   ) {
     return;
   }

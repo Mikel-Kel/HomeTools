@@ -55,6 +55,7 @@ import {
 import {
   formatAmount,
 } from "@/utils/amountFormat";
+import { confirmDialog } from "@/services/dialog/appDialog";
 
 /* =========================
    Router / storage
@@ -807,10 +808,12 @@ async function releaseAllDrafts() {
   }
 
   const confirmed =
-    confirm(
-      `Release ${draftCount.value} draft(s)?\n` +
-      "This action cannot be undone."
-    );
+    await confirmDialog({
+      title: `Release ${draftCount.value} draft(s)?`,
+      message: "This action cannot be undone.",
+      confirmLabel: "Release",
+      destructive: true,
+    });
 
   if (!confirmed) {
     return;

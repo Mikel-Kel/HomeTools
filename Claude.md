@@ -34,7 +34,8 @@ Ce que font les actions de `GitWorkflow` pour ce repo :
 - **Git Restore** : `git reset --hard <tag>` + `git clean -fd` (destructif).
 
 Version : le tag git fait foi ; `package.json` est injecté dans l'app (`__APP_VERSION__`) ; l'app se déclare incompatible
-si elle est plus ancienne que la version de `AppParameters.json` (`src/services/version/`).
+si elle est plus ancienne que la version de `AppParameters.json` (`src/services/version/`), contrôlé une fois par session
+sur tous les backends, dialogue affiché une seule fois.
 
 ## Architecture
 
@@ -111,7 +112,6 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   (PBKDF2 / AES-GCM, verrouillage après inactivité), saisie une fois par appareil. **Ce coffre reste à construire.**
 - Google Drive : `listGoogleFilesInFolder` ne gère pas la pagination et `findGoogleFileByName` prend le premier résultat sans tri ;
   un fichier homonyme en double (create au lieu d'update) est donc possible, et lu de façon arbitraire.
-- Le contrôle de version ne s'exécute qu'en Local Drive (`versionGuard.ts` sort tant qu'aucun dossier local n'est choisi).
 
 ## Règles de travail
 

@@ -1,5 +1,8 @@
 import { loadAppVersion } from "./appVersion";
 
+/* App plus ancienne que la version de référence (AppParameters.json). */
+export class AppVersionMismatchError extends Error {}
+
 /**
  * Compare two semantic versions (x.y.z)
  * @returns -1 if a < b, 0 if equal, 1 if a > b
@@ -39,8 +42,8 @@ export async function checkAppVersionConsistency() {
   // ❌ App plus ancienne que la référence
   if (compareVersions(appVersion, referenceVersion) < 0) {
 
-    throw new Error(
-      `Version mismatch\n\nCurrent App: ${appVersion}\nReference App: ${referenceVersion}`
+    throw new AppVersionMismatchError(
+      `This app is version ${appVersion}; the reference version is ${referenceVersion}.`
     );
 
   }

@@ -17,6 +17,7 @@ import {
   pickLocalDirectory,
   getLocalDirectory,
 } from "@/services/local/localDirectory";
+import { alertDialog } from "@/services/dialog/appDialog";
 
 /* =========================
    Router
@@ -103,10 +104,12 @@ async function handlePickLocalDirectory() {
 
   } catch (err: any) {
     if (err?.message === "BROWSER_NOT_SUPPORTED") {
-      alert(
-        "Local Drive mode requires Chrome or Edge on macOS.\n\n" +
-        "Safari does not support folder selection."
-      );
+      await alertDialog({
+        title: "Local Drive not available",
+        message:
+          "Local Drive mode requires Chrome or Edge on macOS.\n" +
+          "Safari does not support folder selection.",
+      });
 
       return;
     }

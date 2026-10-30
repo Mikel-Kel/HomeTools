@@ -16,6 +16,8 @@ import { useEventRequest } from "@/composables/useEventRequest";
 import type { BudgetLine } from "@/contracts/budget";
 
 import { formatInteger } from "@/utils/amountFormat";
+import { confirmDialog } from "@/services/dialog/appDialog";
+
 import { detectDevice } from "@/utils/deviceDetection";
 
 /* =========================
@@ -252,12 +254,16 @@ const requestMessage =
    Fermeture
 ========================= */
 
-function close() {
+async function close() {
   if (
     !props.readonly &&
     changed.value &&
     !updateRequest.inProgress.value &&
-    !confirm("Discard the changes of this line?")
+    !(await confirmDialog({
+      title: "Discard the changes of this line?",
+      confirmLabel: "Discard",
+      destructive: true,
+    }))
   ) {
     return;
   }
