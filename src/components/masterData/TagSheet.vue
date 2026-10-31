@@ -9,39 +9,41 @@ import EditSheet from "@/components/masterData/EditSheet.vue";
 
 import { useEventRequest } from "@/composables/useEventRequest";
 
-import {
-  ACC_TAG_TYPE,
-  isTagUsed,
-  type AllocationTag,
-} from "@/contracts/allocationTags";
+import { DOC_TAG_TYPE } from "@/contracts/documentTags";
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
-import { formatInteger } from "@/utils/amountFormat";
 import { detectDevice } from "@/utils/deviceDetection";
 
-/* =========================
-   Fiche tag des mouvements
+import type {
+  TagItem,
+  TagType,
+} from "@/components/masterData/tagItems";
 
-   Création (tag null), renommage, numéro d'ordre ou
-   suppression d'un tag inutilisé et non réservé. Envoi au
-   Mac (../Backend/docs/tags-contract.md) :
-     events/PWA-TAG_<AAAAMMJJHHMMSS>_T<TagID|NEW>.json
+/* =========================
+   Fiche tag (mouvements ou documents)
+
+   Création (tag null), renommage, numéro d'ordre, couleur
+   (tags Doc) ou suppression d'un tag inutilisé et non
+   réservé. Envoi au Mac (../Backend/docs/tags-contract.md),
+   suffixe T pour les tags Acc, D pour les tags Doc :
+     events/PWA-TAG_<AAAAMMJJHHMMSS>_<T|D><TagID|NEW>.json
        { "eventType": "TAG_SAVED",
-         "payload": { "tagType": "Acc", "tagId" | null,
-                      "label", "seq", "source" } }
-     events/PWA-TAG_<AAAAMMJJHHMMSS>_T<TagID>_DEL.json
+         "payload": { "tagType", "tagId" | null, "label",
+                      "seq", "color" (Doc), "source" } }
+     events/PWA-TAG_<AAAAMMJJHHMMSS>_<T|D><TagID>_DEL.json
        { "eventType": "TAG_DELETED",
-         "payload": { "tagType": "Acc", "tagId", "source" } }
-   Le Mac refuse aussi la suppression d'un tag présent dans
-   un draft d'allocation.
+         "payload": { "tagType", "tagId", "source" } }
+   Le Mac refuse aussi la suppression d'un tag Acc présent
+   dans un draft d'allocation.
 ========================= */
 
 const props = defineProps<{
-  tag: AllocationTag | null;
+  tagType: TagType;
+  tag: TagItem | null;
 
-  /* Tous les tags, pour le contrôle des doublons et l'ordre par défaut. */
-  tags: AllocationTag[];
+  /* Tous les tags du type, pour le contrôle des doublons et l'ordre par défaut. */
+  tags: TagItem[];
 }>();
 
 const emit = defineEmits<{
@@ -55,25 +57,36 @@ const LABEL_MAX_LENGTH = 50;
 
 const SEQ_MAX = 999;
 
+const DEFAULT_COLOR = "#808080";
+
+const isDoc =
+  props.tagType === DOC_TAG_TYPE;
+
 const isNew =
   props.tag === null;
 
 const originalLabel =
-  props.tag?.tagName ?? "";
+  props.tag?.label ?? "";
 
 /* Nouveau tag : après le dernier. */
 const originalSeq =
-  props.tag?.seqNb ??
+  props.tag?.seq ??
   Math.min(
     SEQ_MAX,
-    Math.max(0, ...props.tags.map(tag => tag.seqNb)) + 1
+    Math.max(0, ...props.tags.map(tag => tag.seq)) + 1
   );
+
+const originalColor =
+  props.tag?.color ?? DEFAULT_COLOR;
 
 const label =
   ref(originalLabel);
 
 const seq =
   ref<number | string>(originalSeq);
+
+const color =
+  ref(originalColor);
 
 const trimmedLabel =
   computed(() =>
@@ -91,7 +104,8 @@ const seqValue =
 const changed =
   computed(() =>
     trimmedLabel.value !== originalLabel ||
-    seqValue.value !== originalSeq
+    seqValue.value !== originalSeq ||
+    (isDoc && color.value.toLowerCase() !== originalColor)
   );
 
 const formError =
@@ -111,7 +125,7 @@ const formError =
       props.tags.some(
         other =>
           other.id !== props.tag?.id &&
-          other.tagName.trim().toLowerCase() === key
+          other.label.trim().toLowerCase() === key
       )
     ) {
       return "Already used by another tag.";
@@ -135,7 +149,7 @@ const saveRequest =
   });
 
 const fileSuffix =
-  `T${props.tag?.id ?? "NEW"}`;
+  `${isDoc ? "D" : "T"}${props.tag?.id ?? "NEW"}`;
 
 const waitingElsewhere =
   computed(() =>
@@ -167,10 +181,11 @@ async function save() {
       version: 1,
       timestamp: new Date().toISOString(),
       payload: {
-        tagType: ACC_TAG_TYPE,
+        tagType: props.tagType,
         tagId: props.tag?.id ?? null,
         label: trimmedLabel.value,
         seq: seqValue.value,
+        ...(isDoc ? { color: color.value.toLowerCase() } : {}),
         source: detectDevice(),
       },
     },
@@ -185,14 +200,14 @@ async function save() {
 const canDelete =
   !isNew &&
   !props.tag!.reserved &&
-  !isTagUsed(props.tag!);
+  props.tag!.used === false;
 
 async function remove() {
   if (
     !canDelete ||
     saveRequest.inProgress.value ||
     !(await confirmDialog({
-      title: `Delete the tag "${props.tag!.tagName}"?`,
+      title: `Delete the tag "${props.tag!.label}"?`,
       confirmLabel: "Delete",
       destructive: true,
     }))
@@ -206,7 +221,7 @@ async function remove() {
       version: 1,
       timestamp: new Date().toISOString(),
       payload: {
-        tagType: ACC_TAG_TYPE,
+        tagType: props.tagType,
         tagId: props.tag!.id,
         source: detectDevice(),
       },
@@ -235,25 +250,14 @@ const hint =
   );
 
 const subtitle =
-  computed(() => {
-    if (isNew) {
-      return "Created on the Mac";
-    }
-
-    const usage =
-      props.tag!.usage;
-
-    return (
-      `Tag ${props.tag!.id} · ` +
-      `${formatInteger(usage.allocations)} allocations · ` +
-      `${formatInteger(usage.rules)} rules`
-    );
-  });
+  isNew
+    ? "Created on the Mac"
+    : `Tag ${props.tag!.id} · ${props.tag!.usage}`;
 </script>
 
 <template>
   <EditSheet
-    :title="isNew ? 'New tag' : tag!.tagName"
+    :title="isNew ? (isDoc ? 'New document tag' : 'New tag') : tag!.label"
     :subtitle="subtitle"
     :request="saveRequest"
     :changed="changed"
@@ -277,21 +281,37 @@ const subtitle =
       />
     </label>
 
-    <label class="field">
-      <h3>Order</h3>
+    <div class="field-row">
+      <label class="field">
+        <h3>Order</h3>
 
-      <input
-        v-model="seq"
-        type="number"
-        inputmode="numeric"
-        min="0"
-        :max="SEQ_MAX"
-        step="1"
-        class="seq-input"
-        :disabled="saveRequest.inProgress.value"
-        @keydown.enter="save"
-      />
-    </label>
+        <input
+          v-model="seq"
+          type="number"
+          inputmode="numeric"
+          min="0"
+          :max="SEQ_MAX"
+          step="1"
+          class="seq-input"
+          :disabled="saveRequest.inProgress.value"
+          @keydown.enter="save"
+        />
+      </label>
+
+      <label
+        v-if="isDoc"
+        class="field"
+      >
+        <h3>Color</h3>
+
+        <input
+          v-model="color"
+          type="color"
+          class="color-input"
+          :disabled="saveRequest.inProgress.value"
+        />
+      </label>
+    </div>
 
     <p
       v-if="tag?.reserved"
@@ -301,10 +321,17 @@ const subtitle =
     </p>
 
     <p
-      v-else-if="tag && isTagUsed(tag)"
+      v-else-if="tag?.used"
       class="note"
     >
-      Used by allocations or rules: it cannot be deleted.
+      {{ isDoc ? "Used by documents" : "Used by allocations or rules" }}: it cannot be deleted.
+    </p>
+
+    <p
+      v-else-if="tag && tag.used === null"
+      class="note"
+    >
+      Usage not published yet: it cannot be deleted.
     </p>
   </EditSheet>
 </template>
@@ -312,5 +339,13 @@ const subtitle =
 <style scoped>
 .seq-input {
   width: 8rem;
+}
+
+.color-input {
+  width: 4rem;
+  height: 38px;
+  padding: 2px 4px;
+
+  cursor: pointer;
 }
 </style>

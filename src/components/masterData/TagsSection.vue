@@ -2,16 +2,23 @@
 import {
   computed,
   ref,
+  watch,
 } from "vue";
 
 import PillButton from "@/components/ui/PillButton.vue";
+import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import TagSheet from "@/components/masterData/TagSheet.vue";
 
+import { ACC_TAG_TYPE, type AllocationTag } from "@/contracts/allocationTags";
+import { DOC_TAG_TYPE, type DocumentTag } from "@/contracts/documentTags";
+
 import {
-  isTagUsed,
-  type AllocationTag,
-} from "@/contracts/allocationTags";
+  fromAllocationTag,
+  fromDocumentTag,
+  type TagItem,
+  type TagType,
+} from "@/components/masterData/tagItems";
 
 import { formatInteger } from "@/utils/amountFormat";
 import { usePersistentRef } from "@/composables/usePersistentRef";
@@ -19,21 +26,43 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
 /* =========================
    Section « Tags » de la page Master data
 
-   Tags des mouvements, dans leur ordre d'affichage (numéro
-   d'ordre puis identifiant), avec leur usage. Recherche sur
+   Deux familles : Spending (tags des mouvements, Acc) et
+   Documents (tags des archives, Doc). Tags dans leur ordre
+   d'affichage (numéro d'ordre puis identifiant), avec leur
+   usage et, pour les documents, leur couleur. Recherche sur
    le libellé, filtre « Unused only ». Création,
    modification et suppression par fiche (TagSheet).
 ========================= */
 
 const props = defineProps<{
-  tags: AllocationTag[];
+  allocationTags: AllocationTag[] | null;
+  documentTags: DocumentTag[] | null;
 }>();
+
+const familyOptions: {
+  value: TagType;
+  label: string;
+}[] = [
+  { value: ACC_TAG_TYPE, label: "Spending" },
+  { value: DOC_TAG_TYPE, label: "Documents" },
+];
+
+const family =
+  usePersistentRef<TagType>("masterData.tags.family", ACC_TAG_TYPE);
 
 const query =
   usePersistentRef("masterData.tags.query", "");
 
 const unusedOnly =
   usePersistentRef("masterData.tags.unusedOnly", false);
+
+/* null : fichier de la famille pas encore chargé. */
+const tags =
+  computed<TagItem[] | null>(() =>
+    family.value === DOC_TAG_TYPE
+      ? props.documentTags?.map(fromDocumentTag) ?? null
+      : props.allocationTags?.map(fromAllocationTag) ?? null
+  );
 
 function normalize(
   value: string
@@ -50,24 +79,39 @@ const filteredTags =
     const text =
       normalize(query.value);
 
-    return props.tags.filter(
+    return (tags.value ?? []).filter(
       tag =>
-        (!unusedOnly.value || !isTagUsed(tag)) &&
-        (!text || normalize(tag.tagName).includes(text))
+        (!unusedOnly.value || tag.used === false) &&
+        (!text || normalize(tag.label).includes(text))
     );
   });
 
 /* undefined : fiche fermée ; null : nouveau tag. */
 const sheetTag =
-  ref<AllocationTag | null | undefined>(undefined);
+  ref<TagItem | null | undefined>(undefined);
+
+/* Changer de famille ferme la fiche. */
+watch(
+  family,
+
+  () => {
+    sheetTag.value = undefined;
+  }
+);
 </script>
 
 <template>
   <section class="panel">
     <header class="panel-header">
-      <h2>Tags</h2>
+      <SegmentedControl
+        v-model="family"
+        :options="familyOptions"
+      />
 
-      <span class="panel-actions">
+      <span
+        v-if="tags"
+        class="panel-actions"
+      >
         <span class="count">
           {{ formatInteger(filteredTags.length) }} / {{ formatInteger(tags.length) }}
         </span>
@@ -78,81 +122,100 @@ const sheetTag =
       </span>
     </header>
 
-    <div class="filter-line">
-      <input
-        v-model="query"
-        type="search"
-        class="search-input"
-        placeholder="Search"
-        autocomplete="off"
-        spellcheck="false"
-      />
-
-      <PillButton
-        :active="unusedOnly"
-        @click="unusedOnly = !unusedOnly"
-      >
-        Unused only
-      </PillButton>
-    </div>
-
     <p
-      v-if="!filteredTags.length"
+      v-if="!tags"
       class="empty"
     >
-      No tag found.
+      Loading tags…
     </p>
 
-    <ul
-      v-else
-      class="item-list"
-    >
-      <li
-        v-for="tag in filteredTags"
-        :key="tag.id"
-      >
-        <button
-          type="button"
-          class="item-row"
-          @click="sheetTag = tag"
+    <template v-else>
+      <div class="filter-line">
+        <input
+          v-model="query"
+          type="search"
+          class="search-input"
+          placeholder="Search"
+          autocomplete="off"
+          spellcheck="false"
+        />
+
+        <PillButton
+          :active="unusedOnly"
+          @click="unusedOnly = !unusedOnly"
         >
-          <span class="item-label">{{ tag.tagName }}</span>
+          Unused only
+        </PillButton>
+      </div>
 
-          <span class="item-meta">
-            <StatusPill
-              v-if="tag.reserved"
-              dashed
-            >
-              Reserved
-            </StatusPill>
+      <p
+        v-if="!filteredTags.length"
+        class="empty"
+      >
+        No tag found.
+      </p>
 
-            <StatusPill
-              v-else-if="!isTagUsed(tag)"
-              dashed
-            >
-              Unused
-            </StatusPill>
+      <ul
+        v-else
+        class="item-list"
+      >
+        <li
+          v-for="tag in filteredTags"
+          :key="tag.id"
+        >
+          <button
+            type="button"
+            class="item-row"
+            @click="sheetTag = tag"
+          >
+            <span class="item-label">
+              <span
+                v-if="tag.color"
+                class="color-dot"
+                :style="{ background: tag.color }"
+              ></span>
 
-            <span
-              class="item-count"
-              title="Allocations"
-            >
-              {{ formatInteger(tag.usage.allocations) }}
+              {{ tag.label }}
             </span>
 
-            <span
-              class="item-seq"
-              title="Order"
-            >
-              {{ tag.seqNb }}
+            <span class="item-meta">
+              <StatusPill
+                v-if="tag.reserved"
+                dashed
+              >
+                Reserved
+              </StatusPill>
+
+              <StatusPill
+                v-else-if="tag.used === false"
+                dashed
+              >
+                Unused
+              </StatusPill>
+
+              <span
+                class="item-count"
+                :title="tag.countLabel"
+              >
+                {{ tag.count === null ? "–" : formatInteger(tag.count) }}
+              </span>
+
+              <span
+                class="item-seq"
+                title="Order"
+              >
+                {{ tag.seq }}
+              </span>
             </span>
-          </span>
-        </button>
-      </li>
-    </ul>
+          </button>
+        </li>
+      </ul>
+    </template>
 
     <TagSheet
-      v-if="sheetTag !== undefined"
+      v-if="sheetTag !== undefined && tags"
+      :key="family"
+      :tag-type="family"
       :tag="sheetTag"
       :tags="tags"
       @close="sheetTag = undefined"
@@ -268,6 +331,20 @@ const sheetTag =
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.color-dot {
+  display: inline-block;
+  flex-shrink: 0;
+
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.5rem;
+
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+
+  vertical-align: -1px;
 }
 
 .item-meta {

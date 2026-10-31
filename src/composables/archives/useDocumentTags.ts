@@ -1,21 +1,14 @@
 import { ref } from "vue"
 import { loadJSONFromFolder } from "@/services/driveAdapter"
 
-/* =========================
-   Types
-========================= */
-export interface DocumentTag {
-  id: number
-  tagName: string
-  seqNb: number
-  color: string
-}
+import {
+  DOCUMENT_TAGS_FILE,
+  DOCUMENT_TAGS_FOLDER,
+  readDocumentTags,
+  type DocumentTag,
+} from "@/contracts/documentTags"
 
-interface DocumentTagsFile {
-  version: number
-  updatedAt?: string
-  tags: DocumentTag[]
-}
+export type { DocumentTag } from "@/contracts/documentTags"
 
 /* =========================
    State
@@ -30,21 +23,22 @@ export function useDocumentTags() {
 
   async function load(): Promise<void> {
     if (loaded.value) return
-    const raw = await loadJSONFromFolder<DocumentTagsFile>(
-      "settings",
-      "documentTags.json"
+    tags.value = readDocumentTags(
+      await loadJSONFromFolder<unknown>(
+        DOCUMENT_TAGS_FOLDER,
+        DOCUMENT_TAGS_FILE
+      )
     )
-    if (
-      !raw ||
-      raw.version !== 1 ||
-      !Array.isArray(raw.tags)
-    ) {
-      throw new Error("Invalid documentTags.json format")
-    }
-    tags.value =
-      raw.tags
-        .slice()
-        .sort((a, b) => a.seqNb - b.seqNb)
+    loaded.value = true
+  }
+
+  /*
+    Liste relue par la page Master data quand
+    documentTags.json change : les Archives en profitent
+    sans recharger.
+  */
+  function set(list: DocumentTag[]): void {
+    tags.value = list
     loaded.value = true
   }
 
@@ -55,6 +49,7 @@ export function useDocumentTags() {
   return {
     tags,
     load,
+    set,
     getTag
   }
 }

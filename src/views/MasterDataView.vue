@@ -16,12 +16,19 @@ import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useCategories } from "@/composables/useCategories";
 import { useParties } from "@/composables/useParties";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
+import { useDocumentTags } from "@/composables/archives/useDocumentTags";
 
 import {
   ALLOCATION_TAGS_FILE,
   ALLOCATION_TAGS_FOLDER,
   readAllocationTags,
 } from "@/contracts/allocationTags";
+
+import {
+  DOCUMENT_TAGS_FILE,
+  DOCUMENT_TAGS_FOLDER,
+  readDocumentTags,
+} from "@/contracts/documentTags";
 
 import {
   CATEGORIES_FILE,
@@ -71,6 +78,9 @@ const partiesStore =
 
 const tagsStore =
   useAllocationTags();
+
+const documentTagsStore =
+  useDocumentTags();
 
 const categoriesFile =
   useRemoteJson({
@@ -129,6 +139,13 @@ const tagsFile =
     read: readAllocationTags,
   });
 
+const documentTagsFile =
+  useRemoteJson({
+    folder: DOCUMENT_TAGS_FOLDER,
+    file: () => (tagsWanted.value ? DOCUMENT_TAGS_FILE : null),
+    read: readDocumentTags,
+  });
+
 /*
   Les autres pages lisent ces données dans leur store :
   elles voient les changements sans recharger l'application.
@@ -163,12 +180,22 @@ watch(
   }
 );
 
+watch(
+  documentTagsFile.data,
+
+  list => {
+    if (list) {
+      documentTagsStore.set(list);
+    }
+  }
+);
+
 const current =
   computed(() =>
     section.value === "categories"
       ? categoriesFile
       : section.value === "tags"
-        ? tagsFile
+        ? (documentTagsFile.error.value ? documentTagsFile : tagsFile)
         : partiesFile
   );
 </script>
@@ -219,7 +246,8 @@ const current =
 
       <TagsSection
         v-else-if="section === 'tags' && tagsFile.data.value"
-        :tags="tagsFile.data.value"
+        :allocation-tags="tagsFile.data.value"
+        :document-tags="documentTagsFile.data.value"
       />
     </template>
   </main>

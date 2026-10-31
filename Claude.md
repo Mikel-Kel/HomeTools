@@ -105,7 +105,8 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 
 - Master data (catégories, parties, tags) : contrats dans `../Backend/docs/categories-contract.md`, `parties-contract.md`
   et `tags-contract.md` (table `Tags`, tags `Acc` numérotés à partir de 1, `0` = sans tag, seul tag hors budget = tag réservé 1 ;
-  événements `PWA-CAT_…`, `PWA-PTY_…`, `PWA-TAG_…`). Tags de documents : deuxième étape, encore dans `misclocal`.
+  événements `PWA-CAT_…`, `PWA-PTY_…`, `PWA-TAG_…`). Tags de documents
+  (§ 6, `TagType = 'Doc'`, identifiants inchangés car écrits dans les noms des PDF, suffixe d'événement `D<id>`).
 
 - Indicateurs (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/indicators-contract.md`
   (exports `indicators/indicators.json` et `values-<famille>.json`, événements `PWA-IND_…`).

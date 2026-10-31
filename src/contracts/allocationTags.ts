@@ -30,7 +30,7 @@ export const ALLOCATION_TAGS_FOLDER = "settings";
 export const ALLOCATION_TAGS_FILE = "allocationTags.json";
 
 /* Type des tags des mouvements dans la table Tags. */
-export const ACC_TAG_TYPE = "Acc";
+export const ACC_TAG_TYPE = "Acc" as const;
 
 export interface AllocationTagUsage {
   allocations: number;
