@@ -1,38 +1,62 @@
 import { ref } from "vue";
 import { loadJSONFromFolder } from "@/services/driveAdapter";
 
-export interface AllocationTag {
-  id: number
-  tagName: string
-  seqNb: number
-  offBudget?: boolean
-}
+import {
+  ALLOCATION_TAGS_FILE,
+  ALLOCATION_TAGS_FOLDER,
+  readAllocationTags,
+  type AllocationTag,
+} from "@/contracts/allocationTags";
 
-const tags = ref<AllocationTag[]>([])
-const loaded = ref(false)
+export type { AllocationTag } from "@/contracts/allocationTags";
+
+/* =========================
+   State
+========================= */
+
+const tags = ref<AllocationTag[]>([]);
+const loaded = ref(false);
+
+/* =========================
+   Composable
+========================= */
 
 export function useAllocationTags() {
 
-  async function load() {
-    if (loaded.value) return
-    const raw = await loadJSONFromFolder<any>(
-      "settings",
-      "allocationTags.json"
-    )
-    tags.value =
-      (raw?.tags ?? [])
-        .slice()
-        .sort((a: any, b: any) => a.seqNb - b.seqNb)
-    loaded.value = true
+  async function load(): Promise<void> {
+
+    if (loaded.value) return;
+
+    tags.value = readAllocationTags(
+      await loadJSONFromFolder<unknown>(
+        ALLOCATION_TAGS_FOLDER,
+        ALLOCATION_TAGS_FILE
+      )
+    );
+
+    loaded.value = true;
+
   }
 
-  function getTag(id: number) {
-    return tags.value.find(t => t.id === id)
+  /*
+    Liste relue par la page Master data quand
+    allocationTags.json change : les autres pages en
+    profitent sans recharger.
+  */
+  function set(list: AllocationTag[]): void {
+    tags.value = list;
+    loaded.value = true;
+  }
+
+  function getTag(id: number): AllocationTag | undefined {
+    return tags.value.find(t => t.id === id);
   }
 
   return {
     tags,
     load,
-    getTag
-  }
+    set,
+    getTag,
+  };
+
 }

@@ -10,10 +10,18 @@ import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import CategoriesSection from "@/components/masterData/CategoriesSection.vue";
 import PartiesSection from "@/components/masterData/PartiesSection.vue";
 import PartyTypesSection from "@/components/masterData/PartyTypesSection.vue";
+import TagsSection from "@/components/masterData/TagsSection.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useCategories } from "@/composables/useCategories";
 import { useParties } from "@/composables/useParties";
+import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
+
+import {
+  ALLOCATION_TAGS_FILE,
+  ALLOCATION_TAGS_FOLDER,
+  readAllocationTags,
+} from "@/contracts/allocationTags";
 
 import {
   CATEGORIES_FILE,
@@ -39,7 +47,8 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
 type MasterDataSection =
   | "parties"
   | "partyTypes"
-  | "categories";
+  | "categories"
+  | "tags";
 
 const sectionOptions: {
   value: MasterDataSection;
@@ -48,6 +57,7 @@ const sectionOptions: {
   { value: "parties", label: "Parties" },
   { value: "partyTypes", label: "Party types" },
   { value: "categories", label: "Categories" },
+  { value: "tags", label: "Tags" },
 ];
 
 const section =
@@ -58,6 +68,9 @@ const categoriesStore =
 
 const partiesStore =
   useParties();
+
+const tagsStore =
+  useAllocationTags();
 
 const categoriesFile =
   useRemoteJson({
@@ -91,6 +104,31 @@ const partiesFile =
     read: readParties,
   });
 
+/* Chargé à la première ouverture de la section des tags. */
+const tagsWanted =
+  ref(false);
+
+watch(
+  section,
+
+  value => {
+    if (value === "tags") {
+      tagsWanted.value = true;
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
+const tagsFile =
+  useRemoteJson({
+    folder: ALLOCATION_TAGS_FOLDER,
+    file: () => (tagsWanted.value ? ALLOCATION_TAGS_FILE : null),
+    read: readAllocationTags,
+  });
+
 /*
   Les autres pages lisent ces données dans leur store :
   elles voient les changements sans recharger l'application.
@@ -115,11 +153,23 @@ watch(
   }
 );
 
+watch(
+  tagsFile.data,
+
+  list => {
+    if (list) {
+      tagsStore.set(list);
+    }
+  }
+);
+
 const current =
   computed(() =>
     section.value === "categories"
       ? categoriesFile
-      : partiesFile
+      : section.value === "tags"
+        ? tagsFile
+        : partiesFile
   );
 </script>
 
@@ -165,6 +215,11 @@ const current =
       <PartyTypesSection
         v-else-if="section === 'partyTypes' && partiesFile.data.value"
         :data="partiesFile.data.value"
+      />
+
+      <TagsSection
+        v-else-if="section === 'tags' && tagsFile.data.value"
+        :tags="tagsFile.data.value"
       />
     </template>
   </main>

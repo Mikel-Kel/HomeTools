@@ -103,6 +103,10 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 - Budget (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/budget-contract.md`
   (section `years` de `budget.json`, événements `PWA-BUD_…`, journal `budgetLog-<année>.json`).
 
+- Master data (catégories, parties, tags) : contrats dans `../Backend/docs/categories-contract.md`, `parties-contract.md`
+  et `tags-contract.md` (table `Tags`, tags `Acc` numérotés à partir de 1, `0` = sans tag, seul tag hors budget = tag réservé 1 ;
+  événements `PWA-CAT_…`, `PWA-PTY_…`, `PWA-TAG_…`). Tags de documents : deuxième étape, encore dans `misclocal`.
+
 - Indicateurs (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/indicators-contract.md`
   (exports `indicators/indicators.json` et `values-<famille>.json`, événements `PWA-IND_…`).
 
