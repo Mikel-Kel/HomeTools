@@ -40,6 +40,7 @@ import {
   readArchiveToFile,
   readArchiveYear,
   TO_FILE_BUCKET,
+  TO_FILE_FOLDER,
   type ArchiveIndex,
   type ArchiveItem,
 } from "@/contracts/archive";
@@ -179,8 +180,29 @@ const error =
 const filtersOpen =
   ref(true);
 
+/* null : All. */
 const selectedFolder =
   usePersistentRef<string | null>("archives.selectedFolder", null);
+
+/*
+  Dossier par défaut déjà appliqué dans la session : un
+  « All » choisi ensuite n'est plus remplacé.
+*/
+const folderChosen =
+  usePersistentRef("archives.folderChosen", false);
+
+function applyDefaultFolder() {
+  if (folderChosen.value) {
+    return;
+  }
+
+  selectedFolder.value =
+    selectedFolder.value ??
+    defaultFolder.value;
+
+  folderChosen.value =
+    selectedFolder.value !== null;
+}
 
 const selectedSubFolder =
   usePersistentRef<number | null>("archives.selectedSubFolder", null);
@@ -795,13 +817,7 @@ async function loadArchive(
     archiveLoaded.value =
       true;
 
-    if (
-      selectedFolder.value ===
-      null
-    ) {
-      selectedFolder.value =
-        defaultFolder.value;
-    }
+    applyDefaultFolder();
 
     if (
       selectedFolder.value ===
@@ -1148,6 +1164,15 @@ function toggleFilterTag(
     selectedTags.value.push(
       id
     );
+
+    /* Choisir un tag depuis « To file » : recherche dans tous les dossiers (All). */
+    if (
+      selectedFolder.value ===
+      TO_FILE_FOLDER
+    ) {
+      selectedFolder.value =
+        null;
+    }
   }
 }
 
@@ -1857,9 +1882,7 @@ async function initializeView() {
 
     await loadSettings();
 
-    selectedFolder.value =
-      selectedFolder.value ??
-      defaultFolder.value;
+    applyDefaultFolder();
 
     bootstrapped.value =
       true;
@@ -1884,7 +1907,7 @@ async function initializeView() {
 watch(
   storageReady,
 
-  async ready => {
+  async (ready, wasReady) => {
     if (!ready) {
       bootstrapped.value =
         false;
@@ -1895,8 +1918,14 @@ watch(
       archive.value =
         [];
 
-      selectedFolder.value =
-        null;
+      /* Changement de backend : retour au dossier par défaut. */
+      if (wasReady) {
+        selectedFolder.value =
+          null;
+
+        folderChosen.value =
+          false;
+      }
 
       return;
     }
