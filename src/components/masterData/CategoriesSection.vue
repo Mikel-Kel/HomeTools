@@ -23,7 +23,9 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
    À gauche les catégories, dans l'ordre d'affichage ; à
    droite les sous-catégories de la catégorie choisie, les
    clôturées masquées par défaut. Création et modification
-   par fiche (CategorySheet), ordre par OrderEditor.
+   par fiche (CategorySheet), ordre par OrderEditor. Le
+   titre du panneau des catégories (slot « title ») est
+   fourni par la section.
 ========================= */
 
 const props = defineProps<{
@@ -114,7 +116,7 @@ function activeCount(
 
     <section class="panel">
       <header class="panel-header">
-        <h2>Categories</h2>
+        <slot name="title" />
 
         <span
           v-if="reordering === null"

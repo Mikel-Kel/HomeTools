@@ -469,6 +469,7 @@ function performanceClass(
           <li
             v-for="item in NAVIGATION_ITEMS"
             :key="item.path"
+            :class="{ 'group-start': item.groupStart }"
           >
             <router-link
               :to="item.path"
@@ -933,6 +934,10 @@ function performanceClass(
 
 .menu li {
   margin-bottom: 0.8rem;
+}
+
+.menu li.group-start {
+  margin-top: 2rem;
 }
 
 .menu-item {

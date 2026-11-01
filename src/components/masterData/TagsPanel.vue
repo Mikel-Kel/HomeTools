@@ -2,67 +2,43 @@
 import {
   computed,
   ref,
-  watch,
 } from "vue";
 
 import PillButton from "@/components/ui/PillButton.vue";
-import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import TagSheet from "@/components/masterData/TagSheet.vue";
 
-import { ACC_TAG_TYPE, type AllocationTag } from "@/contracts/allocationTags";
-import { DOC_TAG_TYPE, type DocumentTag } from "@/contracts/documentTags";
-
-import {
-  fromAllocationTag,
-  fromDocumentTag,
-  type TagItem,
-  type TagType,
+import type {
+  TagItem,
+  TagType,
 } from "@/components/masterData/tagItems";
 
 import { formatInteger } from "@/utils/amountFormat";
 import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
-   Section « Tags » de la page Master data
+   Liste des tags d'un type (Acc ou Doc), page Master data
 
-   Deux familles : Spending (tags des mouvements, Acc) et
-   Documents (tags des archives, Doc). Tags dans leur ordre
-   d'affichage (numéro d'ordre puis identifiant), avec leur
-   usage et, pour les documents, leur couleur. Recherche sur
-   le libellé, filtre « Unused only ». Création,
-   modification et suppression par fiche (TagSheet).
+   Tags dans leur ordre d'affichage (numéro d'ordre puis
+   identifiant), avec leur usage et, pour les documents,
+   leur couleur. Recherche sur le libellé, filtre « Unused
+   only », conservés par type. Création, modification et
+   suppression par fiche (TagSheet). Le titre du panneau
+   (slot « title ») est fourni par la section.
 ========================= */
 
 const props = defineProps<{
-  allocationTags: AllocationTag[] | null;
-  documentTags: DocumentTag[] | null;
+  tagType: TagType;
+
+  /* null : fichier pas encore chargé. */
+  tags: TagItem[] | null;
 }>();
 
-const familyOptions: {
-  value: TagType;
-  label: string;
-}[] = [
-  { value: ACC_TAG_TYPE, label: "Spending" },
-  { value: DOC_TAG_TYPE, label: "Documents" },
-];
-
-const family =
-  usePersistentRef<TagType>("masterData.tags.family", ACC_TAG_TYPE);
-
 const query =
-  usePersistentRef("masterData.tags.query", "");
+  usePersistentRef(`masterData.tags.${props.tagType}.query`, "");
 
 const unusedOnly =
-  usePersistentRef("masterData.tags.unusedOnly", false);
-
-/* null : fichier de la famille pas encore chargé. */
-const tags =
-  computed<TagItem[] | null>(() =>
-    family.value === DOC_TAG_TYPE
-      ? props.documentTags?.map(fromDocumentTag) ?? null
-      : props.allocationTags?.map(fromAllocationTag) ?? null
-  );
+  usePersistentRef(`masterData.tags.${props.tagType}.unusedOnly`, false);
 
 function normalize(
   value: string
@@ -79,7 +55,7 @@ const filteredTags =
     const text =
       normalize(query.value);
 
-    return (tags.value ?? []).filter(
+    return (props.tags ?? []).filter(
       tag =>
         (!unusedOnly.value || tag.used === false) &&
         (!text || normalize(tag.label).includes(text))
@@ -89,24 +65,12 @@ const filteredTags =
 /* undefined : fiche fermée ; null : nouveau tag. */
 const sheetTag =
   ref<TagItem | null | undefined>(undefined);
-
-/* Changer de famille ferme la fiche. */
-watch(
-  family,
-
-  () => {
-    sheetTag.value = undefined;
-  }
-);
 </script>
 
 <template>
   <section class="panel">
     <header class="panel-header">
-      <SegmentedControl
-        v-model="family"
-        :options="familyOptions"
-      />
+      <slot name="title" />
 
       <span
         v-if="tags"
@@ -214,8 +178,7 @@ watch(
 
     <TagSheet
       v-if="sheetTag !== undefined && tags"
-      :key="family"
-      :tag-type="family"
+      :tag-type="tagType"
       :tag="sheetTag"
       :tags="tags"
       @close="sheetTag = undefined"
@@ -245,7 +208,7 @@ watch(
   margin-bottom: 0.5rem;
 }
 
-.panel-header h2 {
+.panel-header :slotted(h2) {
   margin: 0;
 
   font-size: var(--font-size-lg);

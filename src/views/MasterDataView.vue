@@ -7,10 +7,10 @@ import {
 
 import PageHeader from "@/components/PageHeader.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
-import CategoriesSection from "@/components/masterData/CategoriesSection.vue";
 import PartiesSection from "@/components/masterData/PartiesSection.vue";
 import PartyTypesSection from "@/components/masterData/PartyTypesSection.vue";
-import TagsSection from "@/components/masterData/TagsSection.vue";
+import SpendingSection from "@/components/masterData/SpendingSection.vue";
+import DocumentsSection from "@/components/masterData/DocumentsSection.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useCategories } from "@/composables/useCategories";
@@ -54,8 +54,8 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
 type MasterDataSection =
   | "parties"
   | "partyTypes"
-  | "categories"
-  | "tags";
+  | "spending"
+  | "documents";
 
 const sectionOptions: {
   value: MasterDataSection;
@@ -63,12 +63,17 @@ const sectionOptions: {
 }[] = [
   { value: "parties", label: "Parties" },
   { value: "partyTypes", label: "Party types" },
-  { value: "categories", label: "Categories" },
-  { value: "tags", label: "Tags" },
+  { value: "spending", label: "Spending" },
+  { value: "documents", label: "Documents" },
 ];
 
 const section =
   usePersistentRef<MasterDataSection>("masterData.section", "parties");
+
+/* Section mémorisée qui n'existe plus : la première. */
+if (!sectionOptions.some(option => option.value === section.value)) {
+  section.value = "parties";
+}
 
 const categoriesStore =
   useCategories();
@@ -89,7 +94,7 @@ const categoriesFile =
     read: readCategories,
   });
 
-/* Chargé à la première ouverture d'une section des parties. */
+/* Chargé à la première ouverture d'une section qui lit les parties. */
 const partiesWanted =
   ref(false);
 
@@ -97,7 +102,11 @@ watch(
   section,
 
   value => {
-    if (value === "parties" || value === "partyTypes") {
+    if (
+      value === "parties" ||
+      value === "partyTypes" ||
+      value === "documents"
+    ) {
       partiesWanted.value = true;
     }
   },
@@ -114,16 +123,23 @@ const partiesFile =
     read: readParties,
   });
 
-/* Chargé à la première ouverture de la section des tags. */
+/* Tags : chargés à la première ouverture de leur section. */
 const tagsWanted =
+  ref(false);
+
+const documentTagsWanted =
   ref(false);
 
 watch(
   section,
 
   value => {
-    if (value === "tags") {
+    if (value === "spending") {
       tagsWanted.value = true;
+    }
+
+    if (value === "documents") {
+      documentTagsWanted.value = true;
     }
   },
 
@@ -142,7 +158,7 @@ const tagsFile =
 const documentTagsFile =
   useRemoteJson({
     folder: DOCUMENT_TAGS_FOLDER,
-    file: () => (tagsWanted.value ? DOCUMENT_TAGS_FILE : null),
+    file: () => (documentTagsWanted.value ? DOCUMENT_TAGS_FILE : null),
     read: readDocumentTags,
   });
 
@@ -192,11 +208,11 @@ watch(
 
 const current =
   computed(() =>
-    section.value === "categories"
-      ? categoriesFile
-      : section.value === "tags"
-        ? (documentTagsFile.error.value ? documentTagsFile : tagsFile)
-        : partiesFile
+    section.value === "spending"
+      ? (tagsFile.error.value ? tagsFile : categoriesFile)
+      : section.value === "documents" && documentTagsFile.error.value
+          ? documentTagsFile
+          : partiesFile
   );
 </script>
 
@@ -229,13 +245,8 @@ const current =
     </div>
 
     <template v-else>
-      <CategoriesSection
-        v-if="section === 'categories' && categoriesFile.data.value"
-        :categories="categoriesFile.data.value"
-      />
-
       <PartiesSection
-        v-else-if="section === 'parties' && partiesFile.data.value"
+        v-if="section === 'parties' && partiesFile.data.value"
         :data="partiesFile.data.value"
       />
 
@@ -244,9 +255,15 @@ const current =
         :data="partiesFile.data.value"
       />
 
-      <TagsSection
-        v-else-if="section === 'tags' && tagsFile.data.value"
+      <SpendingSection
+        v-else-if="section === 'spending' && categoriesFile.data.value"
+        :categories="categoriesFile.data.value"
         :allocation-tags="tagsFile.data.value"
+      />
+
+      <DocumentsSection
+        v-else-if="section === 'documents' && partiesFile.data.value"
+        :data="partiesFile.data.value"
         :document-tags="documentTagsFile.data.value"
       />
     </template>

@@ -87,7 +87,7 @@ const router = createRouter({
       component: DocumentsArchiveView,
       meta: {
         level: 1,
-        title: "Documents Archives",
+        title: "Documents",
         requiresDrive: true,
       },
     },

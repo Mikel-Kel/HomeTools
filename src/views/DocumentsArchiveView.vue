@@ -1922,7 +1922,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="sticky-stack">
     <PageHeader
-      title="Documents archives"
+      title="Documents"
       icon="bookshelf"
     />
 

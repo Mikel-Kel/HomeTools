@@ -57,7 +57,10 @@ const {
       :key="item.path"
       :to="item.path"
       class="rail-item"
-      :class="{ active: isNavigationItemActive(item, route.path) }"
+      :class="{
+        active: isNavigationItemActive(item, route.path),
+        'group-start': item.groupStart,
+      }"
       :title="item.label"
       :aria-label="item.label"
     >
@@ -115,11 +118,12 @@ const {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
 
   width: var(--nav-rail-width);
-  padding: 12px 0;
+  padding: 14px 0;
   box-sizing: border-box;
+  overflow-y: auto;
 
   border-right: 1px solid var(--border);
 
@@ -146,6 +150,10 @@ const {
   transition: background 0.15s ease;
 }
 
+.rail-item.group-start {
+  margin-top: 14px;
+}
+
 .rail-item.small {
   width: 38px;
   height: 38px;
@@ -163,7 +171,7 @@ const {
 .rail-separator {
   width: 28px;
   height: 1px;
-  margin: 4px 0;
+  margin: 2px 0;
 
   background: var(--border);
 }

@@ -16,6 +16,9 @@ export interface NavigationItem {
 
   /* Pages détail rattachées à cette entrée. */
   related?: string[];
+
+  /* Début d'un groupe : écart supplémentaire avant l'entrée. */
+  groupStart?: boolean;
 }
 
 export function isNavigationItemActive(
@@ -30,9 +33,9 @@ export function isNavigationItemActive(
 export const NAVIGATION_ITEMS: NavigationItem[] = [
   { path: "/spending", label: "Spending", icon: "spending", related: ["/allocation"] },
   { path: "/follow-up", label: "Follow-up", icon: "followup" },
+  { path: "/documentsArchive", label: "Documents", icon: "bookshelf" },
   { path: "/budget", label: "Budget", icon: "budget" },
   { path: "/indicators", label: "Indicators", icon: "indicators" },
-  { path: "/documentsArchive", label: "Archives", icon: "bookshelf" },
-  { path: "/master-data", label: "Master data", icon: "process" },
+  { path: "/master-data", label: "Master data", icon: "process", groupStart: true },
   { path: "/housekeeping", label: "Housekeeping", icon: "pages_warning", health: true },
 ];
