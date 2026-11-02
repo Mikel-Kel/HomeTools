@@ -1533,9 +1533,6 @@ async function saveClassification(
         tocid:
           updated.tocid,
 
-        googleFileId:
-          updated.googleFileId,
-
         newPhysicalName,
 
         folder:

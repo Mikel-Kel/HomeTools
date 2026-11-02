@@ -1,14 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed } from "vue";
 import { useRoute } from "vue-router";
 import AppNavRail from "@/components/AppNavRail.vue";
 import AppDialog from "@/components/ui/AppDialog.vue";
 import AppUnavailable from "@/components/AppUnavailable.vue";
-import { initGoogleAPI } from "@/services/google/googleInit";
-import { useStorageBackend } from "@/composables/useStorageBackend";
-import { log } from "./utils/logger";
-
-const { backend } = useStorageBackend();
 
 const route = useRoute();
 
@@ -21,25 +16,6 @@ const showNavRail = computed(() =>
   route.name !== "home" &&
   route.name !== "selectFolder"
 );
-
-/* =========================
-   Init
-========================= */
-
-onMounted(async () => {
-
-  if (backend.value !== "GOOGLE_DRIVE") {
-    log.info("LOCAL_DRIVE mode → Google API skipped");
-    return;
-  }
-
-  try {
-    await initGoogleAPI();
-  } catch (e) {
-    log.error("[Google API init failed]", e);
-  }
-
-});
 </script>
 
 <template>

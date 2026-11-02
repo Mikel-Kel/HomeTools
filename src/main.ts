@@ -4,7 +4,6 @@ import router from "./router";
 import "@/assets/theme.css";
 
 import { restoreLocalDirectory } from "@/services/local/localDirectory";
-import { initGoogleAPI, handleRedirectToken } from "@/services/google/googleInit";
 
 import { log } from "./utils/logger";
 import { startVersionWatch } from "@/services/version/versionGuard";
@@ -44,18 +43,6 @@ async function bootstrap() {
     log.error("[unhandledrejection]", e.reason, e);
   });
 
-  /* ============================
-     Étape 1 — Init Google (gapi)
-     ➜ PAS d'auth, PAS de popup
-  ============================ */
-
-  try {
-    await initGoogleAPI();
-  } catch (e) {
-    log.warn("[Google] init failed", e);
-  }
-  handleRedirectToken()
-  
   /* ============================
      Lancement de l'app Vue
   ============================ */

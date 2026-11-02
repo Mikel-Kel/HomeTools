@@ -6,7 +6,6 @@ import { detectDevice } from "@/utils/deviceDetection";
 
 export type StorageBackend =
   | "LOCAL_DRIVE"
-  | "GOOGLE_DRIVE"
   | "OBJECT_STORAGE";
 
 /* =========================
@@ -18,7 +17,6 @@ export const STORAGE_BACKEND_KEY =
 
 export const STORAGE_BACKENDS: StorageBackend[] = [
   "LOCAL_DRIVE",
-  "GOOGLE_DRIVE",
   "OBJECT_STORAGE",
 ];
 
@@ -49,7 +47,7 @@ export function getDefaultStorageBackend():
   /*
     Mac:
     - conserve le fonctionnement local actuel
-    - l'utilisateur pourra sélectionner S3 ou Drive
+    - l'utilisateur pourra sélectionner S3
       dans AuthenticationView
 
     iPad / autres appareils:
@@ -75,9 +73,21 @@ export function getStoredStorageBackend():
         STORAGE_BACKEND_KEY
       );
 
-    return isStorageBackend(stored)
-      ? stored
-      : null;
+    if (isStorageBackend(stored)) {
+      return stored;
+    }
+
+    /*
+      Valeur d'un backend retiré (GOOGLE_DRIVE) :
+      effacée, l'appareil reprend son défaut.
+    */
+    if (stored !== null) {
+      window.localStorage.removeItem(
+        STORAGE_BACKEND_KEY
+      );
+    }
+
+    return null;
 
   } catch {
     return null;

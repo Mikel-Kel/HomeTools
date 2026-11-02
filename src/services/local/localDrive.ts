@@ -1,5 +1,5 @@
 import { getLocalDirectory } from "@/services/local/localDirectory";
-import type { DriveItem } from "@/services/google/googleDrive";
+import type { DriveItem } from "@/services/driveAdapter";
 
 
 /* =========================================================
@@ -79,7 +79,7 @@ export async function deleteLocalFile(
     await dir.removeEntry(filename);
   }
   catch (err: any) {
-    // fichier absent → OK (même logique que Google)
+    // fichier absent → OK
     if (err?.name === "NotFoundError") {
       return;
     }

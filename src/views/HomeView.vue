@@ -60,9 +60,6 @@ const storageStatusLabel =
       case "LOCAL_DRIVE":
         return "App ready (local)";
 
-      case "GOOGLE_DRIVE":
-        return "App ready (Google Drive)";
-
       case "OBJECT_STORAGE":
         return "App ready (Object Storage)";
 

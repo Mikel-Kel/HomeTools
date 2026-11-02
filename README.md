@@ -1,5 +1,16 @@
-# Vue 3 + TypeScript + Vite
+# HomeTools
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+PWA personnelle de gestion financière et d'archives documentaires (Vue 3, TypeScript, Vite),
+publiée sur GitHub Pages : https://mikel-kel.github.io/HomeTools/
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## Stockage
+
+- **Local Drive** : dossier HomeTools du Mac, via la File System Access API (Chrome ou Edge sur macOS).
+- **Object Storage** : bucket S3 Hetzner, toujours via le proxy du Mac (Mac et iPad).
+
+## Développement
+
+- `npm run dev` : serveur local sur http://localhost:5173
+- `npm run build` : type-check (`vue-tsc`) puis build de production
+
+La configuration du proxy se trouve dans `.env.local` (non versionné). Toute variable `VITE_*` est publiée en clair dans le bundle.

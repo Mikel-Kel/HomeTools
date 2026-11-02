@@ -4,7 +4,6 @@ import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
 
-import { useDrive } from "@/composables/useDrive";
 import { useStorageBackend } from "@/composables/useStorageBackend";
 
 import type {
@@ -59,11 +58,6 @@ const backendOptions = computed<BackendOption[]>(() => [
     disabled: !isMac.value,
   },
   {
-    id: "GOOGLE_DRIVE",
-    label: "Google Drive",
-    description: "Use the current Google Drive backend.",
-  },
-  {
     id: "OBJECT_STORAGE",
     label: "Object Storage",
     description: "Use Hetzner Object Storage through S3.",
@@ -72,10 +66,6 @@ const backendOptions = computed<BackendOption[]>(() => [
 
 const isLocalDrive = computed(() =>
   backend.value === "LOCAL_DRIVE"
-);
-
-const isGoogleDrive = computed(() =>
-  backend.value === "GOOGLE_DRIVE"
 );
 
 const isObjectStorage = computed(() =>
@@ -122,40 +112,6 @@ function handleUseSelectedLocalDirectory() {
   if (!getLocalDirectory()) return;
 
   router.push({ name: "home" });
-}
-
-/* =========================
-   Google Drive session
-========================= */
-
-const {
-  connect,
-  driveStatus,
-  driveBusy,
-  driveError,
-} = useDrive();
-
-const isConnected = computed(
-  () => driveStatus.value === "CONNECTED"
-);
-
-const isExpired = computed(
-  () => driveStatus.value === "EXPIRED"
-);
-
-async function handleConnect() {
-  if (driveBusy.value) return;
-
-  try {
-    await connect();
-
-    if (driveStatus.value === "CONNECTED") {
-      router.push({ name: "home" });
-    }
-
-  } catch (err) {
-    console.error(err);
-  }
 }
 
 /* =========================
@@ -261,47 +217,6 @@ function handleObjectStorageContinue() {
     </section>
 
     <!-- =========================
-         Google Drive
-    ========================== -->
-
-    <section
-      v-else-if="isGoogleDrive"
-      class="connection-section"
-    >
-      <h2>Google Drive</h2>
-
-      <p>
-        {{
-          isExpired
-            ? "Your Drive session has expired. Please reconnect."
-            : "Connect your Google account to enable Drive features."
-        }}
-      </p>
-
-      <button
-        @click="handleConnect"
-        :disabled="driveBusy || isConnected"
-      >
-        {{
-          isConnected
-            ? "Drive connected"
-            : "Connect Google Drive"
-        }}
-      </button>
-
-      <p v-if="driveBusy">
-        Connecting…
-      </p>
-
-      <p
-        v-if="driveError && !isExpired"
-        class="error"
-      >
-        {{ driveError }}
-      </p>
-    </section>
-
-    <!-- =========================
          Object Storage
     ========================== -->
 
@@ -362,7 +277,7 @@ h2 {
 .backend-options {
   display: grid;
   grid-template-columns: repeat(
-    3,
+    2,
     minmax(0, 1fr)
   );
   gap: 0.75rem;
@@ -476,12 +391,6 @@ button:disabled {
   margin-top: 0.75rem;
   color: var(--positive);
   font-weight: 600;
-}
-
-.error {
-  margin-top: 0.75rem;
-  color: var(--negative);
-  font-size: var(--font-size-sm);
 }
 
 /* =========================================================

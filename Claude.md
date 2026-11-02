@@ -11,7 +11,7 @@ Repos liés : backend AppleScript dans `../Backend`, proxy Flask dans `../hometo
 - « PWA » = manifest + balises meta uniquement : **il n'y a pas de service worker**, donc aucun cache applicatif.
 - Déployée sur GitHub Pages : `https://mikel-kel.github.io/HomeTools/`
 - **Le repo est public** (GitHub Pages ne fonctionne plus en privé) → aucun secret dans le code ni dans le build.
-  - `.env` est versionné (identifiants Google côté client, publics par nature) ; `.env.local` est ignoré (URL et clé du proxy).
+  - Pas de `.env` versionné ; `.env.local` est ignoré (URL et clé du proxy).
   - Toute variable `VITE_*` finit en clair dans le bundle public.
 - Commandes : `npm run dev` (http://localhost:5173), `npm run build` (`vue-tsc -b && vite build`). Pas de tests ni de lint.
   Le type-check utilise `tsconfig.json` (avec `noUnusedLocals` / `noUnusedParameters` : tout code inutilisé fait échouer le build).
@@ -42,12 +42,12 @@ après chaque navigation, au retour au premier plan et toutes les 30 min (au plu
 
 ## Architecture
 
-- Trois backends de stockage, choisis dans `AuthenticationView.vue` et mémorisés en localStorage
+- Deux backends de stockage, choisis dans `AuthenticationView.vue` et mémorisés en localStorage
   (défaut : Local Drive sur Mac, Object Storage ailleurs). Tout accès aux données passe par `src/services/driveAdapter.ts`,
-  qui aiguille selon le backend actif.
+  qui aiguille selon le backend actif. Le mode Google Drive a été retiré : une valeur `GOOGLE_DRIVE` encore
+  mémorisée est effacée et l'appareil reprend son défaut.
   - **Local Drive** : File System Access API du navigateur (Chrome/Edge sur Mac uniquement, pas Safari), handle du dossier
     persisté en IndexedDB. Ne passe pas par le proxy. Ne résout qu'un niveau de dossier à la fois : pas de `/` dans un nom de fichier.
-  - **Google Drive** : backend historique (Google Identity Services + API Drive).
   - **Object Storage** : Hetzner S3, bucket `hometools-prod`, toujours via le proxy.
 - Proxy Flask local, exposé via Tailscale : `https://airmike.tail73b300.ts.net`, authentification par header `X-Proxy-Key`.
   Hetzner refuse les requêtes SigV4 signées par le navigateur (CORS) : ne jamais réintroduire d'accès S3 direct.
@@ -75,7 +75,7 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 
 - `settings/AppParameters.json` : champ `version`, écrit au déploiement, lu au démarrage de l'app.
 - `settings/appStatus.json` : maintenance (`{ version, maintenance, message, since }`), écrit par la section « HomeTools › Maintenance »
-  de myTooling sur les trois backends ; contrat `../Backend/docs/app-status-contract.md`. Maintenance active, ou proxy
+  de myTooling ; contrat `../Backend/docs/app-status-contract.md`. Maintenance active, ou proxy
   injoignable en Object Storage : écran plein `AppUnavailable.vue` (`src/services/appStatus/`). Local Drive jamais bloqué.
 - `diagnostics/homeMessages.json` : `{ "messages": [{ id, level, text }] }`, `level` = `ok` | `warning` | `error`, du plus récent
   au plus ancien. Pastilles de `HomeView.vue`. Réinitialisé et alimenté chaque nuit par `housekeeping.applescript`.
@@ -121,8 +121,6 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 
 - `VITE_PROXY_API_KEY` est en clair dans le bundle public. Objectif : la retirer du build et la stocker dans un coffre chiffré
   (PBKDF2 / AES-GCM, verrouillage après inactivité), saisie une fois par appareil. **Ce coffre reste à construire.**
-- Google Drive : `listGoogleFilesInFolder` ne gère pas la pagination et `findGoogleFileByName` prend le premier résultat sans tri ;
-  un fichier homonyme en double (create au lieu d'update) est donc possible, et lu de façon arbitraire.
 
 ## Règles de travail
 

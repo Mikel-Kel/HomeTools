@@ -3,7 +3,6 @@ import { createRouter, createWebHashHistory } from "vue-router";
 import { getLocalDirectory } from "@/services/local/localDirectory";
 import { detectStorageBackend } from "@/utils/storageBackend";
 
-import { useDrive } from "@/composables/useDrive";
 import { checkAppVersion } from "@/services/version/versionGuard";
 import { checkAppStatus } from "@/services/appStatus/appStatusGuard";
 
@@ -153,7 +152,7 @@ const router = createRouter({
    BEFORE — Access control
 ========================= */
 
-router.beforeEach(async (to, _from, next) => {
+router.beforeEach((to, _from, next) => {
   document.title =
     (to.meta?.title as string) ??
     "HomeTools";
@@ -197,72 +196,14 @@ router.beforeEach(async (to, _from, next) => {
      OBJECT STORAGE MODE
   ========================= */
 
-  if (
-    backend ===
-    "OBJECT_STORAGE"
-  ) {
-    /*
-      La navigation est autorisée.
+  /*
+    La navigation est autorisée.
 
-      La validité de la configuration S3
-      sera contrôlée par l'adaptateur lors
-      du premier accès réel.
-    */
-    return next();
-  }
-
-  /* =========================
-     GOOGLE DRIVE MODE
-  ========================= */
-
-  const drive = useDrive();
-
-  if (
-    drive.driveStatus.value ===
-      "CONNECTED" &&
-    drive.driveState.value
-  ) {
-    return next();
-  }
-
-  if (
-    drive.driveStatus.value ===
-    "EXPIRED"
-  ) {
-    return next({
-      name: "authentication",
-    });
-  }
-
-  try {
-    await drive.connect();
-
-    if (
-      drive.driveStatus.value ===
-        "CONNECTED" &&
-      drive.driveState.value
-    ) {
-      return next();
-    }
-
-  } catch {
-    // La redirection ci-dessous
-    // gère le cas d'échec.
-  }
-
-  console.warn(
-    "🚫 Navigation blocked — Storage backend not ready",
-    {
-      to: to.fullPath,
-      backend,
-      driveStatus:
-        drive.driveStatus.value,
-    }
-  );
-
-  return next({
-    name: "authentication",
-  });
+    La validité de la configuration S3
+    sera contrôlée par l'adaptateur lors
+    du premier accès réel.
+  */
+  return next();
 });
 
 /* =========================

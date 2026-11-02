@@ -63,14 +63,7 @@ export function useDriveWatcher({
         await onChanged();
       }
 
-    } catch (err: any) {
-
-      if (
-        err?.message === "DRIVE_UNAUTHORIZED" ||
-        err?.message === "DRIVE_UNAVAILABLE"
-      ) {
-        return;
-      }
+    } catch (err) {
 
       console.warn("DriveWatcher error", err);
 

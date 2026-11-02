@@ -112,7 +112,7 @@ export function readArchiveIndex(
        "dtaDate": "2026-11-13" | null, "info1": "…", "info2": "…",
        "indicatorDTA": 1, "physicalName": "2026/Factures/P01364/…",
        "partyID": 1364, "refAmount": 9473.88 | null,
-       "googleFileId": "…", "tagIDs": [0, 1] }
+       "tagIDs": [0, 1] }
 
    Les groupes d’une année portent le libellé du dossier
    (« Bills », « Tourism »…) : ils sont ramenés au nom du
@@ -131,7 +131,6 @@ export interface ArchiveItem {
   physicalName: string;
   partyID: number;
   refAmount: number | null;
-  googleFileId: string;
   tagIDs: number[];
 
   /*
@@ -175,9 +174,6 @@ function readArchiveItem(
 
     refAmount:
       asNullableNumber(item.refAmount),
-
-    googleFileId:
-      asString(item.googleFileId),
 
     tagIDs:
       asArray(item.tagIDs)

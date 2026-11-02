@@ -24,8 +24,8 @@ import {
    les minutes tant que l'app est bloquée. Au plus un
    contrôle par minute, sauf « Retry » et changement de
    stockage. Une autre erreur de
-   lecture (Google pas encore connecté…) ne change rien et
-   est réessayée au déclencheur suivant.
+   lecture ne change rien et est réessayée au déclencheur
+   suivant.
 ========================= */
 
 export type AppBlock =
