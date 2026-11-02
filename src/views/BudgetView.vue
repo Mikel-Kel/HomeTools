@@ -13,6 +13,7 @@ import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import BudgetLineSheet from "@/components/budget/BudgetLineSheet.vue";
+import BudgetAddLineSheet, { type BudgetAddLineGroup } from "@/components/budget/BudgetAddLineSheet.vue";
 import MemoTooltip from "@/components/budget/MemoTooltip.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
@@ -47,8 +48,9 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
    « Open » : montants encore à confirmer. Ces lignes sont
    mises en évidence ; « Open only » ne montre qu'elles.
 
-   Saisie (fiches, nouvelle année) réservée au Mac ; les
-   autres appareils consultent, mémos compris.
+   Saisie sur tous les appareils : fiche d'une ligne, ajout
+   d'une sous-catégorie active absente de l'année
+   (« + Line »), création de l'année suivante.
 ========================= */
 
 type NatureFilter =
@@ -84,9 +86,6 @@ const NEW_YEAR_FROM_MONTH = 9;
 
 const NO_ANSWER_DELAY_MS =
   2 * 60 * 1000;
-
-const readonly =
-  detectDevice() !== "Mac";
 
 const natureOptions: {
   value: NatureFilter;
@@ -247,7 +246,6 @@ const newYearWaiting =
 
 const canCreateNewYear =
   computed(() =>
-    !readonly &&
     latestYear.value !== null &&
     Date.now() >=
       new Date(
@@ -368,6 +366,7 @@ const subCategoryIndex =
         nature: CategoryNature;
         label: string;
         seq: number;
+        closed: boolean;
       }>();
 
     for (const category of categoriesStore.categories.value) {
@@ -381,6 +380,7 @@ const subCategoryIndex =
             nature: category.nature,
             label: sub.label,
             seq: sub.seq,
+            closed: sub.status !== "A",
           }
         );
       }
@@ -559,6 +559,83 @@ function openLine(
   editedLine.value = {
     row,
     categoryLabel: group.label,
+  };
+}
+
+/* =========================
+   Ajout d'une ligne
+
+   Sous-catégories actives sans ligne dans l'année, selon
+   les filtres de nature et de catégorie. La fiche s'ouvre
+   avec 12 mois à 0, Open et sans mémo.
+========================= */
+
+const addingLine =
+  ref(false);
+
+const missingGroups =
+  computed<BudgetAddLineGroup[]>(() => {
+    const present =
+      new Set(
+        yearLines.value.map(
+          line => line.subCategoryId
+        )
+      );
+
+    return [...categoriesStore.categories.value]
+      .filter(
+        category =>
+          (nature.value === "-" || category.nature === nature.value) &&
+          (categoryId.value === null || category.id === categoryId.value)
+      )
+      .sort((a, b) => a.seq - b.seq)
+      .map(category => ({
+        categoryId: category.id,
+        label: category.label,
+        subCategories: category.subcategories
+          .filter(
+            sub =>
+              sub.status === "A" &&
+              !present.has(sub.id)
+          )
+          .sort((a, b) => a.seq - b.seq)
+          .map(sub => ({
+            id: sub.id,
+            label: sub.label,
+          })),
+      }))
+      .filter(group => group.subCategories.length);
+  });
+
+function addLine(
+  subCategoryId: number
+) {
+  const meta =
+    subCategoryIndex.value.get(
+      subCategoryId
+    );
+
+  if (!meta) {
+    return;
+  }
+
+  addingLine.value =
+    false;
+
+  editedLine.value = {
+    row: {
+      line: {
+        categoryId: meta.categoryId,
+        subCategoryId,
+        months: Array(12).fill(0),
+        open: true,
+        memo: null,
+      },
+      label: meta.label,
+      seq: meta.seq,
+      total: 0,
+    },
+    categoryLabel: meta.categoryLabel,
   };
 }
 
@@ -764,6 +841,10 @@ watch(
           Open only
         </PillButton>
 
+        <PillButton @click="addingLine = true">
+          + Line
+        </PillButton>
+
         <PillButton
           v-if="canCreateNewYear && latestYear !== null"
           @click="createNewYear"
@@ -913,7 +994,7 @@ watch(
             :key="row.line.subCategoryId"
             class="line-row"
             :class="{ 'to-confirm': row.line.open }"
-            :title="readonly ? 'View this line' : 'Edit this line'"
+            title="Edit this line"
             @click="openLine(row, group)"
           >
             <th
@@ -979,8 +1060,16 @@ watch(
     :label="editedLine.row.label"
     :category-label="editedLine.categoryLabel"
     :nature-label="natureLabelOf(editedLine.row.line)"
-    :readonly="readonly"
+    :closed="subCategoryIndex.get(editedLine.row.line.subCategoryId)?.closed ?? false"
     @close="editedLine = null"
+  />
+
+  <BudgetAddLineSheet
+    v-if="addingLine"
+    :year="year"
+    :groups="missingGroups"
+    @pick="addLine"
+    @close="addingLine = false"
   />
 </template>
 

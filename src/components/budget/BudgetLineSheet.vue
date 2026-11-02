@@ -9,7 +9,6 @@ import {
 
 import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
-import StatusPill from "@/components/ui/StatusPill.vue";
 
 import { useEventRequest } from "@/composables/useEventRequest";
 
@@ -31,10 +30,15 @@ import { detectDevice } from "@/utils/deviceDetection";
                     "months": [12 entiers ≥ 0],
                     "open", "memo", "source" } }
    puis se ferme une fois la demande traitée (budget.json
-   republié).
+   republié). Une sous-catégorie absente du budget de
+   l'année s'ouvre avec 12 mois à 0, Open et sans mémo ;
+   le Mac crée sa ligne au premier enregistrement.
 
-   readonly : consultation seule (iPad, iPhone) ; la
-   saisie est réservée au Mac.
+   Sous-catégorie clôturée, année en cours : la ligne peut
+   être supprimée (montants, statut et mémo de l'année) :
+     events/PWA-BUD_<AAAAMMJJHHMMSS>_<SubCategoryID>_DEL.json
+     { "eventType": "BUDGET_LINE_DELETED",
+       "payload": { "year", "subCategoryId", "source" } }
 ========================= */
 
 const props = defineProps<{
@@ -43,7 +47,9 @@ const props = defineProps<{
   label: string;
   categoryLabel: string;
   natureLabel: string;
-  readonly?: boolean;
+
+  /* Sous-catégorie clôturée (statut autre que « A »). */
+  closed: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -179,13 +185,15 @@ const waitingElsewhere =
       name =>
         name.endsWith(
           `_${props.line.subCategoryId}.json`
+        ) ||
+        name.endsWith(
+          `_${props.line.subCategoryId}_DEL.json`
         )
     )
   );
 
 const canSave =
   computed(() =>
-    !props.readonly &&
     changed.value &&
     !updateRequest.inProgress.value &&
     !waitingElsewhere.value
@@ -195,6 +203,9 @@ async function save() {
   if (!canSave.value) {
     return;
   }
+
+  deleting.value =
+    false;
 
   await updateRequest.send(
     {
@@ -211,6 +222,50 @@ async function save() {
       },
     },
     String(props.line.subCategoryId)
+  );
+}
+
+/* =========================
+   Suppression (sous-catégorie clôturée, année en cours)
+========================= */
+
+const canDelete =
+  props.closed &&
+  props.year === new Date().getFullYear();
+
+const deleting =
+  ref(false);
+
+async function remove() {
+  if (
+    !canDelete ||
+    updateRequest.inProgress.value ||
+    waitingElsewhere.value ||
+    !(await confirmDialog({
+      title: `Delete the ${props.year} budget of "${props.label}"?`,
+      message: "Its monthly amounts, status and memo for this year are removed.",
+      confirmLabel: "Delete",
+      destructive: true,
+    }))
+  ) {
+    return;
+  }
+
+  deleting.value =
+    true;
+
+  await updateRequest.send(
+    {
+      eventType: "BUDGET_LINE_DELETED",
+      version: 1,
+      timestamp: new Date().toISOString(),
+      payload: {
+        year: props.year,
+        subCategoryId: props.line.subCategoryId,
+        source: detectDevice(),
+      },
+    },
+    `${props.line.subCategoryId}_DEL`
   );
 }
 
@@ -240,7 +295,9 @@ const requestMessage =
           : "Sent — waiting for the Mac…";
 
       case "started":
-        return "Saving on the Mac…";
+        return deleting.value
+          ? "Deleting on the Mac…"
+          : "Saving on the Mac…";
 
       case "error":
         return `Rejected: ${current.message ?? "unknown error"}`;
@@ -256,7 +313,6 @@ const requestMessage =
 
 async function close() {
   if (
-    !props.readonly &&
     changed.value &&
     !updateRequest.inProgress.value &&
     !(await confirmDialog({
@@ -312,7 +368,7 @@ onBeforeUnmount(() => {
         <h2>{{ label }}</h2>
 
         <div class="sheet-subtitle">
-          {{ categoryLabel }} · {{ natureLabel }} · {{ year }}
+          {{ categoryLabel }} · {{ natureLabel }} · {{ year }}{{ closed ? " · Closed" : "" }}
         </div>
       </div>
 
@@ -332,7 +388,6 @@ onBeforeUnmount(() => {
       <h3>Monthly amounts</h3>
 
       <PillButton
-        v-if="!readonly"
         :disabled="updateRequest.inProgress.value"
         @click="copyJanuary"
       >
@@ -353,7 +408,6 @@ onBeforeUnmount(() => {
           type="text"
           inputmode="numeric"
           placeholder="0"
-          :readonly="readonly"
           :disabled="updateRequest.inProgress.value"
           @blur="normalizeMonth(index)"
         />
@@ -369,15 +423,7 @@ onBeforeUnmount(() => {
     <div class="field-row">
       <h3>Status</h3>
 
-      <StatusPill
-        v-if="readonly"
-        :tone="status === 'open' ? 'warning' : 'positive'"
-      >
-        {{ status === "open" ? "Open (to confirm)" : "Confirmed" }}
-      </StatusPill>
-
       <SegmentedControl
-        v-else
         v-model="status"
         :options="statusOptions"
       />
@@ -388,13 +434,7 @@ onBeforeUnmount(() => {
     <label class="memo-field">
       <h3>Memo {{ year }}</h3>
 
-      <pre
-        v-if="readonly"
-        class="memo-text"
-      >{{ memo || "No memo." }}</pre>
-
       <textarea
-        v-else
         v-model="memo"
         rows="8"
         :disabled="updateRequest.inProgress.value"
@@ -403,23 +443,16 @@ onBeforeUnmount(() => {
 
     <!-- Actions -->
 
-    <footer
-      v-if="readonly"
-      class="sheet-footer"
-    >
-      <span class="request-message">
-        Read-only on this device — edit on the Mac.
-      </span>
-
-      <PillButton @click="close">
-        Close
+    <footer class="sheet-footer">
+      <PillButton
+        v-if="canDelete"
+        variant="danger"
+        :disabled="updateRequest.inProgress.value || waitingElsewhere"
+        @click="remove"
+      >
+        Delete
       </PillButton>
-    </footer>
 
-    <footer
-      v-else
-      class="sheet-footer"
-    >
       <span
         class="request-message"
         :class="updateRequest.request.value?.phase"
@@ -596,7 +629,6 @@ h3 {
   Police à chasse fixe : les mémos alignent des montants
   avec des espaces.
 */
-.memo-text,
 .memo-field textarea {
   box-sizing: border-box;
   width: 100%;
@@ -611,15 +643,6 @@ h3 {
   line-height: 1.4;
 
   resize: vertical;
-}
-
-.memo-text {
-  margin: 0;
-
-  background: var(--surface-soft);
-  color: var(--text);
-
-  white-space: pre-wrap;
 }
 
 /* =========================
