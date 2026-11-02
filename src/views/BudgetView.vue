@@ -534,6 +534,35 @@ const groups =
   );
 
 /* =========================
+   Catégories repliées
+
+   Un clic sur la ligne d'une catégorie masque ou affiche
+   ses sous-catégories ; conservé pendant la session.
+========================= */
+
+const collapsedCategories =
+  usePersistentRef<number[]>("budget.collapsedCategories", []);
+
+function isCollapsed(
+  group: BudgetGroup
+): boolean {
+  return collapsedCategories.value.includes(
+    group.categoryId
+  );
+}
+
+function toggleCategory(
+  group: BudgetGroup
+) {
+  collapsedCategories.value =
+    isCollapsed(group)
+      ? collapsedCategories.value.filter(
+          id => id !== group.categoryId
+        )
+      : [...collapsedCategories.value, group.categoryId];
+}
+
+/* =========================
    Line sheet
 ========================= */
 
@@ -969,11 +998,20 @@ watch(
           v-for="group in groups"
           :key="group.categoryId"
         >
-          <tr class="category-row">
+          <tr
+            class="category-row"
+            :title="isCollapsed(group) ? 'Show the sub-categories' : 'Hide the sub-categories'"
+            :aria-expanded="!isCollapsed(group)"
+            @click="toggleCategory(group)"
+          >
             <th
               class="label-cell"
               colspan="2"
             >
+              <span class="toggle-arrow">
+                {{ isCollapsed(group) ? "►" : "▼" }}
+              </span>
+
               {{ group.label }}
             </th>
 
@@ -990,7 +1028,7 @@ watch(
           </tr>
 
           <tr
-            v-for="row in group.rows"
+            v-for="row in isCollapsed(group) ? [] : group.rows"
             :key="row.line.subCategoryId"
             class="line-row"
             :class="{ 'to-confirm': row.line.open }"
@@ -1222,6 +1260,23 @@ watch(
   color: var(--text);
 
   font-weight: 700;
+}
+
+.category-row {
+  cursor: pointer;
+}
+
+.category-row:hover th,
+.category-row:hover td {
+  background: color-mix(in srgb, var(--primary-soft) 60%, var(--bg-soft));
+}
+
+.toggle-arrow {
+  display: inline-block;
+  width: 1.1em;
+
+  color: var(--text-soft);
+  font-size: 0.75em;
 }
 
 .line-row {
