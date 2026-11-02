@@ -3,7 +3,7 @@
 Application personnelle de gestion financière et d'archives documentaires.
 Développeur unique : Michel. Utilisée depuis un Mac (MacBook Air M1, `airmike`) et des iPads.
 
-Repos liés : backend AppleScript dans `../Backend`, proxy Flask dans `/Users/Michel/hometools-proxy`. Chacun a son propre CLAUDE.md.
+Repos liés : backend AppleScript dans `../Backend`, proxy Flask dans `../hometools-proxy`. Chacun a son propre CLAUDE.md.
 
 ## Stack
 
@@ -20,18 +20,20 @@ Repos liés : backend AppleScript dans `../Backend`, proxy Flask dans `/Users/Mi
 
 ## Commit et déploiement
 
-Michel commite et déploie avec son outillage AppleScript, dont les sources sont dans le repo Backend
-(`../Backend/scripts/apple/src/tooling/`, détails dans le CLAUDE.md du Backend). Ne jamais le lancer depuis une session
-(dialogues bloquants) : préparer les modifications, puis indiquer à Michel quelle action lancer dans `GitWorkflow`.
+Michel commite et déploie avec l'app myTooling (repo `../myTooling`, détails dans son CLAUDE.md). Ne pas commiter
+depuis une session : préparer les modifications, puis indiquer à Michel quelle action lancer dans myTooling (projet HomeTools).
 
-Ce que font les actions de `GitWorkflow` pour ce repo :
+Ce que font les actions de myTooling pour ce repo :
 
-- **Git commit** : bump de version à partir du dernier tag git, `npm version`, `git add -A`, commit `Release vX.Y.Z – …`,
-  tag annoté, push. **Aucun build** à cette étape, et `git add -A` publie tout fichier non ignoré présent dans le dossier.
-- **Deploy to GitHub Pages** : `npm run build`, `npm run deploy` (`gh-pages -d dist`), puis écrit la version dans
-  `settings/AppParameters.json` de la base HomeTools.
-- **Clean project** : supprime `dist`, les caches Vite et les `.js` parasites de `src/`.
-- **Git Restore** : `git reset --hard <tag>` + `git clean -fd` (destructif).
+- **Commit + Tag** : depuis `main` uniquement, `git fetch` et contrôles, **`npm run build` de vérification** (un échec bloque
+  la release), `npm version`, `git add -A`, commit `Release vX.Y.Z – …`, tag annoté, push du commit et du seul nouveau tag.
+  `git add -A` publie tout fichier non ignoré présent dans le dossier. Option « Deliver afterwards » pour enchaîner la livraison.
+- **Deliver** : seulement si HEAD est exactement le dernier tag, commité et poussé ; `npm run build`, `npm run deploy`
+  (`gh-pages -d dist`), puis écrit la version dans `settings/AppParameters.json` de la base HomeTools.
+- **Clean** : aperçu puis mise à la corbeille de `dist`, des caches Vite et TypeScript et des `.js` générés dans `src/` ;
+  option « Deep clean » (`node_modules` puis `npm ci`).
+- **Restore** : `git reset --hard <tag>` + `git clean -fd`, après sauvegarde de HEAD dans une branche `backup/restore-<date>`
+  et des modifications locales dans un stash.
 
 Version : le tag git fait foi ; `package.json` est injecté dans l'app (`__APP_VERSION__`) ; l'app se déclare incompatible
 si elle est plus ancienne que la version de `AppParameters.json` (`src/services/version/`), contrôlé sur tous les backends
@@ -72,8 +74,8 @@ après chaque navigation, au retour au premier plan et toutes les 30 min (au plu
 Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Backend. Ne pas changer leur format sans modifier les deux côtés.
 
 - `settings/AppParameters.json` : champ `version`, écrit au déploiement, lu au démarrage de l'app.
-- `settings/appStatus.json` : maintenance (`{ version, maintenance, message, since }`), écrit par l'action Maintenance
-  de `GitWorkflow` sur les trois backends ; contrat `../Backend/docs/app-status-contract.md`. Maintenance active, ou proxy
+- `settings/appStatus.json` : maintenance (`{ version, maintenance, message, since }`), écrit par la section « HomeTools › Maintenance »
+  de myTooling sur les trois backends ; contrat `../Backend/docs/app-status-contract.md`. Maintenance active, ou proxy
   injoignable en Object Storage : écran plein `AppUnavailable.vue` (`src/services/appStatus/`). Local Drive jamais bloqué.
 - `diagnostics/homeMessages.json` : `{ "messages": [{ id, level, text }] }`, `level` = `ok` | `warning` | `error`, du plus récent
   au plus ancien. Pastilles de `HomeView.vue`. Réinitialisé et alimenté chaque nuit par `housekeeping.applescript`.
