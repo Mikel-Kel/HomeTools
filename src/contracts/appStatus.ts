@@ -10,7 +10,7 @@ import {
      { "version": 1, "maintenance": true,
        "message": "…", "since": "2026-11-02T14:00:00Z" }
 
-   Écrit par le Mac (GitWorkflow, action Maintenance) ;
+   Écrit par le Mac (app myTooling, section Maintenance) ;
    contrat : ../Backend/docs/app-status-contract.md.
    Fichier absent ou illisible : app disponible.
 ========================= */
