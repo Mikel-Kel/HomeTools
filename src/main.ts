@@ -8,6 +8,7 @@ import { initGoogleAPI, handleRedirectToken } from "@/services/google/googleInit
 
 import { log } from "./utils/logger";
 import { startVersionWatch } from "@/services/version/versionGuard";
+import { startAppStatusWatch } from "@/services/appStatus/appStatusGuard";
 import PageHeader from "@/components/PageHeader.vue";
 
 async function bootstrap() {
@@ -61,6 +62,7 @@ async function bootstrap() {
   app.use(router).mount("#app");
 
   startVersionWatch();
+  startAppStatusWatch();
 }
 
 bootstrap();

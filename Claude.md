@@ -72,6 +72,9 @@ après chaque navigation, au retour au premier plan et toutes les 30 min (au plu
 Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Backend. Ne pas changer leur format sans modifier les deux côtés.
 
 - `settings/AppParameters.json` : champ `version`, écrit au déploiement, lu au démarrage de l'app.
+- `settings/appStatus.json` : maintenance (`{ version, maintenance, message, since }`), écrit par l'action Maintenance
+  de `GitWorkflow` sur les trois backends ; contrat `../Backend/docs/app-status-contract.md`. Maintenance active, ou proxy
+  injoignable en Object Storage : écran plein `AppUnavailable.vue` (`src/services/appStatus/`). Local Drive jamais bloqué.
 - `diagnostics/homeMessages.json` : `{ "messages": [{ id, level, text }] }`, `level` = `ok` | `warning` | `error`, du plus récent
   au plus ancien. Pastilles de `HomeView.vue`. Réinitialisé et alimenté chaque nuit par `housekeeping.applescript`.
 - `diagnostics/housekeepingLogIndex.json` et `diagnostics/housekeepingLog-{date}.json` : journaux affichés par `EventLogView.vue`.

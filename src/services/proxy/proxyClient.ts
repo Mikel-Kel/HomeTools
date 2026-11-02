@@ -23,13 +23,18 @@ const proxyApiKey =
 const DEFAULT_TIMEOUT_MS =
   30_000;
 
+const GATEWAY_ERROR_STATUSES =
+  [502, 503, 504];
+
 export type ProxyErrorKind =
   | "config"
   | "unreachable"
   | "timeout";
 
 /*
-  Échec avant toute réponse HTTP. Une réponse en erreur
+  Échec avant toute réponse HTTP, ou réponse de la
+  passerelle Tailscale sans le proxy derrière (502, 503,
+  504) : « unreachable ». Une autre réponse en erreur
   (404, 500…) est rendue telle quelle : chaque appelant
   sait ce qu'elle signifie pour lui.
 */
@@ -115,8 +120,10 @@ export async function proxyFetch(
       timeoutMs
     );
 
+  let response: Response;
+
   try {
-    return await fetch(
+    response = await fetch(
       buildUrl(path, params),
       {
         method,
@@ -153,4 +160,13 @@ export async function proxyFetch(
   } finally {
     window.clearTimeout(timer);
   }
+
+  if (GATEWAY_ERROR_STATUSES.includes(response.status)) {
+    throw new ProxyError(
+      "unreachable",
+      `Proxy unavailable (${path}): HTTP ${response.status}`
+    );
+  }
+
+  return response;
 }

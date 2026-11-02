@@ -5,6 +5,7 @@ import { detectStorageBackend } from "@/utils/storageBackend";
 
 import { useDrive } from "@/composables/useDrive";
 import { checkAppVersion } from "@/services/version/versionGuard";
+import { checkAppStatus } from "@/services/appStatus/appStatusGuard";
 
 import HomeView from "../views/HomeView.vue";
 import AuthenticationView from "../views/AuthenticationView.vue";
@@ -265,10 +266,11 @@ router.beforeEach(async (to, _from, next) => {
 });
 
 /* =========================
-   AFTER — Version check
+   AFTER — Disponibilité et version
 ========================= */
 
 router.afterEach(() => {
+  void checkAppStatus();
   void checkAppVersion();
 });
 

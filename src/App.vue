@@ -3,6 +3,7 @@ import { computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import AppNavRail from "@/components/AppNavRail.vue";
 import AppDialog from "@/components/ui/AppDialog.vue";
+import AppUnavailable from "@/components/AppUnavailable.vue";
 import { initGoogleAPI } from "@/services/google/googleInit";
 import { useStorageBackend } from "@/composables/useStorageBackend";
 import { log } from "./utils/logger";
@@ -50,6 +51,9 @@ onMounted(async () => {
   >
     <router-view />
   </div>
+
+  <!-- Le choix du stockage reste accessible : passer à un autre backend débloque l'app. -->
+  <AppUnavailable v-if="route.name !== 'authentication'" />
 
   <AppDialog />
 </template>
