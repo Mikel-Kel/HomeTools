@@ -162,13 +162,17 @@ const levelFilter =
 const jobFilter =
   ref<string[]>([]);
 
-const hideRoutine =
-  ref(true);
+const showInfo =
+  ref(false);
 
 /*
-  Lignes de routine, sans intérêt quand tout va bien :
-  enchaînement des événements et publications. Les
-  succès métier (imports, exports) restent affichés.
+  Lignes d’information, masquées par défaut : les lignes
+  INFO (écrites par le housekeeping, nuit et manuel) et les
+  lignes de routine de la journée (enchaînement des
+  événements et publications), sans intérêt quand tout va
+  bien. Les succès métier (imports, exports, synthèses du
+  housekeeping) et l’ouverture d’une exécution restent
+  affichés.
 */
 const ROUTINE_TEXT_PATTERNS = [
   /process completed$/,
@@ -189,15 +193,26 @@ function isProblem(
   );
 }
 
-function isRoutine(
+function isInfoEntry(
   line: HousekeepingLogLine
 ): boolean {
-  return (
-    !isProblem(line) &&
-    ROUTINE_TEXT_PATTERNS.some(
-      pattern =>
-        pattern.test(line.text)
-    )
+  if (isProblem(line)) {
+    return false;
+  }
+
+  if (line.level === "info") {
+    return !(
+      line.job === RUN_JOB &&
+      (
+        RUN_START.night.test(line.text) ||
+        RUN_START.manual.test(line.text)
+      )
+    );
+  }
+
+  return ROUTINE_TEXT_PATTERNS.some(
+    pattern =>
+      pattern.test(line.text)
   );
 }
 
@@ -422,8 +437,8 @@ const visibleLines =
         }
 
         return !(
-          hideRoutine.value &&
-          isRoutine(line)
+          !showInfo.value &&
+          isInfoEntry(line)
         );
       }
     );
@@ -434,14 +449,14 @@ const filtersActive =
     levelFilter.value !== "all" ||
     runFilter.value !== "all" ||
     jobFilter.value.length > 0 ||
-    !hideRoutine.value
+    showInfo.value
   );
 
 function resetFilters() {
   levelFilter.value = "all";
   runFilter.value = "all";
   jobFilter.value = [];
-  hideRoutine.value = true;
+  showInfo.value = false;
 }
 
 /*
@@ -668,13 +683,13 @@ async function goToProblem(
               </PillButton>
             </div>
 
-            <label class="routine-toggle">
+            <label class="info-toggle">
               <input
-                v-model="hideRoutine"
+                v-model="showInfo"
                 type="checkbox"
               />
 
-              Hide routine lines
+              Display info log entries
             </label>
 
             <div
@@ -925,7 +940,7 @@ async function goToProblem(
   opacity: 0.45;
 }
 
-.routine-toggle {
+.info-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
