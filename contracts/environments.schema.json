@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hometools.local/contracts/environments.schema.json",
+  "title": "HomeTools environments.json (contrat 1.x)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "identities", "environments"],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "identities": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^100\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["env", "device", "kind"],
+        "properties": {
+          "env": { "$ref": "#/$defs/envId" },
+          "device": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["mac", "ios"] },
+          "isServer": { "type": "boolean", "default": false }
+        }
+      }
+    },
+    "environments": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/envId" },
+      "additionalProperties": { "$ref": "#/$defs/environment" }
+    }
+  },
+  "$defs": {
+    "envId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}$"
+    },
+    "absPath": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "enabled", "baseDir", "appParameters", "mysql", "s3", "events", "capabilities", "jobs"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean" },
+        "baseDir": { "$ref": "#/$defs/absPath" },
+        "appParameters": { "type": "string", "pattern": "^[^/]" },
+        "mysql": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema", "user"],
+          "properties": {
+            "schema": { "type": "string", "minLength": 1 },
+            "user": { "type": "string", "minLength": 1 }
+          }
+        },
+        "s3": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dataBucket", "archivesBucket", "prefix"],
+          "properties": {
+            "dataBucket": { "type": "string", "minLength": 3 },
+            "archivesBucket": { "type": "string", "minLength": 3 },
+            "prefix": { "type": "string", "pattern": "^$|^[a-z0-9-]+/$" }
+          }
+        },
+        "events": {
+          "type": "object",
+          "properties": {
+            "driveFolderId": { "type": "string" }
+          }
+        },
+        "localArchive": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["root"],
+          "properties": {
+            "root": { "$ref": "#/$defs/absPath" }
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "localArchive": { "type": "boolean", "default": false },
+            "card24": { "type": "boolean", "default": false }
+          }
+        },
+        "jobs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      },
+      "if": {
+        "properties": { "capabilities": { "properties": { "localArchive": { "const": true } }, "required": ["localArchive"] } }
+      },
+      "then": { "required": ["localArchive"] }
+    }
+  }
+}

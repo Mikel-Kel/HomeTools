@@ -17,10 +17,4 @@ export default defineConfig(({ mode }) => ({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
-
-  server: {
-    allowedHosts: [
-      "eva-beverages-witnesses-fibre.trycloudflare.com",
-    ],
-  },
 }));
