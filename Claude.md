@@ -34,8 +34,9 @@ Ce que font les actions de `GitWorkflow` pour ce repo :
 - **Git Restore** : `git reset --hard <tag>` + `git clean -fd` (destructif).
 
 Version : le tag git fait foi ; `package.json` est injecté dans l'app (`__APP_VERSION__`) ; l'app se déclare incompatible
-si elle est plus ancienne que la version de `AppParameters.json` (`src/services/version/`), contrôlé une fois par session
-sur tous les backends, dialogue affiché une seule fois.
+si elle est plus ancienne que la version de `AppParameters.json` (`src/services/version/`), contrôlé sur tous les backends
+après chaque navigation, au retour au premier plan et toutes les 30 min (au plus toutes les 5 min). Le dialogue propose
+« Reload », qui recharge avec `?v=<version>` pour contourner le cache de `index.html` (GitHub Pages, 10 min).
 
 ## Architecture
 

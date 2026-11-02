@@ -4,7 +4,7 @@ import { getLocalDirectory } from "@/services/local/localDirectory";
 import { detectStorageBackend } from "@/utils/storageBackend";
 
 import { useDrive } from "@/composables/useDrive";
-import { ensureAppVersionChecked } from "@/services/version/versionGuard";
+import { checkAppVersion } from "@/services/version/versionGuard";
 
 import HomeView from "../views/HomeView.vue";
 import AuthenticationView from "../views/AuthenticationView.vue";
@@ -17,7 +17,6 @@ import BudgetView from "../views/BudgetView.vue";
 import IndicatorsView from "../views/IndicatorsView.vue";
 import IndicatorHistoryView from "../views/IndicatorHistoryView.vue";
 import MasterDataView from "../views/MasterDataView.vue";
-import { alertDialog } from "@/services/dialog/appDialog";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -269,32 +268,8 @@ router.beforeEach(async (to, _from, next) => {
    AFTER — Version check
 ========================= */
 
-router.afterEach(async () => {
-  const backend =
-    detectStorageBackend();
-
-  /*
-    En mode local, ne pas lancer le contrôle
-    tant qu'aucun dossier n'a été sélectionné.
-  */
-  if (
-    backend === "LOCAL_DRIVE" &&
-    !getLocalDirectory()
-  ) {
-    return;
-  }
-
-  try {
-    await ensureAppVersionChecked();
-
-  } catch (err: any) {
-    await alertDialog({
-      title: "Application version inconsistency",
-      message:
-        `${err.message}\n\n` +
-        "Please refresh your browser and try again.",
-    });
-  }
+router.afterEach(() => {
+  void checkAppVersion();
 });
 
 export default router;

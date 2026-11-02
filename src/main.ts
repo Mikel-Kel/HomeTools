@@ -7,6 +7,7 @@ import { restoreLocalDirectory } from "@/services/local/localDirectory";
 import { initGoogleAPI, handleRedirectToken } from "@/services/google/googleInit";
 
 import { log } from "./utils/logger";
+import { startVersionWatch } from "@/services/version/versionGuard";
 import PageHeader from "@/components/PageHeader.vue";
 
 async function bootstrap() {
@@ -58,6 +59,8 @@ async function bootstrap() {
      Lancement de l'app Vue
   ============================ */
   app.use(router).mount("#app");
+
+  startVersionWatch();
 }
 
 bootstrap();
