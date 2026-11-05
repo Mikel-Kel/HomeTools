@@ -647,6 +647,13 @@ async function goToProblem(
             {{ levelCounts.warning }} WARN
           </StatusPill>
         </span>
+
+        <PillButton
+          v-if="currentRun && filtersActive"
+          @click="resetFilters"
+        >
+          Reset
+        </PillButton>
       </div>
 
       <div
@@ -724,13 +731,6 @@ async function goToProblem(
                 ▶
               </button>
             </div>
-
-            <PillButton
-              v-if="filtersActive"
-              @click="resetFilters"
-            >
-              Reset
-            </PillButton>
           </div>
 
           <ChipSelector
