@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.1.1** — 2026-11-05
+**Version : 1.2.0** — 2026-11-05
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -37,10 +37,10 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 - **I1 — Résolution unique.** L'environnement d'une requête est déterminé **uniquement par le proxy**, à partir de l'IP Tailscale de l'appareil (§4). Aucun client ne peut choisir ni forcer un environnement : aucun paramètre, en-tête ou champ `env` envoyé par un client n'est jamais pris en compte.
 - **I2 — Pas de défaut.** Un appareil inconnu, une requête sans provenance Tailscale ou un environnement désactivé reçoivent un refus (403). Il n'existe aucun environnement « par défaut ».
 - **I3 — Isolation totale.** Aucune ressource d'un environnement n'est lisible ou modifiable depuis un autre : buckets S3, schéma MySQL, dossiers locaux, événements, diagnostics, coffre de secrets PWA, stockage navigateur.
-- **I4 — Pas de valeur en dur.** Aucun chemin, bucket, schéma ou identifiant de dossier n'est codé en dur dans le code. Tout provient du profil. Seule exception : l'emplacement du fichier `environments.json` lui-même (§3.1).
+- **I4 — Pas de valeur en dur.** Aucun chemin, bucket, schéma ou identifiant de dossier n'est codé en dur dans le code. Tout provient du profil. Exceptions : l'emplacement du fichier `environments.json` lui-même (§3.1) et l'emplacement du code, commun à tous les environnements (dossier des scripts compilés et de leurs bibliothèques).
 - **I5 — Secrets hors configuration.** Aucun secret dans `environments.json` ni dans un repo (§7).
 - **I6 — Capacités appliquées côté serveur.** Une capacité absente vaut `false`. Le proxy et les scripts appliquent les capacités ; l'interface ne fait que les refléter.
-- **I7 — Environnement explicite côté scripts.** Tout script backend reçoit l'environnement en argument. Absence ou valeur inconnue : erreur immédiate, jamais de défaut.
+- **I7 — Environnement explicite côté scripts.** Tout script backend reçoit l'environnement en argument : `envId`, ou la configuration d'exécution qui le porte (§9.1). Absence ou valeur inconnue : erreur immédiate, jamais de défaut.
 - **I8 — Non-régression.** Tant que l'environnement `fantoine` n'est pas activé (phase P4, §11), le comportement de `hometools` doit rester strictement identique à l'existant.
 
 ---
@@ -70,8 +70,9 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
       "baseDir": "<chemin absolu>",
       "appParameters": "AppParameters.json",
       "mysql": { "schema": "<schéma>", "user": "<utilisateur>" },
-      "s3": { "dataBucket": "<bucket>", "archivesBucket": "<bucket>", "prefix": "" },
-      "events": { "driveFolderId": "<id dossier Drive>" },
+      "s3": { "dataBucket": "<bucket>", "archivesBucket": "<bucket>", "prefix": "",
+              "endpoint": "<URL https>", "awsProfile": "<profil AWS CLI>" },
+      "events": {},
       "localArchive": { "root": "<chemin absolu>" },
       "capabilities": { "localArchive": false, "card24": false },
       "jobs": ["<nom de job>"]
@@ -88,9 +89,10 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 | `enabled` | `false` : l'environnement est refusé partout (proxy et scripts), sans suppression de données. |
 | `baseDir` | Racine des fichiers de l'environnement : `logs/`, `diagnostics/`, `AppParameters.json`, etc. Pour `hometools` : valeur actuelle, inchangée. |
 | `appParameters` | Relatif à `baseDir`. Contenu métier inchangé par ce contrat. |
-| `mysql` | Un schéma et un utilisateur dédiés par environnement (§8). `hometools` : schéma `Home`. |
+| `mysql` | Un schéma et un utilisateur dédiés par environnement (§8). `hometools` : schéma `Home`. Pas d'hôte dans le profil : la base est sur le serveur (`localhost`). |
 | `s3.prefix` | Préfixe ajouté à toutes les clés. Vide si l'environnement possède ses buckets. |
-| `events` | Emplacement des événements PWA ↔ Mac propres à l'environnement. Champs susceptibles d'être complétés après inventaire du code existant (évolution MINOR). |
+| `s3.endpoint`, `s3.awsProfile` | Endpoint S3 (URL `https`) et profil AWS CLI utilisés par les scripts (§7). Facultatifs pour le schéma ; un script qui accède à S3 s'arrête en `ERR` s'ils manquent. Le proxy ne les lit pas : il a ses propres réglages (§7). |
+| `events` | Objet vide : les emplacements des événements se déduisent du profil, `<baseDir>/events/` sur le Mac et `events/` dans le magasin `data` (`s3.dataBucket`, préfixe `s3.prefix`). `driveFolderId` est obsolète et ignoré ; sa suppression du schéma sera une évolution MAJOR. |
 | `localArchive` | Requis si et seulement si `capabilities.localArchive` vaut `true`. |
 | `jobs` | Liste des jobs Housekeeping exécutés pour cet environnement (§9.4). |
 
@@ -186,7 +188,8 @@ Format unique :
 ## 7. Secrets
 
 - **Proxy** : fichier de secrets `proxy.env`, hors de tout repo. Les secrets propres à un environnement suivent la forme `NOM__<ENVID_MAJUSCULES>` (ex. `S3_SECRET__FANTOINE`) ; les secrets communs gardent leur nom actuel.
-- **Scripts AppleScript** : Trousseau macOS, service `hometools-<usage>-<envId>` (ex. `hometools-mysql-fantoine`), lu via `security find-generic-password -s <service> -w`.
+- **Scripts AppleScript** : Trousseau macOS, service `hometools-<usage>-<envId>` (ex. `hometools-mysql-fantoine`), lu via `security find-generic-password -s <service> -w`. Un identifiant associé au secret (ex. Card24) est porté par l'attribut compte de l'élément.
+- **Accès S3 des scripts** : profil AWS CLI nommé par `s3.awsProfile`, dans `~/.aws/credentials` de l'utilisateur du serveur (hors de tout repo) ; pas de clé S3 dans le Trousseau.
 - Aucun secret dans les logs, les diagnostics, les réponses HTTP ou le stockage navigateur en clair.
 
 ---
@@ -203,8 +206,9 @@ Format unique :
 
 ### 9.1 Interface d'appel
 
-- Tout script exécutable reçoit `envId` comme premier argument (`on run argv`).
-- Argument absent ou inconnu, ou environnement désactivé : `logLine("ERR ", ...)` puis arrêt.
+- **Script d'entrée** (lancé par un LaunchAgent, à la main ou par un outil extérieur) : `envId` en premier argument (`on run argv`).
+- **Script enfant** (lancé par un autre script) : premier argument = configuration d'exécution JSON, construite une seule fois par le script d'entrée à partir du profil (via `HomeToolsEnv`). Elle contient un objet `env` dont `env.id` vaut l'`envId` ; toutes les valeurs d'environnement en proviennent.
+- `envId` absent ou inconnu, environnement désactivé, ou configuration sans `env.id` : `logLine("ERR ", ...)` puis arrêt.
 
 ### 9.2 Bibliothèque partagée `HomeToolsEnv`
 
@@ -216,6 +220,7 @@ Script bibliothèque unique, chargé par `load script`. Handlers minimaux :
 | `envPath(envId, key)` | Chemin absolu dérivé de `baseDir` (`logs`, `diagnostics`, `appParameters`, …). |
 | `hasCapability(envId, name)` | Booléen ; `false` si la capacité est absente. |
 | `envSecret(envId, usage)` | Lecture Trousseau (§7). |
+| `envSecretAccount(envId, usage)` | Attribut compte du même élément du Trousseau (§7). |
 
 ### 9.3 Fichiers par environnement
 
@@ -225,7 +230,8 @@ Script bibliothèque unique, chargé par `load script`. Handlers minimaux :
 
 ### 9.4 Orchestration
 
-- Housekeeping itère sur les environnements `enabled` et, pour chacun, n'exécute que les jobs listés dans `jobs`.
+- Housekeeping itère sur les environnements `enabled` et, pour chacun, n'exécute que les jobs listés dans `jobs`. Les interrupteurs de nuit d'`AppParameters.json` (`housekeeping.<job>`) filtrent à l'intérieur de cette liste : un job absent de `jobs` n'est jamais exécuté, un job présent peut être désactivé la nuit.
+- Surveillances de dossiers (LaunchAgents à `WatchPaths`) : un LaunchAgent par environnement, qui passe son `envId` au script d'entrée.
 - L'échec d'un environnement est journalisé et n'empêche pas le traitement des autres.
 
 ---
@@ -265,3 +271,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.0.2 | 2026-11-02 | §3.1 : `environments.json` déplacé hors de Google Drive. Rectificatif publié en PATCH : le chemin n'avait encore aucun utilisateur |
 | 1.1.0 | 2026-11-02 | §4.8 : exceptions `/health` et `OPTIONS` ; §5.1 : cas sans `X-HomeTools-Env` ; §5.3 : paramètre `store` (absent = `data` jusqu'à la fin de P3), diagnostics et statuts lus dans le magasin `data` ; §5.4 : codes `NOT_FOUND`, `MISSING_PARAM`, `STORAGE_ERROR` |
 | 1.1.1 | 2026-11-05 | §9.3 : pas de préfixe d'environnement dans les lignes de journal (le fichier est propre à l'environnement). Rectificatif publié en PATCH : l'exigence n'avait encore aucune implémentation |
+| 1.2.0 | 2026-11-05 | I4 : exception pour l'emplacement du code ; I7 et §9.1 : `envId` pour les scripts d'entrée, configuration d'exécution portant `env.id` pour les scripts enfants ; §3.2 et §3.3 : `s3.endpoint` et `s3.awsProfile` (facultatifs), hôte MySQL `localhost`, `events` vide et `driveFolderId` obsolète ; §7 : identifiant dans l'attribut compte, accès S3 des scripts par profil AWS CLI ; §9.2 : `envSecretAccount` ; §9.4 : interrupteurs de nuit et un LaunchAgent par environnement |

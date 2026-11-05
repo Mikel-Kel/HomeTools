@@ -69,13 +69,15 @@
           "properties": {
             "dataBucket": { "type": "string", "minLength": 3 },
             "archivesBucket": { "type": "string", "minLength": 3 },
-            "prefix": { "type": "string", "pattern": "^$|^[a-z0-9-]+/$" }
+            "prefix": { "type": "string", "pattern": "^$|^[a-z0-9-]+/$" },
+            "endpoint": { "type": "string", "pattern": "^https://" },
+            "awsProfile": { "type": "string", "minLength": 1 }
           }
         },
         "events": {
           "type": "object",
           "properties": {
-            "driveFolderId": { "type": "string" }
+            "driveFolderId": { "type": "string", "deprecated": true }
           }
         },
         "localArchive": {

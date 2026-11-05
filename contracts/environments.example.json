@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.1.1",
+  "contractVersion": "1.2.0",
   "identities": {
     "100.64.0.1":     { "env": "hometools", "device": "airmike",       "kind": "mac", "isServer": true },
     "100.64.0.2":     { "env": "hometools", "device": "iPad Michel",   "kind": "ios" }
@@ -9,10 +9,11 @@
       "label": "HomeTools",
       "enabled": true,
       "baseDir": "/Users/Michel/Documents (Home)/30 - Finances/HomeTools",
-      "appParameters": "AppParameters.json",
+      "appParameters": "settings/AppParameters.json",
       "mysql": { "schema": "Home", "user": "<utilisateur MySQL actuel>" },
-      "s3": { "dataBucket": "hometools-prod", "archivesBucket": "archives-prod", "prefix": "" },
-      "events": { "driveFolderId": "<id du dossier Drive actuel>" },
+      "s3": { "dataBucket": "hometools-prod", "archivesBucket": "archives-prod", "prefix": "",
+              "endpoint": "https://<endpoint Object Storage>", "awsProfile": "<profil AWS CLI>" },
+      "events": {},
       "localArchive": { "root": "/Users/Michel/Documents (Home)/10 - Archives" },
       "capabilities": { "localArchive": true, "card24": true },
       "jobs": ["<à compléter après inventaire des jobs Housekeeping>"]
@@ -23,8 +24,9 @@
       "baseDir": "/Users/Michel/Documents (Home)/30 - Finances/HomeTools-Fantoine",
       "appParameters": "AppParameters.json",
       "mysql": { "schema": "Fantoine", "user": "fantoine" },
-      "s3": { "dataBucket": "fantoine-prod", "archivesBucket": "fantoine-archives", "prefix": "" },
-      "events": { "driveFolderId": "<à créer>" },
+      "s3": { "dataBucket": "fantoine-prod", "archivesBucket": "fantoine-archives", "prefix": "",
+              "endpoint": "https://<endpoint Object Storage>", "awsProfile": "<profil AWS CLI>" },
+      "events": {},
       "capabilities": { "localArchive": false, "card24": false },
       "jobs": []
     }
