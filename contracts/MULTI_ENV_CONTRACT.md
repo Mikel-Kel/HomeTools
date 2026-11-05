@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.1.0** — 2026-11-02
+**Version : 1.1.1** — 2026-11-05
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -219,7 +219,7 @@ Script bibliothèque unique, chargé par `load script`. Handlers minimaux :
 
 ### 9.3 Fichiers par environnement
 
-- Logs : `<baseDir>/logs/YYYY-MM-DD Housekeeping.log`. Le préfixe de chaque ligne inclut l'environnement : `[<envId>] <JOB_NAME>`.
+- Logs : `<baseDir>/logs/YYYY-MM-DD Housekeeping.log`. Format des lignes inchangé : l'environnement est donné par l'emplacement du fichier, sans préfixe dans les lignes.
 - Diagnostics : `<baseDir>/diagnostics/homeMessages.json`. Mêmes règles qu'aujourd'hui (écriture atomique `jq` + `mktemp`/`mv`, ordre du plus récent au plus ancien).
 - Événements et statuts : emplacements définis par `events` (§3.3).
 
@@ -264,3 +264,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.0.1 | 2026-11-02 | §0 : emplacement des copies et fichiers compagnons ; §7 : nom du fichier de secrets du proxy |
 | 1.0.2 | 2026-11-02 | §3.1 : `environments.json` déplacé hors de Google Drive. Rectificatif publié en PATCH : le chemin n'avait encore aucun utilisateur |
 | 1.1.0 | 2026-11-02 | §4.8 : exceptions `/health` et `OPTIONS` ; §5.1 : cas sans `X-HomeTools-Env` ; §5.3 : paramètre `store` (absent = `data` jusqu'à la fin de P3), diagnostics et statuts lus dans le magasin `data` ; §5.4 : codes `NOT_FOUND`, `MISSING_PARAM`, `STORAGE_ERROR` |
+| 1.1.1 | 2026-11-05 | §9.3 : pas de préfixe d'environnement dans les lignes de journal (le fichier est propre à l'environnement). Rectificatif publié en PATCH : l'exigence n'avait encore aucune implémentation |
