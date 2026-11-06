@@ -26,10 +26,12 @@ import {
 
 export const EVENTS_FOLDER = "events";
 export const EVENT_STATUS_FOLDER = "events/status";
+export const EVENT_PROCESSING_FOLDER = "events/processing";
 
 export interface EventStatus {
   status: string;
   message: string;
+  finishedAt: string;
 }
 
 function timestamp(
@@ -147,5 +149,8 @@ export async function loadEventStatus(
 
     message:
       asString(status.message),
+
+    finishedAt:
+      asString(status.finishedAt),
   };
 }

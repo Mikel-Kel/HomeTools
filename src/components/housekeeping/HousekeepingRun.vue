@@ -6,6 +6,11 @@ import {
 } from "vue";
 
 import {
+  getFileModifiedTime,
+  listFiles,
+} from "@/services/driveAdapter";
+
+import {
   useDriveWatcher,
 } from "@/composables/useDriveWatcher";
 
@@ -25,6 +30,13 @@ import {
   readHousekeepingSteps,
   type HousekeepingStep,
 } from "@/contracts/housekeeping";
+
+import {
+  EVENT_PROCESSING_FOLDER,
+  EVENT_STATUS_FOLDER,
+  eventFilePattern,
+  loadEventStatus,
+} from "@/services/events/eventFiles";
 
 import {
   detectDevice,
@@ -60,6 +72,17 @@ import { confirmDialog } from "@/services/dialog/appDialog";
 */
 const NO_ANSWER_DELAY_MS =
   2 * 60 * 1000;
+
+/*
+  Durée au-delà de laquelle un housekeeping pris en charge
+  sans réécriture de l’index des journaux n’est plus
+  considéré comme en cours (fin sans index, Mac arrêté…).
+*/
+const MAX_RUN_MS =
+  60 * 60 * 1000;
+
+const HKP_EVENT_PATTERN =
+  eventFilePattern("HKP");
 
 /* =========================
    Types
@@ -212,10 +235,101 @@ const selectedSteps =
     )
   );
 
+/*
+  Housekeeping en cours sur le Mac, déduit du stockage et
+  non de l’appareil (demande envoyée depuis un autre
+  appareil, page rechargée) :
+  - demande HKP en traitement (events/processing/) ;
+  - dernière demande prise en charge (statut « success »)
+    plus récente que l’index des journaux, réécrit à la fin
+    de chaque housekeeping, dans la limite de MAX_RUN_MS.
+  Le Mac refuse toute demande pendant ce temps.
+*/
+const runningOnMac =
+  ref(false);
+
+function eventStamp(
+  fileName: string
+): string {
+  return (
+    fileName.match(/_(\d{14})/)?.[1] ??
+    ""
+  );
+}
+
+async function lastStartedRunTime():
+  Promise<number | null> {
+
+  const names =
+    (await listFiles(EVENT_STATUS_FOLDER))
+      .map(file => file.name)
+      .filter(name => HKP_EVENT_PATTERN.test(name))
+      .sort((a, b) =>
+        eventStamp(b).localeCompare(eventStamp(a))
+      );
+
+  for (const name of names) {
+    const status =
+      await loadEventStatus(name);
+
+    if (status?.status === "success") {
+      const time =
+        Date.parse(status.finishedAt);
+
+      return Number.isNaN(time)
+        ? null
+        : time;
+    }
+  }
+
+  return null;
+}
+
+async function refreshRunningOnMac() {
+  const processing =
+    await listFiles(EVENT_PROCESSING_FOLDER)
+      .catch(() => []);
+
+  if (
+    processing.some(file =>
+      HKP_EVENT_PATTERN.test(file.name)
+    )
+  ) {
+    runningOnMac.value = true;
+
+    return;
+  }
+
+  const startedAt =
+    await lastStartedRunTime();
+
+  if (
+    startedAt === null ||
+    Date.now() - startedAt > MAX_RUN_MS
+  ) {
+    runningOnMac.value = false;
+
+    return;
+  }
+
+  const logIndexTime =
+    Date.parse(
+      await getFileModifiedTime(
+        HOUSEKEEPING_LOGS_FOLDER,
+        HOUSEKEEPING_LOG_INDEX_FILE
+      ) ?? ""
+    );
+
+  runningOnMac.value =
+    Number.isNaN(logIndexTime) ||
+    logIndexTime < startedAt;
+}
+
 const requestInProgress =
   computed(() =>
     hkp.inProgress.value ||
-    waitingRequestFound.value
+    waitingRequestFound.value ||
+    runningOnMac.value
   );
 
 const canRun =
@@ -383,6 +497,8 @@ useDriveWatcher({
 
   onChanged:
     async () => {
+      await refreshRunningOnMac();
+
       if (!logIndexStateKnown) {
         logIndexStateKnown =
           true;
@@ -394,6 +510,28 @@ useDriveWatcher({
     },
 });
 
+useDriveWatcher({
+  folderId:
+    EVENT_STATUS_FOLDER,
+
+  lastKnownState:
+    ref<string | null>(null),
+
+  onChanged:
+    refreshRunningOnMac,
+});
+
+useDriveWatcher({
+  folderId:
+    EVENT_PROCESSING_FOLDER,
+
+  lastKnownState:
+    ref<string | null>(null),
+
+  onChanged:
+    refreshRunningOnMac,
+});
+
 /* =========================
    Display helpers
 ========================= */
@@ -402,6 +540,13 @@ const requestMessage =
   computed(() => {
     if (waitingRequestFound.value) {
       return "A housekeeping request is waiting for the Mac.";
+    }
+
+    if (
+      runningOnMac.value &&
+      !hkp.inProgress.value
+    ) {
+      return "A housekeeping is running on the Mac.";
     }
 
     switch (request.value?.phase) {

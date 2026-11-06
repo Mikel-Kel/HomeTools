@@ -101,6 +101,9 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   housekeeping. Exécution manuelle : événement `PWA-HKP_<AAAAMMJJHHMMSS>.json`, `eventType` `HOUSEKEEPING_REQUESTED`,
   `payload: { steps: [clés], source }`. Seules les étapes `manual: true` sont acceptées ; les étapes listées dans `forces`
   (ex. `archiveReconcile` → `exportArchiveToc`) s'exécutent avec elles. Une réconciliation manuelle est toujours appliquée.
+  Le Mac refuse une demande pendant un housekeeping (refus écrit en ERR) : `HousekeepingRun.vue` bloque le lancement, d'après
+  le stockage, tant qu'un HKP attend dans `events/` ou `events/processing/`, ou que le dernier statut HKP `success` est plus
+  récent que `housekeepingLogIndex.json` (réécrit en fin de run ; limite 1 h). Le housekeeping de nuit n'est pas détecté.
 - Nom d'un document archivé (`buildPhysicalName`, `DocumentsArchiveView.vue`) :
   `AAAA/<Folder>/P<PartyID sur 5 chiffres>/<AAAA-MM-JJ>[-DTA<AAAAMMJJ>][-IF1<Info1>][-IF2<Info2>][-TAG<id>[_<id>…]][-AMT<centimes>].pdf`.
   Le backend reconstruit `archivetoc` et les tags à partir de ces noms (`scripts/python/archive_reconcile.py`) :
