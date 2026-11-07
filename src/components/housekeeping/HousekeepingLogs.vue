@@ -147,17 +147,30 @@ function handleDateChange(
 ========================= */
 
 /*
-  all      : toutes les lignes ;
-  problems : avertissements et erreurs ;
-  errors   : erreurs seulement.
+  Niveaux choisis par les pastilles ERR / WARN, cumulables ;
+  aucun : toutes les lignes.
 */
 type LevelFilter =
-  | "all"
-  | "problems"
-  | "errors";
+  | "error"
+  | "warning";
 
 const levelFilter =
-  ref<LevelFilter>("all");
+  ref<LevelFilter[]>([]);
+
+function isLevelSelected(
+  level: LevelFilter
+): boolean {
+  return levelFilter.value.includes(level);
+}
+
+function toggleLevel(
+  level: LevelFilter
+) {
+  levelFilter.value =
+    isLevelSelected(level)
+      ? levelFilter.value.filter(item => item !== level)
+      : [...levelFilter.value, level];
+}
 
 const jobFilter =
   ref<string[]>([]);
@@ -416,15 +429,10 @@ const visibleLines =
         }
 
         if (
-          levelFilter.value === "errors" &&
-          line.level !== "error"
-        ) {
-          return false;
-        }
-
-        if (
-          levelFilter.value === "problems" &&
-          !isProblem(line)
+          levelFilter.value.length &&
+          !levelFilter.value.includes(
+            line.level as LevelFilter
+          )
         ) {
           return false;
         }
@@ -446,14 +454,14 @@ const visibleLines =
 
 const filtersActive =
   computed(() =>
-    levelFilter.value !== "all" ||
+    levelFilter.value.length > 0 ||
     runFilter.value !== "all" ||
     jobFilter.value.length > 0 ||
     showInfo.value
   );
 
 function resetFilters() {
-  levelFilter.value = "all";
+  levelFilter.value = [];
   runFilter.value = "all";
   jobFilter.value = [];
   showInfo.value = false;
@@ -633,19 +641,39 @@ async function goToProblem(
           v-if="currentRun"
           class="level-counts"
         >
-          <StatusPill
-            tone="negative"
-            :class="{ faded: !levelCounts.error }"
+          <button
+            type="button"
+            class="level-pill"
+            :class="{ selected: isLevelSelected('error') }"
+            :disabled="!levelCounts.error && !isLevelSelected('error')"
+            :aria-pressed="isLevelSelected('error')"
+            title="Show errors"
+            @click="toggleLevel('error')"
           >
-            {{ levelCounts.error }} ERR
-          </StatusPill>
+            <StatusPill
+              tone="negative"
+              :class="{ faded: !levelCounts.error }"
+            >
+              {{ levelCounts.error }} ERR
+            </StatusPill>
+          </button>
 
-          <StatusPill
-            tone="warning"
-            :class="{ faded: !levelCounts.warning }"
+          <button
+            type="button"
+            class="level-pill"
+            :class="{ selected: isLevelSelected('warning') }"
+            :disabled="!levelCounts.warning && !isLevelSelected('warning')"
+            :aria-pressed="isLevelSelected('warning')"
+            title="Show warnings"
+            @click="toggleLevel('warning')"
           >
-            {{ levelCounts.warning }} WARN
-          </StatusPill>
+            <StatusPill
+              tone="warning"
+              :class="{ faded: !levelCounts.warning }"
+            >
+              {{ levelCounts.warning }} WARN
+            </StatusPill>
+          </button>
         </span>
 
         <PillButton
@@ -675,21 +703,6 @@ async function goToProblem(
 
         <div class="log-filters">
           <div class="filter-row">
-            <div class="level-filter">
-              <PillButton
-                v-for="option in [
-                  { id: 'all', label: 'All lines' },
-                  { id: 'problems', label: 'Warnings & errors' },
-                  { id: 'errors', label: 'Errors only' },
-                ]"
-                :key="option.id"
-                :active="levelFilter === option.id"
-                @click="levelFilter = option.id as LevelFilter"
-              >
-                {{ option.label }}
-              </PillButton>
-            </div>
-
             <label class="info-toggle">
               <input
                 v-model="showInfo"
@@ -926,14 +939,29 @@ async function goToProblem(
   gap: 0.75rem 1.25rem;
 }
 
-.level-filter {
-  display: inline-flex;
-  gap: 0.25rem;
-}
-
 .level-counts {
   display: inline-flex;
   gap: 0.4rem;
+}
+
+.level-pill {
+  display: inline-flex;
+  padding: 0;
+
+  border: none;
+  border-radius: 999px;
+
+  background: transparent;
+
+  cursor: pointer;
+}
+
+.level-pill:disabled {
+  cursor: default;
+}
+
+.level-pill.selected {
+  box-shadow: 0 0 0 2px var(--primary);
 }
 
 .faded {
