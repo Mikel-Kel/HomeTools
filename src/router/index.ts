@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from "vue-router";
 
 import { getLocalDirectory } from "@/services/local/localDirectory";
 import { detectStorageBackend } from "@/utils/storageBackend";
+import { whenEnvironmentReady } from "@/services/environment/environmentState";
 
 import { checkAppVersion } from "@/services/version/versionGuard";
 import { checkAppStatus } from "@/services/appStatus/appStatusGuard";
@@ -152,10 +153,17 @@ const router = createRouter({
    BEFORE — Access control
 ========================= */
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to) => {
   document.title =
     (to.meta?.title as string) ??
     "HomeTools";
+
+  /*
+    Stockage du navigateur (choix du backend, dossier
+    local) lisible seulement une fois l'environnement
+    connu : la première navigation l'attend.
+  */
+  await whenEnvironmentReady();
 
   const backend =
     detectStorageBackend();
@@ -168,28 +176,21 @@ router.beforeEach((to, _from, next) => {
   ========================= */
 
   if (!requiresStorage) {
-    return next();
+    return true;
   }
 
   /* =========================
      LOCAL DRIVE MODE
   ========================= */
 
-  if (backend === "LOCAL_DRIVE") {
-    const folder =
-      getLocalDirectory();
-
-    if (!folder) {
-      if (to.name === "selectFolder") {
-        return next();
-      }
-
-      return next({
-        name: "selectFolder",
-      });
-    }
-
-    return next();
+  if (
+    backend === "LOCAL_DRIVE" &&
+    !getLocalDirectory() &&
+    to.name !== "selectFolder"
+  ) {
+    return {
+      name: "selectFolder",
+    };
   }
 
   /* =========================
@@ -203,7 +204,7 @@ router.beforeEach((to, _from, next) => {
     sera contrôlée par l'adaptateur lors
     du premier accès réel.
   */
-  return next();
+  return true;
 });
 
 /* =========================

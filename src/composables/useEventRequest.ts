@@ -22,6 +22,12 @@ import {
   loadEventStatus,
 } from "@/services/events/eventFiles";
 
+import {
+  getLocalItem,
+  removeLocalItem,
+  setLocalItem,
+} from "@/services/environment/browserStorage";
+
 /* =========================
    Suivi d’une demande envoyée au Mac
 
@@ -68,7 +74,8 @@ interface EventRequestOptions {
   timeoutMs?: number;
 
   /*
-    Clé localStorage : la demande en cours survit à un
+    Clé localStorage, préfixée par l'environnement
+    (browserStorage.ts) : la demande en cours survit à un
     rechargement de la page (dans la limite de timeoutMs).
     Format : { "fileName": "…", "startedAt": <ms> }.
   */
@@ -193,7 +200,7 @@ export function useEventRequest({
     try {
       const saved =
         JSON.parse(
-          localStorage.getItem(persistKey) ??
+          getLocalItem(persistKey) ??
             "null"
         ) as {
           fileName?: unknown;
@@ -208,7 +215,7 @@ export function useEventRequest({
           Date.now() - saved.startedAt >= timeoutMs
         )
       ) {
-        localStorage.removeItem(persistKey);
+        removeLocalItem(persistKey);
 
         return;
       }
@@ -238,7 +245,7 @@ export function useEventRequest({
               current.phase === "started"
             )
           ) {
-            localStorage.setItem(
+            setLocalItem(
               persistKey,
 
               JSON.stringify({
@@ -247,7 +254,7 @@ export function useEventRequest({
               })
             );
           } else {
-            localStorage.removeItem(persistKey);
+            removeLocalItem(persistKey);
           }
 
         } catch {

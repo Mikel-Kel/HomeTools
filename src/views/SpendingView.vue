@@ -56,6 +56,11 @@ import {
   formatAmount,
 } from "@/utils/amountFormat";
 import { confirmDialog } from "@/services/dialog/appDialog";
+import {
+  getSessionItem,
+  removeSessionItem,
+  setSessionItem,
+} from "@/services/environment/browserStorage";
 
 /* =========================
    Router / storage
@@ -408,7 +413,7 @@ function resetFilters() {
   maxAmount.value =
     null;
 
-  sessionStorage.removeItem(
+  removeSessionItem(
     SPENDING_FILTERS_KEY
   );
 }
@@ -506,7 +511,7 @@ function applyFilters(
 }
 
 function saveFiltersToSession() {
-  sessionStorage.setItem(
+  setSessionItem(
     SPENDING_FILTERS_KEY,
 
     JSON.stringify({
@@ -545,7 +550,7 @@ function saveFiltersToSession() {
 
 function restoreFiltersFromSession() {
   const raw =
-    sessionStorage.getItem(
+    getSessionItem(
       SPENDING_FILTERS_KEY
     );
 

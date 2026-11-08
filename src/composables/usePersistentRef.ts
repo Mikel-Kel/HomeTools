@@ -4,6 +4,11 @@ import {
   type Ref,
 } from "vue";
 
+import {
+  getSessionItem,
+  setSessionItem,
+} from "@/services/environment/browserStorage";
+
 /* =========================
    Filtres conservés pendant la session
 
@@ -15,16 +20,18 @@ import {
    La page reste responsable de vérifier qu'une valeur
    retrouvée existe encore (catégorie, année…) et de revenir
    au défaut sinon.
+
+   Clés préfixées par l'environnement (browserStorage.ts).
 ========================= */
 
-const PREFIX = "hometools.filters.";
+const PREFIX = "filters.";
 
 function readStored<T>(
   key: string
 ): { found: true; value: T } | { found: false } {
   try {
     const raw =
-      sessionStorage.getItem(PREFIX + key);
+      getSessionItem(PREFIX + key);
 
     if (raw === null) {
       return { found: false };
@@ -56,15 +63,11 @@ export function usePersistentRef<T>(
     value,
 
     current => {
-      try {
-        sessionStorage.setItem(
-          PREFIX + key,
-          JSON.stringify(current)
-        );
-
-      } catch {
-        /* Stockage indisponible (navigation privée) : valeur gardée pour la page seulement. */
-      }
+      /* Stockage indisponible (navigation privée) : valeur gardée pour la page seulement. */
+      setSessionItem(
+        PREFIX + key,
+        JSON.stringify(current)
+      );
     },
 
     {

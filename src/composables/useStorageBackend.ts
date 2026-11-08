@@ -12,11 +12,21 @@ import type {
 
 /* =========================
    Shared state
+
+   Lu au chargement avant que l'environnement soit connu
+   (défaut de l'appareil), puis relu par main.ts dès que
+   le stockage du navigateur est prêt.
 ========================= */
 
 const backend = ref<StorageBackend>(
   detectStorageBackend()
 );
+
+export function syncStorageBackend(): void {
+
+  backend.value =
+    detectStorageBackend();
+}
 
 /* =========================
    Composable

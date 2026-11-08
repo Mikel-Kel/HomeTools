@@ -3,25 +3,52 @@ import App from "./App.vue";
 import router from "./router";
 import "@/assets/theme.css";
 
-import { restoreLocalDirectory } from "@/services/local/localDirectory";
+import {
+  migrateLegacyDirectoryHandle,
+  restoreLocalDirectory,
+} from "@/services/local/localDirectory";
 
 import { log } from "./utils/logger";
 import { checkAppVersion, startVersionWatch } from "@/services/version/versionGuard";
 import { checkAppStatus, startAppStatusWatch } from "@/services/appStatus/appStatusGuard";
 import { startEnvironmentWatch } from "@/services/environment/environmentGuard";
-import { environment } from "@/services/environment/environmentState";
+import { environment, environmentReady } from "@/services/environment/environmentState";
+import { migrateLegacyBrowserStorage } from "@/services/environment/browserStorage";
+import { syncStorageBackend } from "@/composables/useStorageBackend";
+import { restoreTheme } from "@/composables/useTheme";
 import PageHeader from "@/components/PageHeader.vue";
 
-async function bootstrap() {
+/* ============================
+   Stockage du navigateur de l'environnement
 
-  /* ============================
-     Étape 0 — Restore Local Drive
-  ============================ */
+   Clés préfixées ht:<envId>: (browserStorage.ts) : lues
+   seulement une fois l'environnement connu. Migration des
+   clés d'avant le contrat, thème, choix du stockage, puis
+   dossier Local Drive.
+============================ */
+async function prepareEnvironmentStorage() {
+
+  migrateLegacyBrowserStorage();
+
+  try {
+    await migrateLegacyDirectoryHandle();
+  } catch (e) {
+    log.warn("[LocalDrive] handle migration failed", e);
+  }
+
+  restoreTheme();
+  syncStorageBackend();
+
   try {
     await restoreLocalDirectory();
   } catch (e) {
     log.warn("[LocalDrive] restore failed", e);
   }
+
+  environmentReady.value = true;
+}
+
+async function bootstrap() {
 
   const app = createApp(App);
 
@@ -53,11 +80,14 @@ async function bootstrap() {
   /* ============================
      Environnement, puis disponibilité et version
 
-     /api/whoami part en premier ; les contrôles de
-     maintenance et de version attendent l'environnement.
+     /api/whoami part en premier ; le stockage du navigateur
+     est ensuite préparé, puis les contrôles de maintenance
+     et de version sont lancés.
   ============================ */
-  watch(environment, (current, previous) => {
+  watch(environment, async (current, previous) => {
     if (current && !previous) {
+      await prepareEnvironmentStorage();
+
       void checkAppStatus(true);
       void checkAppVersion();
     }

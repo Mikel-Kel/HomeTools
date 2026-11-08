@@ -4,16 +4,17 @@ import { useRoute } from "vue-router";
 import AppNavRail from "@/components/AppNavRail.vue";
 import AppDialog from "@/components/ui/AppDialog.vue";
 import AppUnavailable from "@/components/AppUnavailable.vue";
-import { environment, environmentBlock } from "@/services/environment/environmentState";
+import { environmentBlock, environmentReady } from "@/services/environment/environmentState";
 
 const route = useRoute();
 
 /*
   Les pages ne sont montées qu'une fois l'environnement
-  connu (/api/whoami) : aucune ne lit le stockage avant.
+  connu (/api/whoami) et le stockage du navigateur
+  préparé (main.ts) : aucune ne lit le stockage avant.
 */
 const environmentKnown = computed(() =>
-  environment.value !== null
+  environmentReady.value
 );
 
 /*

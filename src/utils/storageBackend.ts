@@ -1,5 +1,11 @@
 import { detectDevice } from "@/utils/deviceDetection";
 
+import {
+  getLocalItem,
+  removeLocalItem,
+  setLocalItem,
+} from "@/services/environment/browserStorage";
+
 /* =========================
    Types
 ========================= */
@@ -12,8 +18,9 @@ export type StorageBackend =
    Constants
 ========================= */
 
+/* Mémorisé par environnement (browserStorage.ts). */
 export const STORAGE_BACKEND_KEY =
-  "hometools-storage-backend";
+  "storage-backend";
 
 export const STORAGE_BACKENDS: StorageBackend[] = [
   "LOCAL_DRIVE",
@@ -67,61 +74,43 @@ export function getDefaultStorageBackend():
 export function getStoredStorageBackend():
   StorageBackend | null {
 
-  try {
-    const stored =
-      window.localStorage.getItem(
-        STORAGE_BACKEND_KEY
-      );
+  const stored =
+    getLocalItem(
+      STORAGE_BACKEND_KEY
+    );
 
-    if (isStorageBackend(stored)) {
-      return stored;
-    }
-
-    /*
-      Valeur d'un backend retiré (GOOGLE_DRIVE) :
-      effacée, l'appareil reprend son défaut.
-    */
-    if (stored !== null) {
-      window.localStorage.removeItem(
-        STORAGE_BACKEND_KEY
-      );
-    }
-
-    return null;
-
-  } catch {
-    return null;
+  if (isStorageBackend(stored)) {
+    return stored;
   }
+
+  /*
+    Valeur d'un backend retiré (GOOGLE_DRIVE) :
+    effacée, l'appareil reprend son défaut.
+  */
+  if (stored !== null) {
+    removeLocalItem(
+      STORAGE_BACKEND_KEY
+    );
+  }
+
+  return null;
 }
 
 export function storeStorageBackend(
   backend: StorageBackend
 ): void {
 
-  try {
-    window.localStorage.setItem(
-      STORAGE_BACKEND_KEY,
-      backend
-    );
-  } catch (err) {
-    console.warn(
-      "Unable to persist storage backend",
-      err
-    );
-  }
+  setLocalItem(
+    STORAGE_BACKEND_KEY,
+    backend
+  );
 }
 
 export function clearStoredStorageBackend(): void {
-  try {
-    window.localStorage.removeItem(
-      STORAGE_BACKEND_KEY
-    );
-  } catch (err) {
-    console.warn(
-      "Unable to clear storage backend",
-      err
-    );
-  }
+
+  removeLocalItem(
+    STORAGE_BACKEND_KEY
+  );
 }
 
 /* =========================

@@ -1,4 +1,4 @@
-import { shallowRef } from "vue";
+import { ref, shallowRef, watch } from "vue";
 
 import type { EnvironmentInfo } from "@/contracts/environment";
 
@@ -6,10 +6,14 @@ import type { EnvironmentInfo } from "@/contracts/environment";
    Environnement de l'appareil
 
    Renseigné par /api/whoami au démarrage
-   (environmentGuard.ts). Tant qu'il n'est pas établi
-   (inconnu ou bloqué), seul /api/whoami part vers le
-   proxy (proxyClient.ts) et les pages ne sont pas montées
-   (App.vue).
+   (environmentGuard.ts), puis préparé par main.ts :
+   migration et lecture du stockage du navigateur, préfixé
+   par l'environnement (browserStorage.ts), restauration du
+   dossier local. L'environnement est « établi » une fois
+   préparé et tant qu'il n'est pas bloqué. Avant, seul
+   /api/whoami part vers le proxy (proxyClient.ts), les
+   pages ne sont pas montées (App.vue) et la navigation
+   attend (router/index.ts).
 
    Blocages, affichés par AppUnavailable.vue :
    - error : refus du proxy (§5.4) ou réponse inexploitable ;
@@ -32,11 +36,32 @@ export const environment =
 export const environmentBlock =
   shallowRef<EnvironmentBlock | null>(null);
 
+/* Stockage du navigateur prêt pour l'environnement (main.ts). */
+export const environmentReady =
+  ref(false);
+
 export function environmentEstablished(): boolean {
   return (
+    environmentReady.value &&
     environment.value !== null &&
     environmentBlock.value === null
   );
+}
+
+export function whenEnvironmentReady(): Promise<void> {
+  if (environmentReady.value) {
+    return Promise.resolve();
+  }
+
+  return new Promise(resolve => {
+    const stop =
+      watch(environmentReady, ready => {
+        if (ready) {
+          stop();
+          resolve();
+        }
+      });
+  });
 }
 
 /* Contrat incompatible ou environnement changé : seul un rechargement en sort. */
