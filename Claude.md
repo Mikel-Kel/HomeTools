@@ -77,6 +77,7 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 - `settings/appStatus.json` : maintenance (`{ version, maintenance, message, since }`), écrit par la section « HomeTools › Maintenance »
   de myTooling ; contrat `../Backend/docs/app-status-contract.md`. Maintenance active, ou proxy
   injoignable en Object Storage : écran plein `AppUnavailable.vue` (`src/services/appStatus/`). Local Drive jamais bloqué.
+  État, journal et Restart / Stop / Start du proxy : myTooling, section « HomeTools › Proxy ».
 - `diagnostics/homeMessages.json` : `{ "messages": [{ id, level, text }] }`, `level` = `ok` | `warning` | `error`, du plus récent
   au plus ancien. Pastilles de `HomeView.vue`. Réinitialisé et alimenté chaque nuit par `housekeeping.applescript`.
 - `diagnostics/housekeepingLogIndex.json` et `diagnostics/housekeepingLog-{date}.json` : journaux affichés par `EventLogView.vue`.

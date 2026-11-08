@@ -33,6 +33,11 @@ import {
   useStorageAccess,
 } from "@/composables/useStorageAccess";
 
+/* Libellé de l'environnement, affiché avec l'état du stockage. */
+import {
+  environment,
+} from "@/services/environment/environmentState";
+
 const {
   backend,
   storageReady,
@@ -400,6 +405,14 @@ function performanceClass(
 
           <span class="status-text">
             {{ storageStatusLabel }}
+          </span>
+
+          <span
+            v-if="environment"
+            class="env-label"
+            :title="environment.device"
+          >
+            · {{ environment.label }}
           </span>
         </div>
       </div>
@@ -839,6 +852,11 @@ function performanceClass(
 
 .storage-status.disconnected {
   color: var(--negative);
+}
+
+.storage-status .env-label {
+  color: var(--text-soft);
+  font-weight: 600;
 }
 
 /* =========================

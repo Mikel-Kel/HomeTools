@@ -10,13 +10,14 @@ import {
 
 import { useHousekeepingHealth } from "@/composables/useHousekeepingHealth";
 import { useTheme } from "@/composables/useTheme";
+import { environment } from "@/services/environment/environmentState";
 
 /* =========================
    Barre de navigation (toutes les pages sauf l'accueil)
 
    Icônes seules, libellé au survol ; la page en cours est
-   mise en évidence. En bas : authentification et
-   jour / nuit.
+   mise en évidence. En bas : libellé de l'environnement
+   (appareil au survol), authentification et jour / nuit.
 ========================= */
 
 const route =
@@ -78,6 +79,14 @@ const {
     </router-link>
 
     <div class="rail-spacer"></div>
+
+    <span
+      v-if="environment"
+      class="env-label"
+      :title="`Environment ${environment.label} · ${environment.device}`"
+    >
+      {{ environment.label }}
+    </span>
 
     <router-link
       to="/authentication"
@@ -178,6 +187,22 @@ const {
 
 .rail-spacer {
   flex: 1;
+}
+
+/*
+  Libellé de l'environnement, lu de bas en haut.
+*/
+.env-label {
+  flex-shrink: 0;
+
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 /*

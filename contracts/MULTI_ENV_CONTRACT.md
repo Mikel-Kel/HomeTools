@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.2.1** — 2026-11-08
+**Version : 1.2.2** — 2026-11-08
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -114,7 +114,7 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 5. Environnement `enabled: false` : `403 ENV_DISABLED`.
 6. Chaque requête est journalisée avec `env`, `device`, méthode, chemin et statut. Aucune donnée métier ni secret n'est journalisé.
 7. L'en-tête `X-Proxy-Key` reste exigé en défense complémentaire. Il n'identifie **pas** l'environnement.
-8. Exceptions : `GET /health` (sonde technique, réponse `{ "ok": true }` sans aucune autre donnée) et les requêtes `OPTIONS` (preflights CORS du navigateur, sans données) ne sont soumis ni à la résolution d'identité ni à `X-Proxy-Key`.
+8. Exceptions : `GET /health` (sonde technique, réponse `{ "ok": true }` sans aucune autre donnée) et les requêtes `OPTIONS` (preflights CORS du navigateur, sans données) ne sont soumis ni à la résolution d'identité ni à `X-Proxy-Key`. `GET /health` est aussi la sonde de l'outillage local (app myTooling, section « HomeTools › Proxy »), interrogé en direct et via `tailscale serve` : sa route, l'absence d'authentification et sa réponse `200 { "ok": true }` ne changent pas sans mettre myTooling à jour.
 
 ---
 
@@ -273,3 +273,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.1.1 | 2026-11-05 | §9.3 : pas de préfixe d'environnement dans les lignes de journal (le fichier est propre à l'environnement). Rectificatif publié en PATCH : l'exigence n'avait encore aucune implémentation |
 | 1.2.0 | 2026-11-05 | I4 : exception pour l'emplacement du code ; I7 et §9.1 : `envId` pour les scripts d'entrée, configuration d'exécution portant `env.id` pour les scripts enfants ; §3.2 et §3.3 : `s3.endpoint` et `s3.awsProfile` (facultatifs), hôte MySQL `localhost`, `events` vide et `driveFolderId` obsolète ; §7 : identifiant dans l'attribut compte, accès S3 des scripts par profil AWS CLI ; §9.2 : `envSecretAccount` ; §9.4 : interrupteurs de nuit et un LaunchAgent par environnement |
 | 1.2.1 | 2026-11-08 | §5.3 : `INVALID_KEY` ne vise que `..` comme élément de chemin (un nom d'archive existant contient `....`), et s'applique aussi aux clés de `/api/local/*`. Rectificatif publié en PATCH : seul le proxy applique cette règle, depuis la phase P1 en cours, et aucun client ne dépend du refus |
+| 1.2.2 | 2026-11-08 | §4.8 : `GET /health` est aussi la sonde de myTooling (pilotage du proxy) ; sa forme est figée. Clarification publiée en PATCH : aucun changement de comportement |
