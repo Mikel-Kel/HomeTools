@@ -16,7 +16,7 @@ import {
 
 /* Version du contrat implémentée par la PWA. */
 export const CONTRACT_VERSION =
-  "1.2.1";
+  "1.3.0";
 
 export const WHOAMI_PATH =
   "/api/whoami";

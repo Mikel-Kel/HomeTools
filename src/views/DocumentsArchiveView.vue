@@ -515,12 +515,14 @@ watch(
 ========================= */
 
 /*
-  Ouverture dans Aperçu, sur le Mac serveur : seulement si
-  l'environnement a ses archives sur ce disque
-  (localArchive) et que l'appareil est le serveur (§3.4).
-  Ailleurs : affichage dans le navigateur.
+  Archives sur le disque de cet appareil : l'environnement a
+  la capacité localArchive et l'appareil est le serveur
+  (§3.4). Alors seulement, le PDF est ouvert dans Aperçu
+  (/api/local/open) ou lu sur le disque (/api/local/read).
+  Ailleurs, iPad compris : lu dans le magasin S3 archives de
+  l'environnement et affiché dans le navigateur.
 */
-function canOpenNatively(): boolean {
+function archivesOnThisDevice(): boolean {
   return (
     hasCapability("localArchive") &&
     isServerDevice()
@@ -577,39 +579,66 @@ function isIOSStandalonePWA(): boolean {
 }
 
 /*
-  archives-prod est un bucket privé, sans URL publique.
-  Les fichiers archivés existent physiquement sur le disque
-  du Mac (source de la synchronisation vers S3), et le proxy
-  tourne sur ce même Mac : il les lit directement sur le
-  disque (/api/local/read), plus vite qu'en repassant par
-  archives-prod, et de la même façon pour le Mac et l'iPad.
+  Lecture du PDF par le proxy, renvoyée en URL blob: :
+  - sur le Mac serveur (archivesOnThisDevice) : sur le
+    disque, /api/local/read ;
+  - ailleurs : magasin S3 archives de l'environnement,
+    /api/s3/read (octets bruts, §5.3). La clé est le même
+    chemin relatif que sur le disque, dont le magasin est
+    la copie ; le proxy essaie ses formes NFC et NFD.
+  Le délai de proxyFetch ne court que jusqu'aux en-têtes :
+  un gros PDF n'est pas coupé pendant son téléchargement.
 */
 async function fetchArchiveDocumentUrl(
   physicalName: string
 ): Promise<string> {
+  const local =
+    archivesOnThisDevice();
+
+  const source =
+    local
+      ? "local archive"
+      : "archive storage";
+
   const response =
-    await proxyFetch(
-      "/api/local/read",
-      { params: { key: physicalName } }
-    );
+    local
+      ? await proxyFetch(
+          "/api/local/read",
+          { params: { key: physicalName } }
+        )
+      : await proxyFetch(
+          "/api/s3/read",
+          { params: { store: "archives", key: physicalName } }
+        );
 
   if (!response.ok) {
     /*
-      Distingue un vrai "fichier absent" (404, le fichier
-      n'existe pas sur le disque local) d'un autre echec
-      (reseau, Tailscale pas encore reconnecte, cle
+      Distingue un vrai "fichier absent" (404) d'un autre
+      echec (reseau, Tailscale pas encore reconnecte, cle
       invalide, etc.) - utile pour diagnostiquer les
       echecs intermittents sur iPad.
     */
     throw new Error(
       response.status === 404
-        ? `Local archive file not found: ${physicalName}`
-        : `Local archive read failed: HTTP ${response.status} for ${physicalName}`
+        ? `Document not found in ${source}: ${physicalName}`
+        : `Read from ${source} failed: HTTP ${response.status} for ${physicalName}`
     );
   }
 
-  const blob =
+  let blob =
     await response.blob();
+
+  /*
+    Objet S3 sans type enregistré (application/octet-stream) :
+    l'iPad le téléchargerait au lieu de l'afficher.
+  */
+  if (
+    blob.type !== "application/pdf" &&
+    physicalName.toLowerCase().endsWith(".pdf")
+  ) {
+    blob =
+      new Blob([blob], { type: "application/pdf" });
+  }
 
   /*
     L'URL blob:// generee ici n'est valide que dans cet onglet
@@ -627,7 +656,7 @@ async function openArchiveDocument(
     return false;
   }
 
-  if (canOpenNatively()) {
+  if (archivesOnThisDevice()) {
     if (
       await openNativelyOnMac(
         item.physicalName
@@ -687,10 +716,9 @@ async function openDocument(
   item: ArchiveItem
 ) {
   /*
-    Un seul chemin d'ouverture desormais, quel que soit
-    l'appareil (Mac ou iPad) : lecture via le proxy Tailscale,
-    qui sert soit le disque local (archives), soit S3
-    (hometools-prod) selon l'endpoint appele.
+    Ouverture via le proxy Tailscale : Aperçu ou disque sur
+    le Mac serveur, magasin S3 archives ailleurs
+    (openArchiveDocument, fetchArchiveDocumentUrl).
 
     L'ancien protocole hometools:// est abandonne : impossible
     a deboguer depuis ce fichier (mecanisme natif macOS hors de

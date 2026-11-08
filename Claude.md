@@ -52,9 +52,10 @@ après chaque navigation, au retour au premier plan et toutes les 30 min (au plu
 - Proxy Flask local, exposé via Tailscale : `https://airmike.tail73b300.ts.net`, authentification par header `X-Proxy-Key`.
   Hetzner refuse les requêtes SigV4 signées par le navigateur (CORS) : ne jamais réintroduire d'accès S3 direct.
   - `/api/s3/read`, `write`, `head`, `list`, `delete` : utilisés par `src/services/s3/s3StorageAdapter.ts`.
-  - `/api/local/read` (lecture d'un PDF d'archive sur le disque du Mac, normalisation NFC/NFD) et `/api/local/open`
-    (ouverture native, si `localArchive` et `isServer`) : utilisés par `DocumentsArchiveView.vue`, quel que soit le backend actif.
-    La page Documents n'est jamais masquée.
+  - PDF d'archives (`DocumentsArchiveView.vue`, quel que soit le backend actif ; page jamais masquée) : si `localArchive`
+    et `isServer` (le Mac serveur), `/api/local/open` (ouverture native) puis repli sur `/api/local/read` (disque) ;
+    ailleurs, iPad compris, `/api/s3/read` avec `store=archives` (octets bruts, contrat 1.3.0). Clé = chemin relatif
+    du document, NFC/NFD tolérés par le proxy.
 - Tout appel au proxy passe par `proxyFetch` (`src/services/proxy/proxyClient.ts`), seul module qui lit `VITE_PROXY_URL`
   et `VITE_PROXY_API_KEY`. Il n'y a pas d'authentification applicative ni de coffre d'identifiants.
 - Thème : tokens `--positive`, `--negative`, `--warning` dans `src/assets/theme.css`, variantes clair/sombre (`[data-theme="dark"]`).
@@ -137,10 +138,6 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 
 ## Points ouverts connus
 
-- PDF d'archives : lecture sur le disque (`/api/local/read`) seulement si `localArchive` et `isServer` (airmike) ;
-  tous les autres appareils, iPad compris, liront le magasin S3 `archives`. En attente du proxy : `/api/s3/read`
-  décode aujourd'hui en UTF-8 (il doit rendre les octets bruts avec leur `Content-Type`) et sans tolérance NFC/NFD.
-  D'ici là, l'iPad continue de lire sur le disque du Mac.
 
 - `VITE_PROXY_API_KEY` est en clair dans le bundle public. Objectif : la retirer du build et la stocker dans un coffre chiffré
   (PBKDF2 / AES-GCM, verrouillage après inactivité), saisie une fois par appareil. **Ce coffre reste à construire.**
