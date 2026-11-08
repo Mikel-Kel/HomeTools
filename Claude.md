@@ -43,17 +43,18 @@ après chaque navigation, au retour au premier plan et toutes les 30 min (au plu
 ## Architecture
 
 - Deux backends de stockage, choisis dans `AuthenticationView.vue` et mémorisés en localStorage
-  (défaut : Local Drive sur Mac, Object Storage ailleurs). Tout accès aux données passe par `src/services/driveAdapter.ts`,
+  (défaut : Local Drive sur l'appareil serveur de l'environnement, `isServer`, seul à pouvoir le choisir ; Object Storage ailleurs). Tout accès aux données passe par `src/services/driveAdapter.ts`,
   qui aiguille selon le backend actif. Le mode Google Drive a été retiré : une valeur `GOOGLE_DRIVE` encore
   mémorisée est effacée et l'appareil reprend son défaut.
   - **Local Drive** : File System Access API du navigateur (Chrome/Edge sur Mac uniquement, pas Safari), handle du dossier
-    persisté en IndexedDB. Ne passe pas par le proxy. Ne résout qu'un niveau de dossier à la fois : pas de `/` dans un nom de fichier.
+    persisté en IndexedDB (un dossier par environnement). Ne passe pas par le proxy pour les données. Ne résout qu'un niveau de dossier à la fois : pas de `/` dans un nom de fichier.
   - **Object Storage** : Hetzner S3, bucket `hometools-prod`, toujours via le proxy.
 - Proxy Flask local, exposé via Tailscale : `https://airmike.tail73b300.ts.net`, authentification par header `X-Proxy-Key`.
   Hetzner refuse les requêtes SigV4 signées par le navigateur (CORS) : ne jamais réintroduire d'accès S3 direct.
   - `/api/s3/read`, `write`, `head`, `list`, `delete` : utilisés par `src/services/s3/s3StorageAdapter.ts`.
   - `/api/local/read` (lecture d'un PDF d'archive sur le disque du Mac, normalisation NFC/NFD) et `/api/local/open`
-    (ouverture native sur le Mac) : utilisés par `DocumentsArchiveView.vue`, quel que soit le backend actif.
+    (ouverture native, si `localArchive` et `isServer`) : utilisés par `DocumentsArchiveView.vue`, quel que soit le backend actif.
+    La page Documents n'est jamais masquée.
 - Tout appel au proxy passe par `proxyFetch` (`src/services/proxy/proxyClient.ts`), seul module qui lit `VITE_PROXY_URL`
   et `VITE_PROXY_API_KEY`. Il n'y a pas d'authentification applicative ni de coffre d'identifiants.
 - Thème : tokens `--positive`, `--negative`, `--warning` dans `src/assets/theme.css`, variantes clair/sombre (`[data-theme="dark"]`).
@@ -69,6 +70,18 @@ après chaque navigation, au retour au premier plan et toutes les 30 min (au plu
   leur index (tous lus par le contrat `archive.ts`), et les drafts d'allocation et statuts d'événements, lus fichier par fichier,
   restent hors de `useRemoteJson`.
 
+## Multi-environnements
+
+- Référence : contracts/MULTI_ENV_CONTRACT.md (copie ; la canonique est dans ../hometools-proxy/contracts/). Ne jamais la modifier ici sans la modifier d'abord là-bas.
+- Le client n'envoie jamais d'environnement ; il le découvre via GET /api/whoami au démarrage. Toute requête S3 transmet store=data ou store=archives, jamais un bucket.
+- Stockage navigateur uniquement via le module préfixé ht:<envId>: ; fonctionnalités conditionnées par capabilities.
+- Repo public : aucune IP, aucun identifiant ni secret.
+- Mise en œuvre : contrat côté PWA dans `src/contracts/environment.ts` (`CONTRACT_VERSION`), état et démarrage dans
+  `src/services/environment/` (`environmentState`, `environmentGuard`, `browserStorage`). Tant que l'environnement n'est pas
+  établi, seul `/api/whoami` part (`proxyFetch`), les pages ne sont pas montées et la navigation attend. Refus du proxy
+  (`ENV_*`, `AUTH_INVALID`, `CONFIG_INVALID`), MAJOR différent ou environnement changé : écran bloquant `AppUnavailable.vue`.
+  Libellé de l'environnement : barre d'icônes et accueil.
+
 ## Contrat d'échange avec le backend Mac (Housekeeping)
 
 Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Backend. Ne pas changer leur format sans modifier les deux côtés.
@@ -76,7 +89,8 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 - `settings/AppParameters.json` : champ `version`, écrit au déploiement, lu au démarrage de l'app.
 - `settings/appStatus.json` : maintenance (`{ version, maintenance, message, since }`), écrit par la section « HomeTools › Maintenance »
   de myTooling ; contrat `../Backend/docs/app-status-contract.md`. Maintenance active, ou proxy
-  injoignable en Object Storage : écran plein `AppUnavailable.vue` (`src/services/appStatus/`). Local Drive jamais bloqué.
+  injoignable : écran plein `AppUnavailable.vue` (`src/services/appStatus/`). Local Drive jamais bloqué par une maintenance,
+  mais bloqué comme le reste si `/api/whoami` échoue (revérifié à chaque navigation).
   État, journal et Restart / Stop / Start du proxy : myTooling, section « HomeTools › Proxy ».
 - `diagnostics/homeMessages.json` : `{ "messages": [{ id, level, text }] }`, `level` = `ok` | `warning` | `error`, du plus récent
   au plus ancien. Pastilles de `HomeView.vue`. Réinitialisé et alimenté chaque nuit par `housekeeping.applescript`.
@@ -122,6 +136,11 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   (exports `indicators/indicators.json` et `values-<famille>.json`, événements `PWA-IND_…`).
 
 ## Points ouverts connus
+
+- PDF d'archives : lecture sur le disque (`/api/local/read`) seulement si `localArchive` et `isServer` (airmike) ;
+  tous les autres appareils, iPad compris, liront le magasin S3 `archives`. En attente du proxy : `/api/s3/read`
+  décode aujourd'hui en UTF-8 (il doit rendre les octets bruts avec leur `Content-Type`) et sans tolérance NFC/NFD.
+  D'ici là, l'iPad continue de lire sur le disque du Mac.
 
 - `VITE_PROXY_API_KEY` est en clair dans le bundle public. Objectif : la retirer du build et la stocker dans un coffre chiffré
   (PBKDF2 / AES-GCM, verrouillage après inactivité), saisie une fois par appareil. **Ce coffre reste à construire.**
