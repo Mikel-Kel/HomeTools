@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.3.0** — 2026-11-08
+**Version : 1.3.1** — 2026-11-08
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -199,7 +199,7 @@ Format unique :
 ## 8. MySQL
 
 - Un schéma par environnement : `hometools` → `Home` (existant) ; `fantoine` → `Fantoine` (créé à partir de la structure de `Home`, sans données).
-- Un utilisateur MySQL par environnement, avec des droits limités à **son** schéma.
+- Utilisateur MySQL : déclaré par `mysql.user` du profil. Cible : un utilisateur dédié par environnement, avec des droits limités à **son** schéma, et son mot de passe dans le Trousseau (§7, `hometools-mysql-<envId>`). **Transition** : `root` (connexion locale, sans mot de passe) reste admis pour un environnement tant que son utilisateur dédié n'est pas créé. L'isolation de la base (I3) repose alors sur `mysql.schema` du profil et sur l'absence de schéma en dur (I4), et non sur les droits MySQL. Le passage à l'utilisateur dédié ne demande aucun changement de code : il suffit de changer `mysql.user` et de créer l'élément du Trousseau.
 - Aucune requête n'utilise de nom de schéma en dur : le schéma vient de `mysql.schema`.
 
 ---
@@ -277,3 +277,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.2.1 | 2026-11-08 | §5.3 : `INVALID_KEY` ne vise que `..` comme élément de chemin (un nom d'archive existant contient `....`), et s'applique aussi aux clés de `/api/local/*`. Rectificatif publié en PATCH : seul le proxy applique cette règle, depuis la phase P1 en cours, et aucun client ne dépend du refus |
 | 1.2.2 | 2026-11-08 | §4.8 : `GET /health` est aussi la sonde de myTooling (pilotage du proxy) ; sa forme est figée. Clarification publiée en PATCH : aucun changement de comportement |
 | 1.3.0 | 2026-11-08 | §5.3 : `GET /api/s3/read` renvoie les octets bruts de l'objet avec son `Content-Type` (lecture des PDF d'archives par S3 hors du Mac) ; `read` et `head` essaient la clé telle quelle, puis en NFC et NFD. Évolution MINOR : le contenu des lectures qui réussissaient est inchangé, seul l'en-tête `Content-Type` change, et la PWA ne le lit pas |
+| 1.3.1 | 2026-11-08 | §8 : `root` admis comme utilisateur MySQL d'un environnement pendant une transition ; l'utilisateur dédié reste la cible. Rectificatif publié en PATCH : aucun code ne change, les scripts acceptent déjà les deux (`passwordService` vide pour `root`) |
