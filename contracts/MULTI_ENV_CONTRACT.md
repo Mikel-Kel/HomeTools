@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.2.2** — 2026-11-08
+**Version : 1.3.0** — 2026-11-08
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -150,6 +150,8 @@ Premier appel de la PWA, avant toute autre requête.
 - **S3** : le client fournit un magasin logique (`data` ou `archives`) et une clé relative. Il ne fournit jamais de nom de bucket. Le proxy calcule `bucket = s3.<store>Bucket` et `key = s3.prefix + cléRelative`. Les listings renvoient des clés relatives, préfixe retiré. Les clés dont un élément de chemin vaut `..` (ex. `../a`, `a/../b`), commençant par `/` ou contenant des caractères de contrôle sont rejetées (`400 INVALID_KEY`). Des points à l'intérieur d'un nom (ex. `see ....pdf`) sont acceptés.
   - Le magasin est transmis par le paramètre `store` : en query, ou dans le corps JSON pour `PUT /api/s3/write`. Une valeur autre que `data` ou `archives` est rejetée (`400 MISSING_PARAM`).
   - **Transition** : jusqu'à la fin de la phase P3, un `store` absent vaut `data`. Le rendre obligatoire ensuite sera une évolution MAJOR.
+  - **Lecture** : `GET /api/s3/read` renvoie les octets bruts de l'objet, sans décodage, avec le `Content-Type` enregistré sur l'objet (`application/octet-stream` s'il est absent). Les deux magasins sont concernés : un objet texte est lu par le client avec son propre décodage (UTF-8), un PDF d'archives en binaire.
+  - **Normalisation Unicode** : pour `GET /api/s3/read` et `GET /api/s3/head`, le proxy essaie la clé telle quelle, puis ses formes NFC et NFD. Il répond `404 NOT_FOUND` seulement si aucune n'existe. La clé renvoyée par `head` est celle qu'envoie le client. `write`, `delete` et `list` utilisent la clé exacte, sans essayer d'autre forme.
 - **Local** : `/api/local/read` exige la capacité `localArchive` et reste confiné à `localArchive.root` ; ses clés suivent les mêmes règles que les clés S3 (`400 INVALID_KEY`). `/api/local/open` exige `localArchive` **et** `isServer`.
 - **Diagnostics et statuts** : servis depuis les emplacements de l'environnement de l'appelant uniquement. Le proxy n'a pas d'endpoint dédié : la PWA les lit dans le magasin `data` (`diagnostics/`, `events/status/`), donc dans les buckets de l'environnement de l'appelant.
 
@@ -274,3 +276,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.2.0 | 2026-11-05 | I4 : exception pour l'emplacement du code ; I7 et §9.1 : `envId` pour les scripts d'entrée, configuration d'exécution portant `env.id` pour les scripts enfants ; §3.2 et §3.3 : `s3.endpoint` et `s3.awsProfile` (facultatifs), hôte MySQL `localhost`, `events` vide et `driveFolderId` obsolète ; §7 : identifiant dans l'attribut compte, accès S3 des scripts par profil AWS CLI ; §9.2 : `envSecretAccount` ; §9.4 : interrupteurs de nuit et un LaunchAgent par environnement |
 | 1.2.1 | 2026-11-08 | §5.3 : `INVALID_KEY` ne vise que `..` comme élément de chemin (un nom d'archive existant contient `....`), et s'applique aussi aux clés de `/api/local/*`. Rectificatif publié en PATCH : seul le proxy applique cette règle, depuis la phase P1 en cours, et aucun client ne dépend du refus |
 | 1.2.2 | 2026-11-08 | §4.8 : `GET /health` est aussi la sonde de myTooling (pilotage du proxy) ; sa forme est figée. Clarification publiée en PATCH : aucun changement de comportement |
+| 1.3.0 | 2026-11-08 | §5.3 : `GET /api/s3/read` renvoie les octets bruts de l'objet avec son `Content-Type` (lecture des PDF d'archives par S3 hors du Mac) ; `read` et `head` essaient la clé telle quelle, puis en NFC et NFD. Évolution MINOR : le contenu des lectures qui réussissaient est inchangé, seul l'en-tête `Content-Type` change, et la PWA ne le lit pas |
