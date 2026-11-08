@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.2.0** — 2026-11-05
+**Version : 1.2.1** — 2026-11-08
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -147,10 +147,10 @@ Premier appel de la PWA, avant toute autre requête.
 ### 5.3 Endpoints existants
 
 - Les chemins et formats actuels sont conservés. Leur sémantique devient « relative à l'environnement de l'appelant ».
-- **S3** : le client fournit un magasin logique (`data` ou `archives`) et une clé relative. Il ne fournit jamais de nom de bucket. Le proxy calcule `bucket = s3.<store>Bucket` et `key = s3.prefix + cléRelative`. Les listings renvoient des clés relatives, préfixe retiré. Les clés contenant `..`, commençant par `/` ou contenant des caractères de contrôle sont rejetées (`400 INVALID_KEY`).
+- **S3** : le client fournit un magasin logique (`data` ou `archives`) et une clé relative. Il ne fournit jamais de nom de bucket. Le proxy calcule `bucket = s3.<store>Bucket` et `key = s3.prefix + cléRelative`. Les listings renvoient des clés relatives, préfixe retiré. Les clés dont un élément de chemin vaut `..` (ex. `../a`, `a/../b`), commençant par `/` ou contenant des caractères de contrôle sont rejetées (`400 INVALID_KEY`). Des points à l'intérieur d'un nom (ex. `see ....pdf`) sont acceptés.
   - Le magasin est transmis par le paramètre `store` : en query, ou dans le corps JSON pour `PUT /api/s3/write`. Une valeur autre que `data` ou `archives` est rejetée (`400 MISSING_PARAM`).
   - **Transition** : jusqu'à la fin de la phase P3, un `store` absent vaut `data`. Le rendre obligatoire ensuite sera une évolution MAJOR.
-- **Local** : `/api/local/read` exige la capacité `localArchive` et reste confiné à `localArchive.root`. `/api/local/open` exige `localArchive` **et** `isServer`.
+- **Local** : `/api/local/read` exige la capacité `localArchive` et reste confiné à `localArchive.root` ; ses clés suivent les mêmes règles que les clés S3 (`400 INVALID_KEY`). `/api/local/open` exige `localArchive` **et** `isServer`.
 - **Diagnostics et statuts** : servis depuis les emplacements de l'environnement de l'appelant uniquement. Le proxy n'a pas d'endpoint dédié : la PWA les lit dans le magasin `data` (`diagnostics/`, `events/status/`), donc dans les buckets de l'environnement de l'appelant.
 
 ### 5.4 Erreurs
@@ -272,3 +272,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.1.0 | 2026-11-02 | §4.8 : exceptions `/health` et `OPTIONS` ; §5.1 : cas sans `X-HomeTools-Env` ; §5.3 : paramètre `store` (absent = `data` jusqu'à la fin de P3), diagnostics et statuts lus dans le magasin `data` ; §5.4 : codes `NOT_FOUND`, `MISSING_PARAM`, `STORAGE_ERROR` |
 | 1.1.1 | 2026-11-05 | §9.3 : pas de préfixe d'environnement dans les lignes de journal (le fichier est propre à l'environnement). Rectificatif publié en PATCH : l'exigence n'avait encore aucune implémentation |
 | 1.2.0 | 2026-11-05 | I4 : exception pour l'emplacement du code ; I7 et §9.1 : `envId` pour les scripts d'entrée, configuration d'exécution portant `env.id` pour les scripts enfants ; §3.2 et §3.3 : `s3.endpoint` et `s3.awsProfile` (facultatifs), hôte MySQL `localhost`, `events` vide et `driveFolderId` obsolète ; §7 : identifiant dans l'attribut compte, accès S3 des scripts par profil AWS CLI ; §9.2 : `envSecretAccount` ; §9.4 : interrupteurs de nuit et un LaunchAgent par environnement |
+| 1.2.1 | 2026-11-08 | §5.3 : `INVALID_KEY` ne vise que `..` comme élément de chemin (un nom d'archive existant contient `....`), et s'applique aussi aux clés de `/api/local/*`. Rectificatif publié en PATCH : seul le proxy applique cette règle, depuis la phase P1 en cours, et aucun client ne dépend du refus |
