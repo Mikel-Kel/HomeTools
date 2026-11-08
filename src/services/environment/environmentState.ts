@@ -1,6 +1,6 @@
 import { ref, shallowRef, watch } from "vue";
 
-import type { EnvironmentInfo } from "@/contracts/environment";
+import type { Capabilities, EnvironmentInfo } from "@/contracts/environment";
 
 /* =========================
    Environnement de l'appareil
@@ -62,6 +62,20 @@ export function whenEnvironmentReady(): Promise<void> {
         }
       });
   });
+}
+
+/*
+  Capacités de l'environnement et rôle de l'appareil
+  (§3.4) : faux tant que l'environnement n'est pas connu.
+*/
+export function hasCapability(
+  name: keyof Capabilities
+): boolean {
+  return environment.value?.capabilities[name] === true;
+}
+
+export function isServerDevice(): boolean {
+  return environment.value?.isServer === true;
 }
 
 /* Contrat incompatible ou environnement changé : seul un rechargement en sort. */

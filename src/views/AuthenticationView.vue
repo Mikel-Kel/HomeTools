@@ -10,7 +10,7 @@ import type {
   StorageBackend,
 } from "@/utils/storageBackend";
 
-import { detectDevice } from "@/utils/deviceDetection";
+import { isServerDevice } from "@/services/environment/environmentState";
 
 import {
   pickLocalDirectory,
@@ -23,16 +23,6 @@ import { alertDialog } from "@/services/dialog/appDialog";
 ========================= */
 
 const router = useRouter();
-
-/* =========================
-   Device
-========================= */
-
-const device = detectDevice();
-
-const isMac = computed(() =>
-  device === "Mac"
-);
 
 /* =========================
    Storage backend
@@ -55,7 +45,8 @@ const backendOptions = computed<BackendOption[]>(() => [
     id: "LOCAL_DRIVE",
     label: "Local Drive",
     description: "Use the local HomeTools folder on this Mac.",
-    disabled: !isMac.value,
+    /* Dossiers locaux : seulement sur le serveur de l'environnement. */
+    disabled: !isServerDevice(),
   },
   {
     id: "OBJECT_STORAGE",

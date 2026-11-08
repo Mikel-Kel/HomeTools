@@ -1,4 +1,4 @@
-import { detectDevice } from "@/utils/deviceDetection";
+import { isServerDevice } from "@/services/environment/environmentState";
 
 import {
   getLocalItem,
@@ -49,22 +49,15 @@ export function isStorageBackend(
 export function getDefaultStorageBackend():
   StorageBackend {
 
-  const device = detectDevice();
-
   /*
-    Mac:
-    - conserve le fonctionnement local actuel
-    - l'utilisateur pourra sélectionner S3
-      dans AuthenticationView
+    Serveur de l'environnement (le Mac) : dossier local ;
+    l'utilisateur peut choisir S3 dans AuthenticationView.
 
-    iPad / autres appareils:
-    - Object Storage devient la cible par défaut
+    Autres appareils : Object Storage, seul possible.
   */
-  if (device === "Mac") {
-    return "LOCAL_DRIVE";
-  }
-
-  return "OBJECT_STORAGE";
+  return isServerDevice()
+    ? "LOCAL_DRIVE"
+    : "OBJECT_STORAGE";
 }
 
 /* =========================
@@ -79,12 +72,16 @@ export function getStoredStorageBackend():
       STORAGE_BACKEND_KEY
     );
 
-  if (isStorageBackend(stored)) {
+  if (
+    isStorageBackend(stored) &&
+    (stored !== "LOCAL_DRIVE" || isServerDevice())
+  ) {
     return stored;
   }
 
   /*
-    Valeur d'un backend retiré (GOOGLE_DRIVE) :
+    Valeur d'un backend retiré (GOOGLE_DRIVE), ou Local
+    Drive sur un appareil qui n'est pas le serveur :
     effacée, l'appareil reprend son défaut.
   */
   if (stored !== null) {

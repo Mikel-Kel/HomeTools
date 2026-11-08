@@ -56,6 +56,7 @@ import {
   formatAmount,
 } from "@/utils/amountFormat";
 import { confirmDialog } from "@/services/dialog/appDialog";
+import { hasCapability } from "@/services/environment/environmentState";
 import {
   getSessionItem,
   removeSessionItem,
@@ -160,6 +161,10 @@ const releasedState =
 
 const SPENDING_FILTERS_KEY =
   "spendingFilters";
+
+/* Téléchargement Card24 : capacité de l'environnement (§3.4). */
+const card24Enabled =
+  hasCapability("card24");
 
 const filtersOpen =
   ref(false);
@@ -1377,9 +1382,9 @@ onBeforeUnmount(() => {
         <span class="ops-count">
           {{ recordsFor(account.id).length }} ops
         </span>
-        <!-- Bouton download Card24 — uniquement pour Global Card -->
+        <!-- Bouton download Card24 — uniquement pour Global Card, avec la capacité card24 -->
         <button
-          v-if="account.label.toLowerCase().includes('card')"
+          v-if="card24Enabled && account.label.toLowerCase().includes('card')"
           class="btn-download-card24"
           :disabled="card24Downloading"
           title="Télécharger les transactions Card24"

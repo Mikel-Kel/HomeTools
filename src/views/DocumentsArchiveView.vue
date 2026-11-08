@@ -17,6 +17,7 @@ import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { emitEvent } from "@/services/events/eventFiles";
 import { isProxyConfigured, proxyFetch } from "@/services/proxy/proxyClient";
+import { hasCapability, isServerDevice } from "@/services/environment/environmentState";
 
 import { useParties } from "@/composables/useParties";
 import { useArchiveFolders } from "@/composables/archives/useArchiveFolders";
@@ -513,30 +514,16 @@ watch(
    Open document
 ========================= */
 
-function isMacDesktopBrowser(): boolean {
-  /*
-    Contrairement a l'ancien isRealMacDesktop() (retire plus haut
-    dans cette session), cette detection ne sert PAS a decider si
-    on peut acceder au fichier - le proxy fonctionne identiquement
-    partout. Elle sert uniquement a choisir la PRESENTATION
-    preferee sur Mac (Apercu natif) vs les autres appareils
-    (affichage dans le navigateur, seul choix sensé sur iPad).
-
-    Si la detection se trompe, le pire cas est cosmetique : le
-    document s'affiche quand meme, juste pas dans l'app preferee.
-  */
-  const isMac =
-    navigator.userAgent.includes(
-      "Macintosh"
-    );
-
-  const isTouch =
-    navigator.maxTouchPoints >
-    1;
-
+/*
+  Ouverture dans Aperçu, sur le Mac serveur : seulement si
+  l'environnement a ses archives sur ce disque
+  (localArchive) et que l'appareil est le serveur (§3.4).
+  Ailleurs : affichage dans le navigateur.
+*/
+function canOpenNatively(): boolean {
   return (
-    isMac &&
-    !isTouch
+    hasCapability("localArchive") &&
+    isServerDevice()
   );
 }
 
@@ -640,7 +627,7 @@ async function openArchiveDocument(
     return false;
   }
 
-  if (isMacDesktopBrowser()) {
+  if (canOpenNatively()) {
     if (
       await openNativelyOnMac(
         item.physicalName
