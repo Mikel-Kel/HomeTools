@@ -8,7 +8,30 @@
    La clé vient encore de VITE_PROXY_API_KEY, donc du
    bundle public. Le coffre chiffré la remplacera ici,
    sans toucher aux appelants.
+
+   Contrat multi-environnements (src/contracts/environment.ts) :
+   - tant que l'environnement n'est pas établi, seul
+     /api/whoami est envoyé ;
+   - un refus d'identité, de clé ou de configuration (§5.4),
+     un contrat d'un autre MAJOR ou un environnement
+     différent de celui du démarrage bloquent l'app.
 ========================= */
+
+import {
+  CONTRACT_HEADER,
+  ENV_HEADER,
+  ENVIRONMENT_ERROR_CODES,
+  isContractCompatible,
+  readProxyErrorBody,
+  WHOAMI_PATH,
+  type ProxyErrorBody,
+} from "@/contracts/environment";
+
+import {
+  blockEnvironment,
+  environment,
+  environmentEstablished,
+} from "@/services/environment/environmentState";
 
 const proxyUrl =
   import.meta.env.VITE_PROXY_URL as string | undefined;
@@ -29,14 +52,17 @@ const GATEWAY_ERROR_STATUSES =
 export type ProxyErrorKind =
   | "config"
   | "unreachable"
-  | "timeout";
+  | "timeout"
+  | "environment";
 
 /*
   Échec avant toute réponse HTTP, ou réponse de la
   passerelle Tailscale sans le proxy derrière (502, 503,
-  504) : « unreachable ». Une autre réponse en erreur
-  (404, 500…) est rendue telle quelle : chaque appelant
-  sait ce qu'elle signifie pour lui.
+  504 sans corps d'erreur du contrat) : « unreachable ».
+  Environnement non établi ou bloquant : « environment ».
+  Une autre réponse en erreur (404, 500…) est rendue
+  telle quelle : chaque appelant sait ce qu'elle signifie
+  pour lui.
 */
 export class ProxyError extends Error {
   readonly kind: ProxyErrorKind;
@@ -87,6 +113,58 @@ function buildUrl(
   return url.toString();
 }
 
+async function readErrorBody(
+  response: Response
+): Promise<ProxyErrorBody | null> {
+  try {
+    return readProxyErrorBody(
+      await response.clone().json()
+    );
+  } catch {
+    return null;
+  }
+}
+
+/* Contrat et environnement annoncés par chaque réponse (§5.1). */
+function checkResponseHeaders(
+  response: Response,
+  path: string
+) {
+  const contract =
+    response.headers.get(CONTRACT_HEADER);
+
+  if (contract && !isContractCompatible(contract)) {
+    blockEnvironment({
+      kind: "contract",
+      proxyVersion: contract,
+    });
+
+    throw new ProxyError(
+      "environment",
+      `Incompatible contract ${contract} (${path})`
+    );
+  }
+
+  const env =
+    response.headers.get(ENV_HEADER);
+
+  const known =
+    environment.value;
+
+  if (env && known && env !== known.env) {
+    blockEnvironment({
+      kind: "changed",
+      expected: known.env,
+      received: env,
+    });
+
+    throw new ProxyError(
+      "environment",
+      `Environment changed to ${env} (${path})`
+    );
+  }
+}
+
 export async function proxyFetch(
   path: string,
   {
@@ -108,6 +186,16 @@ export async function proxyFetch(
     throw new ProxyError(
       "config",
       "Missing VITE_PROXY_API_KEY"
+    );
+  }
+
+  if (
+    path !== WHOAMI_PATH &&
+    !environmentEstablished()
+  ) {
+    throw new ProxyError(
+      "environment",
+      `Environment not established (${path})`
     );
   }
 
@@ -161,7 +249,29 @@ export async function proxyFetch(
     window.clearTimeout(timer);
   }
 
-  if (GATEWAY_ERROR_STATUSES.includes(response.status)) {
+  checkResponseHeaders(response, path);
+
+  if (response.ok) {
+    return response;
+  }
+
+  const error =
+    await readErrorBody(response);
+
+  if (error && ENVIRONMENT_ERROR_CODES.includes(error.code)) {
+    blockEnvironment({
+      kind: "error",
+      code: error.code,
+      message: error.message,
+    });
+
+    throw new ProxyError(
+      "environment",
+      `${error.code} (${path}): ${error.message}`
+    );
+  }
+
+  if (!error && GATEWAY_ERROR_STATUSES.includes(response.status)) {
     throw new ProxyError(
       "unreachable",
       `Proxy unavailable (${path}): HTTP ${response.status}`

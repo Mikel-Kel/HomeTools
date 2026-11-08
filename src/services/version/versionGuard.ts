@@ -1,3 +1,4 @@
+import { environmentEstablished } from "@/services/environment/environmentState";
 import { getLocalDirectory } from "@/services/local/localDirectory";
 import { confirmDialog } from "@/services/dialog/appDialog";
 import { detectStorageBackend } from "@/utils/storageBackend";
@@ -18,8 +19,10 @@ import {
    - toutes les 30 minutes tant que la page est visible.
    Au plus un contrôle abouti toutes les 5 minutes ; une
    référence illisible (stockage pas encore prêt, fichier
-   absent) est réessayée au déclencheur suivant. En Local
-   Drive, rien tant qu'aucun dossier n'est choisi.
+   absent) est réessayée au déclencheur suivant. Rien tant
+   que l'environnement n'est pas établi
+   (environmentGuard.ts) ; en Local Drive, rien non plus
+   tant qu'aucun dossier n'est choisi.
 
    App trop ancienne : proposition de recharger. Le
    rechargement ajoute la version à l'adresse (?v=…) pour
@@ -102,6 +105,7 @@ export async function checkAppVersion() {
 
   if (
     running ||
+    !environmentEstablished() ||
     Date.now() - lastCheckAt < CHECK_INTERVAL_MS ||
     !storageSelected()
   ) {

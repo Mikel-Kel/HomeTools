@@ -4,14 +4,24 @@ import { useRoute } from "vue-router";
 import AppNavRail from "@/components/AppNavRail.vue";
 import AppDialog from "@/components/ui/AppDialog.vue";
 import AppUnavailable from "@/components/AppUnavailable.vue";
+import { environment, environmentBlock } from "@/services/environment/environmentState";
 
 const route = useRoute();
+
+/*
+  Les pages ne sont montées qu'une fois l'environnement
+  connu (/api/whoami) : aucune ne lit le stockage avant.
+*/
+const environmentKnown = computed(() =>
+  environment.value !== null
+);
 
 /*
   Barre de navigation sur toutes les pages, sauf l'accueil
   (qui a son menu) et le choix du dossier local.
 */
 const showNavRail = computed(() =>
+  environmentKnown.value &&
   route.name !== undefined &&
   route.name !== "home" &&
   route.name !== "selectFolder"
@@ -25,11 +35,17 @@ const showNavRail = computed(() =>
     class="app-content"
     :class="{ 'with-nav-rail': showNavRail }"
   >
-    <router-view />
+    <router-view v-if="environmentKnown" />
+
+    <p
+      v-else-if="!environmentBlock"
+      class="connecting"
+    >
+      Connecting…
+    </p>
   </div>
 
-  <!-- Le choix du stockage reste accessible : passer à un autre backend débloque l'app. -->
-  <AppUnavailable v-if="route.name !== 'authentication'" />
+  <AppUnavailable />
 
   <AppDialog />
 </template>
@@ -37,5 +53,13 @@ const showNavRail = computed(() =>
 <style scoped>
 .app-content.with-nav-rail {
   margin-left: var(--nav-rail-width);
+}
+
+.connecting {
+  margin: 0;
+  padding: 2rem 16px;
+
+  color: var(--text-soft);
+  text-align: center;
 }
 </style>

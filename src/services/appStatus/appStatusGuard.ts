@@ -1,6 +1,8 @@
 import { ref, shallowRef } from "vue";
 
 import { loadJSONFromFolder } from "@/services/driveAdapter";
+import { loadEnvironment } from "@/services/environment/environmentGuard";
+import { environmentEstablished } from "@/services/environment/environmentState";
 import { ProxyError } from "@/services/proxy/proxyClient";
 import { detectStorageBackend, type StorageBackend } from "@/utils/storageBackend";
 
@@ -17,7 +19,12 @@ import {
    - settings/appStatus.json annonce une maintenance
      (contrat : ../Backend/docs/app-status-contract.md) ;
    - en stockage objet, le proxy du Mac ne répond pas.
-   Le backend Local Drive (le Mac) n'est jamais bloqué.
+   Le backend Local Drive (le Mac) n'est jamais bloqué par
+   une maintenance : le contrôle s'y limite à revérifier
+   /api/whoami, dont l'échec (proxy arrêté, appareil
+   refusé…) bloque l'app par environmentGuard.ts. Appel
+   local et léger : pas de limite d'une minute en Local
+   Drive, chaque navigation revérifie.
 
    Contrôle après chaque navigation (router/index.ts), au
    retour au premier plan et toutes les 5 minutes ; toutes
@@ -25,7 +32,9 @@ import {
    contrôle par minute, sauf « Retry » et changement de
    stockage. Une autre erreur de
    lecture ne change rien et est réessayée au déclencheur
-   suivant.
+   suivant. Rien tant que l'environnement n'est pas établi
+   (environmentGuard.ts) : main.ts lance le premier
+   contrôle dès qu'il l'est.
 ========================= */
 
 export type AppBlock =
@@ -54,19 +63,18 @@ export async function checkAppStatus(
   force = false
 ) {
 
-  const backend =
-    detectStorageBackend();
-
-  if (backend === "LOCAL_DRIVE") {
-    appBlock.value = null;
-    lastBackend = backend;
+  if (!environmentEstablished()) {
     return;
   }
+
+  const backend =
+    detectStorageBackend();
 
   if (
     appStatusChecking.value ||
     (
       !force &&
+      backend !== "LOCAL_DRIVE" &&
       backend === lastBackend &&
       Date.now() - lastCheckAt < MIN_INTERVAL_MS
     )
@@ -76,6 +84,19 @@ export async function checkAppStatus(
 
   appStatusChecking.value = true;
   lastBackend = backend;
+
+  if (backend === "LOCAL_DRIVE") {
+    appBlock.value = null;
+
+    try {
+      await loadEnvironment();
+      lastCheckAt = Date.now();
+    } finally {
+      appStatusChecking.value = false;
+    }
+
+    return;
+  }
 
   try {
 
@@ -102,7 +123,7 @@ export async function checkAppStatus(
 
     if (
       err instanceof ProxyError &&
-      err.kind !== "config"
+      (err.kind === "unreachable" || err.kind === "timeout")
     ) {
       appBlock.value = { kind: "unreachable" };
       lastCheckAt = Date.now();

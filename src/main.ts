@@ -1,4 +1,4 @@
-import { createApp } from "vue";
+import { createApp, watch } from "vue";
 import App from "./App.vue";
 import router from "./router";
 import "@/assets/theme.css";
@@ -6,8 +6,10 @@ import "@/assets/theme.css";
 import { restoreLocalDirectory } from "@/services/local/localDirectory";
 
 import { log } from "./utils/logger";
-import { startVersionWatch } from "@/services/version/versionGuard";
-import { startAppStatusWatch } from "@/services/appStatus/appStatusGuard";
+import { checkAppVersion, startVersionWatch } from "@/services/version/versionGuard";
+import { checkAppStatus, startAppStatusWatch } from "@/services/appStatus/appStatusGuard";
+import { startEnvironmentWatch } from "@/services/environment/environmentGuard";
+import { environment } from "@/services/environment/environmentState";
 import PageHeader from "@/components/PageHeader.vue";
 
 async function bootstrap() {
@@ -48,6 +50,20 @@ async function bootstrap() {
   ============================ */
   app.use(router).mount("#app");
 
+  /* ============================
+     Environnement, puis disponibilité et version
+
+     /api/whoami part en premier ; les contrôles de
+     maintenance et de version attendent l'environnement.
+  ============================ */
+  watch(environment, (current, previous) => {
+    if (current && !previous) {
+      void checkAppStatus(true);
+      void checkAppVersion();
+    }
+  });
+
+  startEnvironmentWatch();
   startVersionWatch();
   startAppStatusWatch();
 }
