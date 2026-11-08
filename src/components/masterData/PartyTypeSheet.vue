@@ -16,7 +16,7 @@ import {
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
-import { detectDevice } from "@/utils/deviceDetection";
+import { deviceName } from "@/services/environment/environmentState";
 
 /* =========================
    Fiche type de partie
@@ -135,7 +135,7 @@ async function save() {
       payload: {
         typeId: props.type?.id ?? null,
         label: trimmedLabel.value,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     fileSuffix
@@ -171,7 +171,7 @@ async function remove() {
       timestamp: new Date().toISOString(),
       payload: {
         typeId: props.type!.id,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     `${fileSuffix}_DEL`

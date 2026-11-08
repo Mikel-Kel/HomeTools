@@ -28,7 +28,7 @@ import {
 import { formatDate } from "@/utils/dateFormat";
 import { confirmDialog } from "@/services/dialog/appDialog";
 
-import { detectDevice } from "@/utils/deviceDetection";
+import { deviceName } from "@/services/environment/environmentState";
 
 /* =========================
    Fiche d'un indicateur pour une fin de mois
@@ -322,7 +322,7 @@ async function save() {
   const base = {
     familyId: props.familyId,
     itemId: props.item.itemId,
-    source: detectDevice(),
+    source: deviceName(),
   };
 
   if (valueChanged.value) {
@@ -386,7 +386,7 @@ async function deleteValue() {
         familyId: props.familyId,
         itemId: props.item.itemId,
         date: props.date,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     eventSuffix

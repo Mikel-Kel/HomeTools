@@ -1,6 +1,7 @@
 import { ref, shallowRef, watch } from "vue";
 
 import type { Capabilities, EnvironmentInfo } from "@/contracts/environment";
+import { detectDevice } from "@/utils/deviceDetection";
 
 /* =========================
    Environnement de l'appareil
@@ -79,6 +80,15 @@ export function hasCapability(
 
 export function isServerDevice(): boolean {
   return environment.value?.isServer === true;
+}
+
+/*
+  Nom de l'appareil pour le champ source des événements :
+  celui que déclare environments.json (whoami), sinon le
+  type détecté par le navigateur.
+*/
+export function deviceName(): string {
+  return environment.value?.device || detectDevice();
 }
 
 /* Contrat incompatible ou environnement changé : seul un rechargement en sort. */

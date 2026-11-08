@@ -17,7 +17,7 @@ import type { BudgetLine } from "@/contracts/budget";
 import { formatInteger } from "@/utils/amountFormat";
 import { confirmDialog } from "@/services/dialog/appDialog";
 
-import { detectDevice } from "@/utils/deviceDetection";
+import { deviceName } from "@/services/environment/environmentState";
 
 /* =========================
    Fiche budget d'une sous-catégorie
@@ -218,7 +218,7 @@ async function save() {
         months: months.value,
         open: status.value === "open",
         memo: memo.value.trim() || null,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     String(props.line.subCategoryId)
@@ -262,7 +262,7 @@ async function remove() {
       payload: {
         year: props.year,
         subCategoryId: props.line.subCategoryId,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     `${props.line.subCategoryId}_DEL`

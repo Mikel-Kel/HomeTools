@@ -13,7 +13,7 @@ import { DOC_TAG_TYPE } from "@/contracts/documentTags";
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
-import { detectDevice } from "@/utils/deviceDetection";
+import { deviceName } from "@/services/environment/environmentState";
 
 import type {
   TagItem,
@@ -186,7 +186,7 @@ async function save() {
         label: trimmedLabel.value,
         seq: seqValue.value,
         ...(isDoc ? { color: color.value.toLowerCase() } : {}),
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     fileSuffix
@@ -223,7 +223,7 @@ async function remove() {
       payload: {
         tagType: props.tagType,
         tagId: props.tag!.id,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     `${fileSuffix}_DEL`

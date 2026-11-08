@@ -39,8 +39,8 @@ import {
 } from "@/services/events/eventFiles";
 
 import {
-  detectDevice,
-} from "@/utils/deviceDetection";
+  deviceName,
+} from "@/services/environment/environmentState";
 
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
@@ -465,7 +465,7 @@ async function runHousekeeping() {
         ),
 
       source:
-        detectDevice(),
+        deviceName(),
     },
   });
 }

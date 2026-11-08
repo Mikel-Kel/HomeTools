@@ -38,7 +38,7 @@ import {
 } from "@/utils/amountFormat";
 
 import { formatDate } from "@/utils/dateFormat";
-import { detectDevice } from "@/utils/deviceDetection";
+import { deviceName } from "@/services/environment/environmentState";
 
 import {
   sanDue,
@@ -468,7 +468,7 @@ async function startMonth() {
       payload: {
         date: month.value,
         familyIds: ENTRY_FAMILY_IDS,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     "NEWMONTH"

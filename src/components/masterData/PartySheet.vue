@@ -19,7 +19,7 @@ import {
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
-import { detectDevice } from "@/utils/deviceDetection";
+import { deviceName } from "@/services/environment/environmentState";
 
 /* =========================
    Fiche partie (et ses alias)
@@ -317,7 +317,7 @@ async function save() {
         typeId: typeId.value,
         seq,
         aliases: aliases.value,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     fileSuffix
@@ -353,7 +353,7 @@ async function remove() {
       timestamp: new Date().toISOString(),
       payload: {
         partyId: props.party!.id,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     `${fileSuffix}_DEL`

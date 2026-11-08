@@ -22,7 +22,7 @@ import type {
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
-import { detectDevice } from "@/utils/deviceDetection";
+import { deviceName } from "@/services/environment/environmentState";
 
 /* =========================
    Fiche catégorie ou sous-catégorie
@@ -248,7 +248,7 @@ async function save() {
             label: trimmedLabel.value,
             nature: nature.value,
             displayScope: displayScope.value,
-            source: detectDevice(),
+            source: deviceName(),
           },
         }
       : {
@@ -258,7 +258,7 @@ async function save() {
             categoryId: props.category.id,
             label: trimmedLabel.value,
             status: status.value,
-            source: detectDevice(),
+            source: deviceName(),
           },
         };
 

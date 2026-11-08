@@ -35,7 +35,7 @@ import {
 } from "@/contracts/budget";
 
 import { formatInteger } from "@/utils/amountFormat";
-import { detectDevice } from "@/utils/deviceDetection";
+import { deviceName } from "@/services/environment/environmentState";
 import { confirmDialog } from "@/services/dialog/appDialog";
 import { usePersistentRef } from "@/composables/usePersistentRef";
 
@@ -292,7 +292,7 @@ async function createNewYear() {
       payload: {
         sourceYear,
         targetYear,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     "NEWYEAR"

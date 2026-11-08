@@ -10,7 +10,7 @@ import StatusPill from "@/components/ui/StatusPill.vue";
 
 import { useEventRequest } from "@/composables/useEventRequest";
 
-import { detectDevice } from "@/utils/deviceDetection";
+import { deviceName } from "@/services/environment/environmentState";
 
 /* =========================
    Ordre d'affichage d'une liste de données de base
@@ -137,7 +137,7 @@ async function save() {
       payload: {
         ...props.scope,
         order: order.value,
-        source: detectDevice(),
+        source: deviceName(),
       },
     },
     "ORDER"
