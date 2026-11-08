@@ -133,16 +133,3 @@ export async function findLocalFileByName(
   const files = await listLocalFilesInFolder(folderPath);
   return files.find(f => f.name === fileName) ?? null;
 }
-
-/* =========================
-   Download file
-========================= */
-export async function downloadLocalFile(
-  filePath: string
-): Promise<string> {
-  const res = await fetch(filePath);
-  if (!res.ok) {
-    throw new Error("[LOCAL] downloadFile failed");
-  }
-  return await res.text();
-}

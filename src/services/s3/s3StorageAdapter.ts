@@ -18,7 +18,15 @@ import {
   Le proxy (Python/Flask, sur le Mac, expose via
   `tailscale serve`) signe les requetes S3 lui-meme.
   Acces au proxy : src/services/proxy/proxyClient.ts.
+
+  Contrat multi-environnements (§5.3) : chaque requete
+  nomme le magasin logique (`store`), jamais le bucket ;
+  les cles restent relatives a l'environnement. Les
+  fichiers de l'app sont tous dans le magasin `data`.
 */
+
+const DATA_STORE =
+  "data";
 
 
 /* =========================
@@ -154,7 +162,7 @@ export async function readS3Text(
   const response =
     await proxyFetch(
       "/api/s3/read",
-      { params: { key } }
+      { params: { store: DATA_STORE, key } }
     );
 
   if (response.status === 404) {
@@ -225,6 +233,7 @@ export async function writeS3Text(
             "application/json",
         },
         body: JSON.stringify({
+          store: DATA_STORE,
           key,
           content,
           contentType,
@@ -330,7 +339,7 @@ export async function findS3FileByName(
   const response =
     await proxyFetch(
       "/api/s3/head",
-      { params: { key } }
+      { params: { store: DATA_STORE, key } }
     );
 
   if (response.status === 404) {
@@ -368,26 +377,6 @@ export async function findS3FileByName(
 
 
 /* =========================
-   Download file
-========================= */
-
-export async function downloadS3File(
-  key: string
-): Promise<string> {
-  const content =
-    await readS3Text(key);
-
-  if (content === null) {
-    throw new Error(
-      `S3 object not found: ${key}`
-    );
-  }
-
-  return content;
-}
-
-
-/* =========================
    List files
 ========================= */
 
@@ -411,7 +400,7 @@ export async function listS3FilesInFolder(
   const response =
     await proxyFetch(
       "/api/s3/list",
-      { params: { prefix } }
+      { params: { store: DATA_STORE, prefix } }
     );
 
   if (!response.ok) {
@@ -463,7 +452,7 @@ export async function deleteS3File(
       "/api/s3/delete",
       {
         method: "DELETE",
-        params: { key },
+        params: { store: DATA_STORE, key },
       }
     );
 

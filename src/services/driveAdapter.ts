@@ -12,14 +12,12 @@ import {
   deleteLocalFile,
   listLocalFilesInFolder,
   findLocalFileByName,
-  downloadLocalFile,
   resolveDirectory,
 } from "@/services/local/localDrive";
 
 import {
   buildS3Key,
   deleteS3File,
-  downloadS3File,
   findS3FileByName,
   getS3FileModifiedTime,
   listS3FilesInFolder,
@@ -133,31 +131,6 @@ export async function findFileByName(
   return await findS3FileByName(
     folderPath,
     fileName
-  );
-}
-
-/* =========================
-   Download file
-========================= */
-
-export async function downloadFile(
-  filePath: string
-): Promise<string> {
-  const {
-    backend,
-  } = useStorageBackend();
-
-  if (
-    backend.value ===
-    "LOCAL_DRIVE"
-  ) {
-    return await downloadLocalFile(
-      filePath
-    );
-  }
-
-  return await downloadS3File(
-    filePath
   );
 }
 
