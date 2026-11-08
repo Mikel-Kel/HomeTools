@@ -1,7 +1,20 @@
 import { ref } from "vue";
 
 import { ContractError } from "@/contracts/read";
-import { ProxyError, proxyFetch } from "@/services/proxy/proxyClient";
+import { log } from "@/utils/logger";
+
+import {
+  hasProxyKey,
+  ProxyError,
+  proxyFetch,
+  setProxyKey,
+} from "@/services/proxy/proxyClient";
+
+import {
+  loadProxyKey,
+  saveProxyKey,
+  type StoredProxyKey,
+} from "@/services/proxy/proxyKeyVault";
 
 import {
   isContractCompatible,
@@ -24,7 +37,14 @@ import {
    reste bloquée (AppUnavailable.vue) et réessaie toutes les
    minutes et au retour au premier plan, sauf contrat
    incompatible ou environnement changé, qui demandent de
-   recharger.
+   recharger, et clé absente ou refusée, qui attend sa
+   saisie (submitProxyKey).
+
+   Clé du proxy : lue dans le coffre de l'appareil
+   (proxyKeyVault.ts) avant whoami, qui l'exige. Une fois
+   l'environnement connu, elle est rangée sous celui-ci si
+   elle vient d'être saisie ou si elle était rangée sous un
+   autre (appareil réaffecté).
 ========================= */
 
 const RETRY_INTERVAL_MS =
@@ -32,6 +52,34 @@ const RETRY_INTERVAL_MS =
 
 export const environmentChecking =
   ref(false);
+
+/* Clé en mémoire et environnement sous lequel elle est rangée (null : saisie, pas encore rangée). */
+let keySource: { env: string | null; value: string } | null = null;
+
+async function readStoredKey(): Promise<StoredProxyKey | null> {
+  try {
+    return await loadProxyKey();
+  } catch (e) {
+    log.warn("[Vault] proxy key not readable", e);
+    return null;
+  }
+}
+
+async function rememberProxyKey(
+  env: string
+) {
+  if (!keySource || keySource.env === env) {
+    return;
+  }
+
+  try {
+    await saveProxyKey(env, keySource.value);
+    keySource = { env, value: keySource.value };
+  } catch (e) {
+    /* Clé gardée en mémoire : elle sera redemandée au prochain lancement. */
+    log.warn("[Vault] proxy key not saved", e);
+  }
+}
 
 export async function loadEnvironment() {
 
@@ -42,6 +90,19 @@ export async function loadEnvironment() {
   environmentChecking.value = true;
 
   try {
+
+    if (!hasProxyKey()) {
+      const stored =
+        await readStoredKey();
+
+      if (!stored) {
+        blockEnvironment({ kind: "key", rejected: false });
+        return;
+      }
+
+      keySource = stored;
+      setProxyKey(stored.value);
+    }
 
     const response =
       await proxyFetch(WHOAMI_PATH);
@@ -78,6 +139,8 @@ export async function loadEnvironment() {
       return;
     }
 
+    await rememberProxyKey(info.env);
+
     environment.value = info;
     environmentBlock.value = null;
 
@@ -90,6 +153,10 @@ export async function loadEnvironment() {
         blockEnvironment({ kind: "error", code: null, message: err.message });
       }
       /* "environment" : le blocage est déjà posé par proxyFetch. */
+      if (environmentBlock.value?.kind === "key") {
+        keySource = null;
+        setProxyKey(null);
+      }
     } else if (err instanceof ContractError) {
       blockEnvironment({ kind: "error", code: null, message: err.message });
     } else {
@@ -104,6 +171,23 @@ export async function loadEnvironment() {
 
 }
 
+/* Clé saisie dans AppUnavailable.vue : essayée par whoami, rangée si acceptée. */
+export async function submitProxyKey(
+  value: string
+) {
+  const key =
+    value.trim();
+
+  if (!key) {
+    return;
+  }
+
+  keySource = { env: null, value: key };
+  setProxyKey(key);
+
+  await loadEnvironment();
+}
+
 function retryIfBlocked() {
 
   const block =
@@ -112,6 +196,7 @@ function retryIfBlocked() {
   if (
     document.visibilityState === "visible" &&
     block !== null &&
+    block.kind !== "key" &&
     !requiresReload(block)
   ) {
     void loadEnvironment();

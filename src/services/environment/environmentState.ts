@@ -21,14 +21,17 @@ import type { Capabilities, EnvironmentInfo } from "@/contracts/environment";
    - contract : MAJOR du contrat différent de celui de la PWA ;
    - changed : l'appareil a changé d'environnement en cours
      de session ;
-   - unreachable : le proxy ne répond pas.
+   - unreachable : le proxy ne répond pas ;
+   - key : clé du proxy absente de l'appareil, ou refusée
+     (rejected) ; attend sa saisie.
 ========================= */
 
 export type EnvironmentBlock =
   | { kind: "error"; code: string | null; message: string }
   | { kind: "contract"; proxyVersion: string }
   | { kind: "changed"; expected: string; received: string }
-  | { kind: "unreachable" };
+  | { kind: "unreachable" }
+  | { kind: "key"; rejected: boolean };
 
 export const environment =
   shallowRef<EnvironmentInfo | null>(null);

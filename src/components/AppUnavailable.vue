@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import PillButton from "@/components/ui/PillButton.vue";
@@ -14,6 +14,7 @@ import {
 import {
   environmentChecking,
   loadEnvironment,
+  submitProxyKey,
 } from "@/services/environment/environmentGuard";
 
 import {
@@ -29,7 +30,9 @@ import {
      contrat incompatible, environnement changé ou proxy
      injoignable au démarrage. Prioritaire, sur toutes les
      pages et quel que soit le stockage ; « Retry » relance
-     /api/whoami, « Reload » recharge l'app ;
+     /api/whoami, « Reload » recharge l'app. Clé du proxy
+     absente ou refusée : saisie, une fois par appareil
+     (« Connect ») ;
    - disponibilité (appStatusGuard.ts) : maintenance
      annoncée par le Mac, ou proxy injoignable. « Retry »
      relance le contrôle ; « Storage » ouvre le choix du
@@ -68,6 +71,19 @@ const sinceLabel =
 function reloadApp() {
   window.location.reload();
 }
+
+const keyInput =
+  ref("");
+
+async function connect() {
+  if (!keyInput.value.trim() || environmentChecking.value) {
+    return;
+  }
+
+  await submitProxyKey(keyInput.value);
+
+  keyInput.value = "";
+}
 </script>
 
 <template>
@@ -78,7 +94,47 @@ function reloadApp() {
     aria-modal="true"
     aria-labelledby="unavailable-title"
   >
-    <section class="card">
+    <section
+      v-if="environmentBlock.kind === 'key'"
+      class="card"
+    >
+      <h1 id="unavailable-title">
+        {{ environmentBlock.rejected ? "Proxy key rejected" : "Proxy key required" }}
+      </h1>
+
+      <p class="message">
+        {{
+          environmentBlock.rejected
+            ? "The home services refused this key. Enter the current proxy key."
+            : "Enter the HomeTools proxy key. It is asked once on this device and stored encrypted."
+        }}
+      </p>
+
+      <input
+        v-model="keyInput"
+        class="key-input"
+        type="password"
+        autocomplete="off"
+        aria-label="Proxy key"
+        :disabled="environmentChecking"
+        @keyup.enter="connect"
+      >
+
+      <div class="actions">
+        <PillButton
+          variant="primary"
+          :disabled="environmentChecking || !keyInput.trim()"
+          @click="connect"
+        >
+          {{ environmentChecking ? "Checking…" : "Connect" }}
+        </PillButton>
+      </div>
+    </section>
+
+    <section
+      v-else
+      class="card"
+    >
       <template v-if="environmentBlock.kind === 'unreachable'">
         <h1 id="unavailable-title">Home services unreachable</h1>
 
@@ -115,7 +171,7 @@ function reloadApp() {
         </p>
       </template>
 
-      <template v-else>
+      <template v-else-if="environmentBlock.kind === 'changed'">
         <h1 id="unavailable-title">Environment changed</h1>
 
         <p class="message">
@@ -257,6 +313,12 @@ function reloadApp() {
 .actions {
   display: flex;
   gap: 0.5rem;
+}
+
+.key-input {
+  width: 100%;
+  max-width: 320px;
+  box-sizing: border-box;
 }
 
 .code {

@@ -11,7 +11,7 @@ Repos liés : backend AppleScript dans `../Backend`, proxy Flask dans `../hometo
 - « PWA » = manifest + balises meta uniquement : **il n'y a pas de service worker**, donc aucun cache applicatif.
 - Déployée sur GitHub Pages : `https://mikel-kel.github.io/HomeTools/`
 - **Le repo est public** (GitHub Pages ne fonctionne plus en privé) → aucun secret dans le code ni dans le build.
-  - Pas de `.env` versionné ; `.env.local` est ignoré (URL et clé du proxy).
+  - Pas de `.env` versionné ; `.env.local` est ignoré (URL du proxy, `VITE_PROXY_URL`). La clé du proxy n'est jamais dans le build.
   - Toute variable `VITE_*` finit en clair dans le bundle public.
 - Commandes : `npm run dev` (http://localhost:5173), `npm run build` (`vue-tsc -b && vite build`). Pas de tests ni de lint.
   Le type-check utilise `tsconfig.json` (avec `noUnusedLocals` / `noUnusedParameters` : tout code inutilisé fait échouer le build).
@@ -57,7 +57,10 @@ après chaque navigation, au retour au premier plan et toutes les 30 min (au plu
     ailleurs, iPad compris, `/api/s3/read` avec `store=archives` (octets bruts, contrat 1.3.0). Clé = chemin relatif
     du document, NFC/NFD tolérés par le proxy.
 - Tout appel au proxy passe par `proxyFetch` (`src/services/proxy/proxyClient.ts`), seul module qui lit `VITE_PROXY_URL`
-  et `VITE_PROXY_API_KEY`. Il n'y a pas d'authentification applicative ni de coffre d'identifiants.
+  et envoie `X-Proxy-Key`. La clé est saisie une fois par appareil (écran `AppUnavailable.vue`, aussi quand le proxy la
+  refuse) et rangée chiffrée par `src/services/proxy/proxyKeyVault.ts` : base IndexedDB `hometools-vault`, clé AES-GCM
+  générée par le navigateur et non exportable, un enregistrement `ht:<envId>:proxy-key` par environnement. Pas de phrase
+  secrète (choix de Michel : appareils protégés par leur mot de passe). Pas d'authentification applicative.
 - Thème : tokens `--positive`, `--negative`, `--warning` dans `src/assets/theme.css`, variantes clair/sombre (`[data-theme="dark"]`).
 - Navigation : liste des pages dans `src/config/navigation.ts`, partagée par le menu de l'accueil et la barre
   d'icônes `AppNavRail.vue` (toutes les pages sauf l'accueil, montée dans `App.vue`). Une nouvelle page s'y ajoute.
@@ -138,9 +141,8 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 
 ## Points ouverts connus
 
-
-- `VITE_PROXY_API_KEY` est en clair dans le bundle public. Objectif : la retirer du build et la stocker dans un coffre chiffré
-  (PBKDF2 / AES-GCM, verrouillage après inactivité), saisie une fois par appareil. **Ce coffre reste à construire.**
+- Changer `PROXY_API_KEY` (`proxy.env`) une fois tous les appareils passés à la version avec coffre : l'ancienne clé
+  figure dans les bundles déjà publiés sur `gh-pages`.
 
 ## Règles de travail
 

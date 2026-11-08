@@ -5,16 +5,18 @@
    Tailscale) : URL, clé d'API et en-tête X-Proxy-Key ne
    sont lus qu'ici.
 
-   La clé vient encore de VITE_PROXY_API_KEY, donc du
-   bundle public. Le coffre chiffré la remplacera ici,
-   sans toucher aux appelants.
+   La clé n'est pas dans le bundle (repo public) : saisie
+   une fois par appareil, gardée chiffrée par
+   proxyKeyVault.ts, et confiée ici en mémoire par
+   environmentGuard.ts (setProxyKey).
 
    Contrat multi-environnements (src/contracts/environment.ts) :
    - tant que l'environnement n'est pas établi, seul
      /api/whoami est envoyé ;
-   - un refus d'identité, de clé ou de configuration (§5.4),
-     un contrat d'un autre MAJOR ou un environnement
-     différent de celui du démarrage bloquent l'app.
+   - un refus d'identité ou de configuration (§5.4), un
+     contrat d'un autre MAJOR ou un environnement différent
+     de celui du démarrage bloquent l'app ; un refus de la
+     clé (AUTH_INVALID) demande de la saisir.
 ========================= */
 
 import {
@@ -36,8 +38,18 @@ import {
 const proxyUrl =
   import.meta.env.VITE_PROXY_URL as string | undefined;
 
-const proxyApiKey =
-  import.meta.env.VITE_PROXY_API_KEY as string | undefined;
+/* Clé X-Proxy-Key déchiffrée, en mémoire seulement. */
+let proxyKey: string | null = null;
+
+export function setProxyKey(
+  value: string | null
+) {
+  proxyKey = value;
+}
+
+export function hasProxyKey(): boolean {
+  return proxyKey !== null;
+}
 
 /*
   Au-delà de ce délai, la requête est abandonnée (Mac en
@@ -89,7 +101,7 @@ export interface ProxyRequest {
 export function isProxyConfigured(): boolean {
   return Boolean(
     proxyUrl &&
-    proxyApiKey
+    proxyKey
   );
 }
 
@@ -182,10 +194,10 @@ export async function proxyFetch(
     );
   }
 
-  if (!proxyApiKey) {
+  if (!proxyKey) {
     throw new ProxyError(
       "config",
-      "Missing VITE_PROXY_API_KEY"
+      "Proxy key not set on this device"
     );
   }
 
@@ -221,7 +233,7 @@ export async function proxyFetch(
 
         headers: {
           "X-Proxy-Key":
-            proxyApiKey,
+            proxyKey,
 
           ...headers,
         },
@@ -259,11 +271,11 @@ export async function proxyFetch(
     await readErrorBody(response);
 
   if (error && ENVIRONMENT_ERROR_CODES.includes(error.code)) {
-    blockEnvironment({
-      kind: "error",
-      code: error.code,
-      message: error.message,
-    });
+    blockEnvironment(
+      error.code === "AUTH_INVALID"
+        ? { kind: "key", rejected: true }
+        : { kind: "error", code: error.code, message: error.message }
+    );
 
     throw new ProxyError(
       "environment",
