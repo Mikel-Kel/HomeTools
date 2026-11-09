@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.5.0** — 2026-11-09
+**Version : 1.5.1** — 2026-11-09
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -191,7 +191,7 @@ Format unique :
   - **Suppression** : un document supprimé est déplacé dans la corbeille du magasin, `_deleted/<AAAA-MM-JJ>/<clé>` (date de la suppression), et retiré de la copie locale. La corbeille n'est ni indexée, ni réconciliée, ni copiée sur le disque ; les scripts la purgent après 90 jours.
   - **Copie locale** : une étape de nuit ajoute à `localArchive.root` les documents du magasin qui y manquent. Elle ne supprime, ne remplace et ne déplace jamais un fichier local, compare les noms en NFC sans lire le contenu des fichiers, et signale sans y toucher les fichiers présents seulement en local. Rien n'est jamais copié d'une copie locale vers le magasin.
   - **Réconciliation** : l'index MySQL des archives est comparé au magasin `archives`, pour tout environnement, avec ou sans `localArchive`.
-  - **Transition** : pour `hometools`, le disque (`localArchive.root`) reste la source et alimente le magasin `archives` (publication disque → magasin, avec suppression dans le magasin de ce qui manque sur le disque), jusqu'à la bascule vers les règles ci-dessus. Tant que cette publication existe, la capacité `localArchive` n'est donnée à aucun autre environnement. La bascule sera notée au §12.
+  - **Transition** : terminée le 2026-11-09 (1.5.1). `hometools` suit les règles ci-dessus ; la publication disque → magasin n'existe plus.
 
 ---
 
@@ -289,3 +289,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.3.1 | 2026-11-08 | §8 : `root` admis comme utilisateur MySQL d'un environnement pendant une transition ; l'utilisateur dédié reste la cible. Rectificatif publié en PATCH : aucun code ne change, les scripts acceptent déjà les deux (`passwordService` vide pour `root`) |
 | 1.4.0 | 2026-11-09 | §6, §3.3, §3.4 : le magasin `archives` est la référence des archives de chaque environnement, `localArchive.root` en est une copie locale facultative ; transition pour `hometools`, dont le disque reste la source. Évolution MINOR : nouvelle règle, sans changement de code pour le proxy et la PWA, et `hometools` inchangé |
 | 1.5.0 | 2026-11-09 | §6 : règles du magasin `archives` de référence (écritures dans le magasin d'abord, clés NFC, corbeille `_deleted/` purgée après 90 jours, copie locale sans suppression, réconciliation sur le magasin), transition précisée ; §3.3 : `localArchive.root` dans un dossier synchronisé ; §5.3 : `404 NOT_FOUND` pour un fichier local absent ou non téléchargé ; §10 : repli de la PWA sur le magasin. Évolution MINOR : `hometools` inchangé jusqu'à la bascule, les lectures locales qui réussissent aujourd'hui sont inchangées |
+| 1.5.1 | 2026-11-09 | §6 : fin de la transition, `hometools` écrit aussi d'abord dans le magasin `archives` et sa copie locale en est alimentée ; la publication disque → magasin est retirée. Publié en PATCH : bascule annoncée en 1.5.0, sans changement d'interface |
