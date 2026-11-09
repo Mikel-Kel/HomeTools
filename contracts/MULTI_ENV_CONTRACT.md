@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.3.1** — 2026-11-08
+**Version : 1.4.0** — 2026-11-09
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -93,14 +93,14 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 | `s3.prefix` | Préfixe ajouté à toutes les clés. Vide si l'environnement possède ses buckets. |
 | `s3.endpoint`, `s3.awsProfile` | Endpoint S3 (URL `https`) et profil AWS CLI utilisés par les scripts (§7). Facultatifs pour le schéma ; un script qui accède à S3 s'arrête en `ERR` s'ils manquent. Le proxy ne les lit pas : il a ses propres réglages (§7). |
 | `events` | Objet vide : les emplacements des événements se déduisent du profil, `<baseDir>/events/` sur le Mac et `events/` dans le magasin `data` (`s3.dataBucket`, préfixe `s3.prefix`). `driveFolderId` est obsolète et ignoré ; sa suppression du schéma sera une évolution MAJOR. |
-| `localArchive` | Requis si et seulement si `capabilities.localArchive` vaut `true`. |
+| `localArchive` | Requis si et seulement si `capabilities.localArchive` vaut `true`. Copie locale des archives sur le serveur ; la référence est le magasin `archives` (§6). |
 | `jobs` | Liste des jobs Housekeeping exécutés pour cet environnement (§9.4). |
 
 ### 3.4 Capacités v1
 
 | Capacité | Effet |
 |---|---|
-| `localArchive` | Autorise `/api/local/read` sur `localArchive.root`. `/api/local/open` exige en plus que l'appareil appelant soit le serveur (`isServer: true`). |
+| `localArchive` | Autorise `/api/local/read` sur `localArchive.root` (copie locale du magasin `archives`, §6). `/api/local/open` exige en plus que l'appareil appelant soit le serveur (`isServer: true`). |
 | `card24` | Autorise le job Card24 et les vues de suivi associées. |
 
 ---
@@ -184,6 +184,8 @@ Format unique :
 
 - Les buckets existants `hometools-prod` et `archives-prod` restent ceux de `hometools`, sans préfixe et sans migration de données.
 - Chaque nouvel environnement reçoit ses propres buckets (ex. `fantoine-prod`, `fantoine-archives`), sous réserve de disponibilité des noms chez Hetzner.
+- **Référence des archives** : le magasin `archives` (`s3.archivesBucket`, préfixe `s3.prefix`) est la référence des documents archivés de chaque environnement. `localArchive.root`, quand il existe, en est une copie locale sur le serveur. Elle sert à la lecture rapide (`/api/local/read`) et à l'ouverture native (`/api/local/open`). Un environnement sans `localArchive` (ex. `fantoine`) n'a que le magasin `archives`.
+  - **Transition** : pour `hometools`, le disque (`localArchive.root`) reste la source et alimente le magasin `archives`, jusqu'à la fin du chantier qui inversera ce sens (copie du magasin vers le disque, sans jamais supprimer de fichier local). La fin de la transition sera notée au §12.
 
 ---
 
@@ -278,3 +280,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.2.2 | 2026-11-08 | §4.8 : `GET /health` est aussi la sonde de myTooling (pilotage du proxy) ; sa forme est figée. Clarification publiée en PATCH : aucun changement de comportement |
 | 1.3.0 | 2026-11-08 | §5.3 : `GET /api/s3/read` renvoie les octets bruts de l'objet avec son `Content-Type` (lecture des PDF d'archives par S3 hors du Mac) ; `read` et `head` essaient la clé telle quelle, puis en NFC et NFD. Évolution MINOR : le contenu des lectures qui réussissaient est inchangé, seul l'en-tête `Content-Type` change, et la PWA ne le lit pas |
 | 1.3.1 | 2026-11-08 | §8 : `root` admis comme utilisateur MySQL d'un environnement pendant une transition ; l'utilisateur dédié reste la cible. Rectificatif publié en PATCH : aucun code ne change, les scripts acceptent déjà les deux (`passwordService` vide pour `root`) |
+| 1.4.0 | 2026-11-09 | §6, §3.3, §3.4 : le magasin `archives` est la référence des archives de chaque environnement, `localArchive.root` en est une copie locale facultative ; transition pour `hometools`, dont le disque reste la source. Évolution MINOR : nouvelle règle, sans changement de code pour le proxy et la PWA, et `hometools` inchangé |
