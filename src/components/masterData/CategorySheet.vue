@@ -24,6 +24,13 @@ import { confirmDialog } from "@/services/dialog/appDialog";
 
 import { deviceName } from "@/services/environment/environmentState";
 
+import {
+  AGGREGATES_REBUILT_BY_SERVER,
+  pendingMessage,
+  processingMessage,
+  waitingElsewhereMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Fiche catégorie ou sous-catégorie
 
@@ -286,7 +293,7 @@ watch(
 const requestMessage =
   computed(() => {
     if (waitingElsewhere.value) {
-      return "A change of this item is waiting for the Mac.";
+      return waitingElsewhereMessage("A change of this item");
     }
 
     const current =
@@ -294,12 +301,10 @@ const requestMessage =
 
     switch (current?.phase) {
       case "requested":
-        return saveRequest.noAnswerYet.value
-          ? "Sent — no answer from the Mac yet. Check that it is on and reachable."
-          : "Sent — waiting for the Mac…";
+        return pendingMessage("Sent", saveRequest.noAnswerYet.value);
 
       case "started":
-        return "Saving on the Mac…";
+        return processingMessage("Saving");
 
       case "error":
         return `Rejected: ${current.message ?? "unknown error"}`;
@@ -433,7 +438,7 @@ onBeforeUnmount(() => {
         "
         class="note"
       >
-        The follow-up aggregates are rebuilt by the Mac after this change.
+        {{ AGGREGATES_REBUILT_BY_SERVER }}
       </p>
     </template>
 

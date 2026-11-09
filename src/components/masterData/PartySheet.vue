@@ -21,6 +21,11 @@ import { confirmDialog } from "@/services/dialog/appDialog";
 
 import { deviceName } from "@/services/environment/environmentState";
 
+import {
+  CREATED_ON_SERVER,
+  waitingElsewhereMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Fiche partie (et ses alias)
 
@@ -373,7 +378,7 @@ watch(
 const hint =
   computed(() =>
     waitingElsewhere.value
-      ? "A change of this party is waiting for the Mac."
+      ? waitingElsewhereMessage("A change of this party")
       : changed.value
         ? formError.value
         : ""
@@ -393,7 +398,7 @@ const usageText =
 <template>
   <EditSheet
     :title="title"
-    :subtitle="isNew ? 'Created on the Mac' : `${isFolder ? 'Folder' : 'Party'} ${party!.id} · ${usageText}`"
+    :subtitle="isNew ? CREATED_ON_SERVER : `${isFolder ? 'Folder' : 'Party'} ${party!.id} · ${usageText}`"
     :request="saveRequest"
     :changed="changed"
     :can-save="canSave"

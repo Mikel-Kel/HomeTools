@@ -19,6 +19,12 @@ import { confirmDialog } from "@/services/dialog/appDialog";
 
 import { deviceName } from "@/services/environment/environmentState";
 
+import {
+  pendingMessage,
+  processingMessage,
+  waitingElsewhereMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Fiche budget d'une sous-catégorie
 
@@ -282,7 +288,7 @@ watch(
 const requestMessage =
   computed(() => {
     if (waitingElsewhere.value) {
-      return "An update of this line is waiting for the Mac.";
+      return waitingElsewhereMessage("An update of this line");
     }
 
     const current =
@@ -290,14 +296,12 @@ const requestMessage =
 
     switch (current?.phase) {
       case "requested":
-        return updateRequest.noAnswerYet.value
-          ? "Sent — no answer from the Mac yet. Check that it is on and reachable."
-          : "Sent — waiting for the Mac…";
+        return pendingMessage("Sent", updateRequest.noAnswerYet.value);
 
       case "started":
         return deleting.value
-          ? "Deleting on the Mac…"
-          : "Saving on the Mac…";
+          ? processingMessage("Deleting")
+          : processingMessage("Saving");
 
       case "error":
         return `Rejected: ${current.message ?? "unknown error"}`;

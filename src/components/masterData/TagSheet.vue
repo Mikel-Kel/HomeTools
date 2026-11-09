@@ -20,6 +20,11 @@ import type {
   TagType,
 } from "@/components/masterData/tagItems";
 
+import {
+  CREATED_ON_SERVER,
+  waitingElsewhereMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Fiche tag (mouvements ou documents)
 
@@ -243,7 +248,7 @@ watch(
 const hint =
   computed(() =>
     waitingElsewhere.value
-      ? "A change of this tag is waiting for the Mac."
+      ? waitingElsewhereMessage("A change of this tag")
       : changed.value
         ? formError.value
         : ""
@@ -251,7 +256,7 @@ const hint =
 
 const subtitle =
   isNew
-    ? "Created on the Mac"
+    ? CREATED_ON_SERVER
     : `Tag ${props.tag!.id} · ${props.tag!.usage}`;
 </script>
 

@@ -18,6 +18,11 @@ import { confirmDialog } from "@/services/dialog/appDialog";
 
 import { deviceName } from "@/services/environment/environmentState";
 
+import {
+  CREATED_ON_SERVER,
+  waitingElsewhereMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Fiche type de partie
 
@@ -191,7 +196,7 @@ watch(
 const hint =
   computed(() =>
     waitingElsewhere.value
-      ? "A change of this type is waiting for the Mac."
+      ? waitingElsewhereMessage("A change of this type")
       : changed.value
         ? formError.value
         : ""
@@ -201,7 +206,7 @@ const hint =
 <template>
   <EditSheet
     :title="isNew ? 'New party type' : type!.label"
-    :subtitle="isNew ? 'Created on the Mac' : `Party type ${type!.id} · ${partyCount} parties`"
+    :subtitle="isNew ? CREATED_ON_SERVER : `Party type ${type!.id} · ${partyCount} parties`"
     :request="saveRequest"
     :changed="changed"
     :can-save="canSave"

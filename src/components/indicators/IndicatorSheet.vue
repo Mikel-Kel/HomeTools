@@ -30,6 +30,10 @@ import { confirmDialog } from "@/services/dialog/appDialog";
 
 import { deviceName } from "@/services/environment/environmentState";
 
+import {
+  pendingMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Fiche d'un indicateur pour une fin de mois
 
@@ -429,11 +433,12 @@ const requestMessage =
       return "";
     }
 
-    return sentRequests.value.some(
-      request => request.noAnswerYet.value
-    )
-      ? "Sent — no answer from the Mac yet. Check that it is on and reachable."
-      : "Sent — waiting for the Mac…";
+    return pendingMessage(
+      "Sent",
+      sentRequests.value.some(
+        request => request.noAnswerYet.value
+      )
+    );
   });
 
 const hasError =

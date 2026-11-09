@@ -12,6 +12,12 @@ import { useEventRequest } from "@/composables/useEventRequest";
 
 import { deviceName } from "@/services/environment/environmentState";
 
+import {
+  pendingMessage,
+  processingMessage,
+  waitingElsewhereMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Ordre d'affichage d'une liste de données de base
 
@@ -157,7 +163,7 @@ watch(
 const requestMessage =
   computed(() => {
     if (waitingElsewhere.value) {
-      return "Another order change is waiting for the Mac.";
+      return waitingElsewhereMessage("Another order change");
     }
 
     const current =
@@ -165,12 +171,10 @@ const requestMessage =
 
     switch (current?.phase) {
       case "requested":
-        return orderRequest.noAnswerYet.value
-          ? "Sent — no answer from the Mac yet. Check that it is on and reachable."
-          : "Sent — waiting for the Mac…";
+        return pendingMessage("Sent", orderRequest.noAnswerYet.value);
 
       case "started":
-        return "Saving on the Mac…";
+        return processingMessage("Saving");
 
       case "error":
         return `Rejected: ${current.message ?? "unknown error"}`;

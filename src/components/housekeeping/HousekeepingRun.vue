@@ -46,6 +46,13 @@ import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import { confirmDialog } from "@/services/dialog/appDialog";
 
+import {
+  pendingMessage,
+  processingMessage,
+  runningElsewhereMessage,
+  waitingElsewhereMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Data contract
 
@@ -539,24 +546,22 @@ useDriveWatcher({
 const requestMessage =
   computed(() => {
     if (waitingRequestFound.value) {
-      return "A housekeeping request is waiting for the Mac.";
+      return waitingElsewhereMessage("A housekeeping request");
     }
 
     if (
       runningOnMac.value &&
       !hkp.inProgress.value
     ) {
-      return "A housekeeping is running on the Mac.";
+      return runningElsewhereMessage("A housekeeping");
     }
 
     switch (request.value?.phase) {
       case "requested":
-        return hkp.noAnswerYet.value
-          ? "Requested — no answer from the Mac yet. Check that it is on and reachable."
-          : "Requested — waiting for the Mac…";
+        return pendingMessage("Requested", hkp.noAnswerYet.value);
 
       case "started":
-        return "Running on the Mac…";
+        return processingMessage("Running");
 
       case "completed":
         return "Completed — see the Logs tab.";

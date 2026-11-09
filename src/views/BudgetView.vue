@@ -39,6 +39,12 @@ import { deviceName } from "@/services/environment/environmentState";
 import { confirmDialog } from "@/services/dialog/appDialog";
 import { usePersistentRef } from "@/composables/usePersistentRef";
 
+import {
+  pendingMessage,
+  processingMessage,
+  waitingElsewhereMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Page Budget
 
@@ -302,7 +308,7 @@ async function createNewYear() {
 const newYearMessage =
   computed(() => {
     if (newYearWaiting.value) {
-      return "A new year request is waiting for the Mac.";
+      return waitingElsewhereMessage("A new year request");
     }
 
     const current =
@@ -310,12 +316,10 @@ const newYearMessage =
 
     switch (current?.phase) {
       case "requested":
-        return newYearRequest.noAnswerYet.value
-          ? "New year requested — no answer from the Mac yet. Check that it is on and reachable."
-          : "New year requested — waiting for the Mac…";
+        return pendingMessage("New year requested", newYearRequest.noAnswerYet.value);
 
       case "started":
-        return "Creating the new year on the Mac…";
+        return processingMessage("Creating the new year");
 
       case "completed":
         return "New year created.";

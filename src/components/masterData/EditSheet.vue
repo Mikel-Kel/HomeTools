@@ -11,6 +11,11 @@ import type { useEventRequest } from "@/composables/useEventRequest";
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
+import {
+  pendingMessage,
+  processingMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Cadre d'une fiche de données de base
 
@@ -53,12 +58,10 @@ const message =
 
     switch (current?.phase) {
       case "requested":
-        return props.request.noAnswerYet.value
-          ? "Sent — no answer from the Mac yet. Check that it is on and reachable."
-          : "Sent — waiting for the Mac…";
+        return pendingMessage("Sent", props.request.noAnswerYet.value);
 
       case "started":
-        return "Saving on the Mac…";
+        return processingMessage("Saving");
 
       case "error":
         return `Rejected: ${current.message ?? "unknown error"}`;

@@ -50,6 +50,11 @@ import {
 import { confirmDialog } from "@/services/dialog/appDialog";
 import { usePersistentRef } from "@/composables/usePersistentRef";
 
+import {
+  pendingMessage,
+  processingMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Page Indicators
 
@@ -482,12 +487,10 @@ const newMonthMessage =
 
     switch (current?.phase) {
       case "requested":
-        return newMonthRequest.noAnswerYet.value
-          ? "Requested — no answer from the Mac yet. Check that it is on and reachable."
-          : "Requested — waiting for the Mac…";
+        return pendingMessage("Requested", newMonthRequest.noAnswerYet.value);
 
       case "started":
-        return "Copying the last known values on the Mac…";
+        return processingMessage("Copying the last known values");
 
       case "completed":
         return "Month started.";

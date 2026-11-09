@@ -28,6 +28,11 @@ import {
   setLocalItem,
 } from "@/services/environment/browserStorage";
 
+import {
+  REJECTED_BY_SERVER,
+  noAnswerAfterMessage,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Suivi d’une demande envoyée au Mac
 
@@ -183,7 +188,7 @@ export function useEventRequest({
     ) {
       update(
         "error",
-        `No answer from the Mac after ${Math.round(timeoutMs / 60_000)} minutes`
+        noAnswerAfterMessage(Math.round(timeoutMs / 60_000))
       );
     }
   }
@@ -300,7 +305,7 @@ export function useEventRequest({
       update(
         "error",
         status.message ||
-          "Request rejected by the Mac"
+          REJECTED_BY_SERVER
       );
 
       return;

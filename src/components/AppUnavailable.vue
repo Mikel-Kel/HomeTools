@@ -22,6 +22,10 @@ import {
   requiresReload,
 } from "@/services/environment/environmentState";
 
+import {
+  SERVER_NOT_ANSWERING,
+} from "@/services/events/requestMessages";
+
 /* =========================
    Écran « app indisponible »
 
@@ -139,7 +143,7 @@ async function connect() {
         <h1 id="unavailable-title">Home services unreachable</h1>
 
         <p class="message">
-          The Mac does not answer. Check that it is on and connected.
+          {{ SERVER_NOT_ANSWERING }}
         </p>
       </template>
 
@@ -238,7 +242,7 @@ async function connect() {
         <h1 id="unavailable-title">Home services unreachable</h1>
 
         <p class="message">
-          The Mac does not answer. Check that it is on and connected.
+          {{ SERVER_NOT_ANSWERING }}
         </p>
       </template>
 
