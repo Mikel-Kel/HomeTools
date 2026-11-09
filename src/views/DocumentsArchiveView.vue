@@ -16,7 +16,8 @@ import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { emitEvent } from "@/services/events/eventFiles";
-import { isProxyConfigured, proxyFetch } from "@/services/proxy/proxyClient";
+import { isProxyConfigured, ProxyError, proxyFetch } from "@/services/proxy/proxyClient";
+import { SERVER_NOT_ANSWERING } from "@/services/events/requestMessages";
 import { hasCapability, isServerDevice } from "@/services/environment/environmentState";
 
 import { useParties } from "@/composables/useParties";
@@ -578,53 +579,96 @@ function isIOSStandalonePWA(): boolean {
   return standalone === true;
 }
 
+const LOCAL_SOURCE =
+  "local archive";
+
+const STORE_SOURCE =
+  "archive storage";
+
+/*
+  Distingue un vrai "fichier absent" (404) d'un autre
+  echec (reseau, Tailscale pas encore reconnecte, cle
+  invalide, etc.) - utile pour diagnostiquer les
+  echecs intermittents sur iPad.
+*/
+function readFailure(
+  source: string,
+  response: Response
+): string {
+  return response.status === 404
+    ? `Document not found in ${source}`
+    : `Read from ${source} failed (HTTP ${response.status})`;
+}
+
 /*
   Lecture du PDF par le proxy, renvoyée en URL blob: :
   - sur le Mac serveur (archivesOnThisDevice) : sur le
-    disque, /api/local/read ;
+    disque, /api/local/read ; si la copie locale ne l'a pas
+    (404 : en retard, ou fichier pas téléchargé par iCloud),
+    dans le magasin S3 archives, qui fait référence (§6,
+    §10). Une autre erreur ne déclenche pas de repli ;
   - ailleurs : magasin S3 archives de l'environnement,
-    /api/s3/read (octets bruts, §5.3). La clé est le même
-    chemin relatif que sur le disque, dont le magasin est
-    la copie ; le proxy essaie ses formes NFC et NFD.
+    /api/s3/read (octets bruts, §5.3).
+  La clé est le même chemin relatif sur le disque et dans le
+  magasin ; le proxy essaie ses formes NFC et NFD.
   Le délai de proxyFetch ne court que jusqu'aux en-têtes :
   un gros PDF n'est pas coupé pendant son téléchargement.
 */
 async function fetchArchiveDocumentUrl(
   physicalName: string
 ): Promise<string> {
-  const local =
-    archivesOnThisDevice();
+  let localFailure =
+    "";
 
-  const source =
-    local
-      ? "local archive"
-      : "archive storage";
+  if (archivesOnThisDevice()) {
+    const localResponse =
+      await proxyFetch(
+        "/api/local/read",
+        { params: { key: physicalName } }
+      );
+
+    if (localResponse.ok) {
+      return toPdfObjectUrl(
+        localResponse,
+        physicalName
+      );
+    }
+
+    localFailure =
+      readFailure(LOCAL_SOURCE, localResponse);
+
+    if (localResponse.status !== 404) {
+      throw new Error(localFailure);
+    }
+  }
 
   const response =
-    local
-      ? await proxyFetch(
-          "/api/local/read",
-          { params: { key: physicalName } }
-        )
-      : await proxyFetch(
-          "/api/s3/read",
-          { params: { store: "archives", key: physicalName } }
-        );
+    await proxyFetch(
+      "/api/s3/read",
+      { params: { store: "archives", key: physicalName } }
+    );
 
   if (!response.ok) {
-    /*
-      Distingue un vrai "fichier absent" (404) d'un autre
-      echec (reseau, Tailscale pas encore reconnecte, cle
-      invalide, etc.) - utile pour diagnostiquer les
-      echecs intermittents sur iPad.
-    */
+    const storeFailure =
+      readFailure(STORE_SOURCE, response);
+
     throw new Error(
-      response.status === 404
-        ? `Document not found in ${source}: ${physicalName}`
-        : `Read from ${source} failed: HTTP ${response.status} for ${physicalName}`
+      localFailure
+        ? `${localFailure}. ${storeFailure}.`
+        : `${storeFailure}.`
     );
   }
 
+  return toPdfObjectUrl(
+    response,
+    physicalName
+  );
+}
+
+async function toPdfObjectUrl(
+  response: Response,
+  physicalName: string
+): Promise<string> {
   let blob =
     await response.blob();
 
@@ -649,11 +693,12 @@ async function fetchArchiveDocumentUrl(
   return URL.createObjectURL(blob);
 }
 
+/* Ouvre le document ; renvoie null, ou la raison de l'échec. */
 async function openArchiveDocument(
   item: ArchiveItem
-): Promise<boolean> {
+): Promise<string | null> {
   if (!item.physicalName) {
-    return false;
+    return "This document has no file.";
   }
 
   if (archivesOnThisDevice()) {
@@ -662,7 +707,7 @@ async function openArchiveDocument(
         item.physicalName
       )
     ) {
-      return true;
+      return null;
     }
     /*
       Echec de l'ouverture native (proxy injoignable, launchctl
@@ -691,7 +736,7 @@ async function openArchiveDocument(
       window.location.href =
         objectUrl;
 
-      return true;
+      return null;
     }
 
     window.open(
@@ -700,15 +745,25 @@ async function openArchiveDocument(
       "noopener"
     );
 
-    return true;
+    return null;
 
   } catch (err) {
     console.error(
       "Failed to open archive document",
+      item.physicalName,
       err
     );
 
-    return false;
+    if (
+      err instanceof ProxyError &&
+      (err.kind === "unreachable" || err.kind === "timeout")
+    ) {
+      return SERVER_NOT_ANSWERING;
+    }
+
+    return err instanceof Error
+      ? err.message
+      : String(err);
   }
 }
 
@@ -726,15 +781,16 @@ async function openDocument(
     normalisation Unicode (NFC/NFD) deja identifie et corrige
     cote proxy pour les noms de fichiers accentues.
   */
-  if (
-    await openArchiveDocument(item)
-  ) {
+  const failure =
+    await openArchiveDocument(item);
+
+  if (failure === null) {
     return;
   }
 
   await alertDialog({
     title: "Document not available",
-    message: "This document is not available on this device.",
+    message: failure,
   });
 }
 
