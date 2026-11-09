@@ -1445,6 +1445,10 @@ function formatPartyID(
   );
 }
 
+/*
+  Nom des nouveaux documents en Unicode NFC (contrat §6) :
+  Info1, Info2 ou le libellé du tiers peuvent arriver en NFD.
+*/
 function buildPhysicalName(
   item: ArchiveItem
 ): string {
@@ -1510,7 +1514,7 @@ function buildPhysicalName(
       `${tags}` +
       `${amount}` +
       `${extension}`
-    );
+    ).normalize("NFC");
   }
 
   const year =
@@ -1535,7 +1539,7 @@ function buildPhysicalName(
     `${tags}` +
     `${amount}` +
     `${extension}`
-  );
+  ).normalize("NFC");
 }
 
 /* =========================
