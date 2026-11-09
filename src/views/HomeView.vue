@@ -61,15 +61,19 @@ const storageStatusLabel =
       );
     }
 
+    /* Nom de l'environnement (whoami) : « HomeTools ready (cloud) ». */
+    const name =
+      environment.value?.label || "HomeTools";
+
     switch (backend.value) {
       case "LOCAL_DRIVE":
-        return "App ready (local)";
+        return `${name} ready (local)`;
 
       case "OBJECT_STORAGE":
-        return "App ready (Object Storage)";
+        return `${name} ready (cloud)`;
 
       default:
-        return "App ready";
+        return `${name} ready`;
     }
   });
 
@@ -403,16 +407,11 @@ function performanceClass(
         >
           <span class="dot"></span>
 
-          <span class="status-text">
-            {{ storageStatusLabel }}
-          </span>
-
           <span
-            v-if="environment"
-            class="env-label"
-            :title="environment.device"
+            class="status-text"
+            :title="environment?.device"
           >
-            · {{ environment.label }}
+            {{ storageStatusLabel }}
           </span>
         </div>
       </div>
@@ -852,11 +851,6 @@ function performanceClass(
 
 .storage-status.disconnected {
   color: var(--negative);
-}
-
-.storage-status .env-label {
-  color: var(--text-soft);
-  font-weight: 600;
 }
 
 /* =========================

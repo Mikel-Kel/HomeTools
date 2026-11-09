@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.4.0** — 2026-11-09
+**Version : 1.5.0** — 2026-11-09
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -93,7 +93,7 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 | `s3.prefix` | Préfixe ajouté à toutes les clés. Vide si l'environnement possède ses buckets. |
 | `s3.endpoint`, `s3.awsProfile` | Endpoint S3 (URL `https`) et profil AWS CLI utilisés par les scripts (§7). Facultatifs pour le schéma ; un script qui accède à S3 s'arrête en `ERR` s'ils manquent. Le proxy ne les lit pas : il a ses propres réglages (§7). |
 | `events` | Objet vide : les emplacements des événements se déduisent du profil, `<baseDir>/events/` sur le Mac et `events/` dans le magasin `data` (`s3.dataBucket`, préfixe `s3.prefix`). `driveFolderId` est obsolète et ignoré ; sa suppression du schéma sera une évolution MAJOR. |
-| `localArchive` | Requis si et seulement si `capabilities.localArchive` vaut `true`. Copie locale des archives sur le serveur ; la référence est le magasin `archives` (§6). |
+| `localArchive` | Requis si et seulement si `capabilities.localArchive` vaut `true`. Copie locale des archives sur le serveur ; la référence est le magasin `archives` (§6). `root` peut se trouver dans un dossier synchronisé (Google Drive, iCloud Drive, y compris un dossier partagé). |
 | `jobs` | Liste des jobs Housekeeping exécutés pour cet environnement (§9.4). |
 
 ### 3.4 Capacités v1
@@ -153,6 +153,7 @@ Premier appel de la PWA, avant toute autre requête.
   - **Lecture** : `GET /api/s3/read` renvoie les octets bruts de l'objet, sans décodage, avec le `Content-Type` enregistré sur l'objet (`application/octet-stream` s'il est absent). Les deux magasins sont concernés : un objet texte est lu par le client avec son propre décodage (UTF-8), un PDF d'archives en binaire.
   - **Normalisation Unicode** : pour `GET /api/s3/read` et `GET /api/s3/head`, le proxy essaie la clé telle quelle, puis ses formes NFC et NFD. Il répond `404 NOT_FOUND` seulement si aucune n'existe. La clé renvoyée par `head` est celle qu'envoie le client. `write`, `delete` et `list` utilisent la clé exacte, sans essayer d'autre forme.
 - **Local** : `/api/local/read` exige la capacité `localArchive` et reste confiné à `localArchive.root` ; ses clés suivent les mêmes règles que les clés S3 (`400 INVALID_KEY`). `/api/local/open` exige `localArchive` **et** `isServer`.
+  - **Fichier non disponible** : un fichier absent de la copie locale, ou présent sans son contenu (dossier synchronisé dont le fichier n'est pas téléchargé sur le serveur), donne `404 NOT_FOUND` à `/api/local/read` et à `/api/local/open`. Le proxy ne déclenche aucun téléchargement.
 - **Diagnostics et statuts** : servis depuis les emplacements de l'environnement de l'appelant uniquement. Le proxy n'a pas d'endpoint dédié : la PWA les lit dans le magasin `data` (`diagnostics/`, `events/status/`), donc dans les buckets de l'environnement de l'appelant.
 
 ### 5.4 Erreurs
@@ -185,7 +186,12 @@ Format unique :
 - Les buckets existants `hometools-prod` et `archives-prod` restent ceux de `hometools`, sans préfixe et sans migration de données.
 - Chaque nouvel environnement reçoit ses propres buckets (ex. `fantoine-prod`, `fantoine-archives`), sous réserve de disponibilité des noms chez Hetzner.
 - **Référence des archives** : le magasin `archives` (`s3.archivesBucket`, préfixe `s3.prefix`) est la référence des documents archivés de chaque environnement. `localArchive.root`, quand il existe, en est une copie locale sur le serveur. Elle sert à la lecture rapide (`/api/local/read`) et à l'ouverture native (`/api/local/open`). Un environnement sans `localArchive` (ex. `fantoine`) n'a que le magasin `archives`.
-  - **Transition** : pour `hometools`, le disque (`localArchive.root`) reste la source et alimente le magasin `archives`, jusqu'à la fin du chantier qui inversera ce sens (copie du magasin vers le disque, sans jamais supprimer de fichier local). La fin de la transition sera notée au §12.
+  - **Écritures** : tout ajout, déplacement (classement) ou suppression d'un document se fait d'abord dans le magasin `archives`, puis dans la copie locale par le même traitement. Un échec dans le magasin annule l'opération ; un échec sur la copie locale n'est qu'un avertissement, rattrapé par la copie de nuit.
+  - **Noms** : les clés des nouveaux documents sont en Unicode NFC. Les clés existantes dans une autre forme restent valides et ne sont pas renommées (le proxy essaie les deux formes, §5.3).
+  - **Suppression** : un document supprimé est déplacé dans la corbeille du magasin, `_deleted/<AAAA-MM-JJ>/<clé>` (date de la suppression), et retiré de la copie locale. La corbeille n'est ni indexée, ni réconciliée, ni copiée sur le disque ; les scripts la purgent après 90 jours.
+  - **Copie locale** : une étape de nuit ajoute à `localArchive.root` les documents du magasin qui y manquent. Elle ne supprime, ne remplace et ne déplace jamais un fichier local, compare les noms en NFC sans lire le contenu des fichiers, et signale sans y toucher les fichiers présents seulement en local. Rien n'est jamais copié d'une copie locale vers le magasin.
+  - **Réconciliation** : l'index MySQL des archives est comparé au magasin `archives`, pour tout environnement, avec ou sans `localArchive`.
+  - **Transition** : pour `hometools`, le disque (`localArchive.root`) reste la source et alimente le magasin `archives` (publication disque → magasin, avec suppression dans le magasin de ce qui manque sur le disque), jusqu'à la bascule vers les règles ci-dessus. Tant que cette publication existe, la capacité `localArchive` n'est donnée à aucun autre environnement. La bascule sera notée au §12.
 
 ---
 
@@ -249,6 +255,7 @@ Script bibliothèque unique, chargé par `load script`. Handlers minimaux :
 - **Stockage navigateur.** Toutes les clés localStorage et IndexedDB sont préfixées `ht:<envId>:`. Migration unique des clés existantes vers `ht:hometools:` au premier démarrage sous contrat 1.x.
 - **Coffre de secrets.** Un coffre par environnement (clé de stockage préfixée) ; chiffrement inchangé.
 - **Fonctionnalités.** Vues et actions conditionnées par `capabilities` ; une capacité absente masque la fonctionnalité.
+- **Archives sur le serveur.** Quand la copie locale répond `404 NOT_FOUND` (§5.3), la PWA lit le document dans le magasin `archives` (`/api/s3/read`).
 
 ---
 
@@ -281,3 +288,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.3.0 | 2026-11-08 | §5.3 : `GET /api/s3/read` renvoie les octets bruts de l'objet avec son `Content-Type` (lecture des PDF d'archives par S3 hors du Mac) ; `read` et `head` essaient la clé telle quelle, puis en NFC et NFD. Évolution MINOR : le contenu des lectures qui réussissaient est inchangé, seul l'en-tête `Content-Type` change, et la PWA ne le lit pas |
 | 1.3.1 | 2026-11-08 | §8 : `root` admis comme utilisateur MySQL d'un environnement pendant une transition ; l'utilisateur dédié reste la cible. Rectificatif publié en PATCH : aucun code ne change, les scripts acceptent déjà les deux (`passwordService` vide pour `root`) |
 | 1.4.0 | 2026-11-09 | §6, §3.3, §3.4 : le magasin `archives` est la référence des archives de chaque environnement, `localArchive.root` en est une copie locale facultative ; transition pour `hometools`, dont le disque reste la source. Évolution MINOR : nouvelle règle, sans changement de code pour le proxy et la PWA, et `hometools` inchangé |
+| 1.5.0 | 2026-11-09 | §6 : règles du magasin `archives` de référence (écritures dans le magasin d'abord, clés NFC, corbeille `_deleted/` purgée après 90 jours, copie locale sans suppression, réconciliation sur le magasin), transition précisée ; §3.3 : `localArchive.root` dans un dossier synchronisé ; §5.3 : `404 NOT_FOUND` pour un fichier local absent ou non téléchargé ; §10 : repli de la PWA sur le magasin. Évolution MINOR : `hometools` inchangé jusqu'à la bascule, les lectures locales qui réussissent aujourd'hui sont inchangées |
