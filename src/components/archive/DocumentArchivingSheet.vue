@@ -106,6 +106,9 @@ const folders = computed(() =>
   appParameters.value?.archiveFolders ?? []
 )
 
+/* Environnement sans archiveFolders : aucun classement possible */
+const hasFolders = computed(() => folders.value.length > 0)
+
 const folderItems = computed(() =>
   folders.value.map(f => ({
     id: f.source,
@@ -173,6 +176,7 @@ const isDocumentDateValid = computed(() => {
 })
 
 const isValid = computed(() =>
+  hasFolders.value &&
   isDTAValid.value &&
   isDocumentDateValid.value
 )
@@ -431,7 +435,7 @@ function onCancel() {
 
 function onSave() {
   const partyID = activeRelation.value
-  if (!partyID) return
+  if (!partyID || !hasFolders.value) return
   if (isBillsFolder.value && !localDoc.value.dtaDate?.trim()) return
   emit("save", {
     ...localDoc.value,
@@ -480,7 +484,11 @@ async function onDelete() {
   </header>
   <!-- Folder -->
   <div class="row folder-row">
+    <p v-if="!hasFolders" class="no-folders">
+      No archive folders configured for this environment
+    </p>
     <ChipSelector
+      v-else
       label="Folder"
       :items="folderItems"
       v-model="localDoc.folder"
@@ -718,6 +726,12 @@ display: flex;
 align-items: center;
 gap: 12px;
 margin-bottom: 14px;
+}
+
+.no-folders {
+margin: 0;
+color: var(--warning);
+font-size: 0.9rem;
 }
 
 .label {

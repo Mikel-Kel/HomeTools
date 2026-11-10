@@ -278,18 +278,33 @@ const folderConfigMap =
     return map;
   });
 
+/*
+  Dossiers proposés : tous ceux d’archiveFolders, même
+  vides (environnement ou année neufs : une année n’existe
+  dans le magasin qu’avec son premier document), plus ceux
+  des documents chargés. « A Classer » n’apparaît que s’il
+  contient des documents (toFile).
+*/
 const archiveFolders =
   computed<FolderView[]>(() => {
     const unique =
-      [
-        ...new Set(
-          archive.value.map(
-            item => item.folder
-          )
-        ),
-      ];
+      new Set(
+        archive.value.map(
+          item => item.folder
+        )
+      );
 
-    return unique
+    for (
+      const folder
+      of archiveFoldersStore
+        .folders.value
+    ) {
+      if (folder.source !== TO_FILE_FOLDER) {
+        unique.add(folder.source);
+      }
+    }
+
+    return [...unique]
       .map(
         (
           folder
@@ -325,6 +340,18 @@ const archiveFolders =
           a.order - b.order
       );
   });
+
+/* Dossier choisi sans aucun document, ou archive vide (All). */
+const noDocuments =
+  computed(() =>
+    selectedFolder.value
+      ? !archive.value.some(
+          item =>
+            item.folder ===
+            selectedFolder.value
+        )
+      : archive.value.length === 0
+  );
 
 const billsFolderSource =
   computed(() => {
@@ -2468,7 +2495,7 @@ onBeforeUnmount(() => {
       v-else
       class="empty-state"
     >
-      Check filters
+      {{ noDocuments ? "No documents" : "Check filters" }}
     </div>
   </div>
 
