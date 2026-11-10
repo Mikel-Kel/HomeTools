@@ -225,6 +225,11 @@ watch(
    copie l'année la plus récente (montants et mémos des
    sous-catégories actives, toutes les lignes « Open »),
    puis republie budget.json.
+
+   Premier budget (environnement neuf, budget.json sans
+   aucune année) : même événement, sourceYear null ; le Mac
+   crée une ligne « Open » sans montant par sous-catégorie
+   active pour l'année en cours.
 ========================= */
 
 const latestYear =
@@ -305,10 +310,74 @@ async function createNewYear() {
   );
 }
 
+const currentYear =
+  new Date().getFullYear();
+
+/* Premier budget demandé depuis cet onglet : ses messages restent ceux du premier budget. */
+const firstBudgetSent =
+  ref(false);
+
+const firstBudget =
+  computed(() =>
+    firstBudgetSent.value ||
+    !budgetYears.value.length
+  );
+
+const canCreateFirstBudget =
+  computed(() =>
+    !budgetYears.value.length &&
+    !newYearRequest.inProgress.value &&
+    !newYearWaiting.value
+  );
+
+async function createFirstBudget() {
+  if (!canCreateFirstBudget.value) {
+    return;
+  }
+
+  const confirmed =
+    await confirmDialog({
+      title: `Create the ${currentYear} budget with one line per active subcategory?`,
+      message:
+        "Every line starts as Open with no amount; amounts are entered line by line.",
+      confirmLabel: "Create",
+    });
+
+  if (!confirmed) {
+    return;
+  }
+
+  firstBudgetSent.value =
+    true;
+
+  await newYearRequest.send(
+    {
+      eventType: "BUDGET_YEAR_CREATED",
+      version: 1,
+      timestamp: new Date().toISOString(),
+      payload: {
+        sourceYear: null,
+        targetYear: currentYear,
+        source: deviceName(),
+      },
+    },
+    "NEWYEAR"
+  );
+}
+
 const newYearMessage =
   computed(() => {
+    const label =
+      firstBudget.value
+        ? "First budget"
+        : "New year";
+
     if (newYearWaiting.value) {
-      return waitingElsewhereMessage("A new year request");
+      return waitingElsewhereMessage(
+        firstBudget.value
+          ? "A first budget request"
+          : "A new year request"
+      );
     }
 
     const current =
@@ -316,16 +385,20 @@ const newYearMessage =
 
     switch (current?.phase) {
       case "requested":
-        return pendingMessage("New year requested", newYearRequest.noAnswerYet.value);
+        return pendingMessage(`${label} requested`, newYearRequest.noAnswerYet.value);
 
       case "started":
-        return processingMessage("Creating the new year");
+        return processingMessage(
+          firstBudget.value
+            ? "Creating the first budget"
+            : "Creating the new year"
+        );
 
       case "completed":
-        return "New year created.";
+        return `${label} created.`;
 
       case "error":
-        return `New year rejected: ${current.message ?? "unknown error"}`;
+        return `${label} rejected: ${current.message ?? "unknown error"}`;
 
       default:
         return "";
@@ -844,9 +917,25 @@ watch(
 
   <div
     v-else-if="!budgetYears.length"
-    class="state-message"
+    class="state-message first-budget"
   >
-    No budget published yet — run “Export settings” from the Housekeeping page.
+    <p>No budget yet</p>
+
+    <PillButton
+      v-if="canCreateFirstBudget"
+      variant="primary"
+      @click="createFirstBudget"
+    >
+      Create {{ currentYear }} budget
+    </PillButton>
+
+    <span
+      v-if="newYearMessage"
+      class="request-message"
+      :class="newYearRequest.request.value?.phase"
+    >
+      {{ newYearMessage }}
+    </span>
   </div>
 
   <main
@@ -1132,6 +1221,17 @@ watch(
 
 .state-message.error {
   color: var(--negative);
+}
+
+.first-budget {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.first-budget p {
+  margin: 0;
 }
 
 /* =========================
