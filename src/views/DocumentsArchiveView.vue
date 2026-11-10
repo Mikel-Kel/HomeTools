@@ -18,6 +18,7 @@ import { useRemoteJson } from "@/composables/useRemoteJson";
 import { emitEvent } from "@/services/events/eventFiles";
 import { isProxyConfigured, ProxyError, proxyFetch } from "@/services/proxy/proxyClient";
 import { SERVER_NOT_ANSWERING } from "@/services/events/requestMessages";
+import { isPWA } from "@/utils/deviceDetection";
 import { hasCapability, isServerDevice } from "@/services/environment/environmentState";
 
 import { useParties } from "@/composables/useParties";
@@ -591,21 +592,6 @@ async function openNativelyOnMac(
   }
 }
 
-function isIOSStandalonePWA(): boolean {
-  /*
-    navigator.standalone est une propriete non-standard
-    specifique a iOS Safari, vraie uniquement lorsque la
-    PWA a ete ajoutee a l'ecran d'accueil et est lancee en
-    mode standalone (pas d'UI de navigateur, pas d'onglets).
-  */
-  const standalone =
-    (window.navigator as unknown as {
-      standalone?: boolean;
-    }).standalone;
-
-  return standalone === true;
-}
-
 const LOCAL_SOURCE =
   "local archive";
 
@@ -750,15 +736,13 @@ async function openArchiveDocument(
         item.physicalName
       );
 
-    if (isIOSStandalonePWA()) {
+    if (isPWA()) {
       /*
-        window.open() est notoirement peu fiable dans une PWA
-        iOS installee en mode standalone : il n'y a pas de
-        notion d'onglet vers laquelle ouvrir une nouvelle
-        fenetre, et l'appel echoue souvent silencieusement.
-
-        Naviguer directement dans la fenetre courante est le
-        contournement le plus robuste pour ce cas precis.
+        PWA installée (écran d'accueil de l'iPad, Dock ou
+        Chrome sur Mac) : le PDF s'affiche dans la fenêtre de
+        l'app, comme sur l'iPad. window.open() y est peu
+        fiable (pas d'onglets, échec souvent silencieux sur
+        iOS) et ouvrirait une fenêtre de navigateur sur Mac.
       */
       window.location.href =
         objectUrl;
