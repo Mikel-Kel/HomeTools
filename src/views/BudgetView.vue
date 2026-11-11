@@ -23,6 +23,13 @@ import { useEventRequest } from "@/composables/useEventRequest";
 import { useMemoTooltip } from "@/composables/useMemoTooltip";
 
 import {
+  lineValues,
+  sameValues,
+  useBudgetDraft,
+  type BudgetLineValues,
+} from "@/composables/useBudgetDraft";
+
+import {
   useCategories,
   type CategoryNature,
 } from "@/composables/useCategories";
@@ -54,9 +61,20 @@ import {
    « Open » : montants encore à confirmer. Ces lignes sont
    mises en évidence ; « Open only » ne montre qu'elles.
 
-   Saisie sur tous les appareils : fiche d'une ligne, ajout
+   Saisie sur tous les appareils, en brouillon par année
+   (useBudgetDraft) : fiche d'une ligne (« Apply »), ajout
    d'une sous-catégorie active absente de l'année
-   (« + Line »), création de l'année suivante.
+   (« + Line ») ; matrice et totaux montrent le brouillon.
+   « Save all » envoie le brouillon de l'année en un seul
+   événement :
+     events/PWA-BUD_<AAAAMMJJHHMMSS>_BATCH.json
+     { "eventType": "BUDGET_BATCH_UPDATED",
+       "payload": { "year", "lines": [ { "subCategoryId",
+                    "months", "open", "memo" } ], "source" } }
+   tout ou rien côté Mac. Aucune saisie tant que l'envoi
+   attend le Mac (5 minutes au plus). Suppression d'une
+   ligne et création d'année restent immédiates, hors
+   brouillon.
 ========================= */
 
 type NatureFilter =
@@ -188,12 +206,16 @@ const budgetYears =
     budgetFile.data.value ?? []
   );
 
+/* Année avec un brouillon : marquée « • ». */
 const yearOptions =
   computed(() =>
     budgetYears.value.map(
       item => ({
         value: item.year,
-        label: String(item.year),
+        label:
+          budgetDraft.count(item.year)
+            ? `${item.year} •`
+            : String(item.year),
       })
     )
   );
@@ -466,12 +488,331 @@ const subCategoryIndex =
     return index;
   });
 
-const yearLines =
+/* Lignes publiées (budget.json) de l'année affichée. */
+const publishedLines =
   computed(() =>
     budgetYears.value.find(
       item => item.year === year.value
     )?.lines ?? []
   );
+
+const publishedById =
+  computed(() =>
+    new Map(
+      publishedLines.value.map(
+        line => [line.subCategoryId, line]
+      )
+    )
+  );
+
+function publishedValues(
+  subCategoryId: number
+): BudgetLineValues {
+  return lineValues(
+    publishedById.value.get(subCategoryId)
+  );
+}
+
+/* =========================
+   Brouillon
+========================= */
+
+const budgetDraft =
+  useBudgetDraft();
+
+const draftEntries =
+  computed(() =>
+    budgetDraft.entries(year.value)
+  );
+
+const draftCount =
+  computed(() =>
+    Object.keys(draftEntries.value).length
+  );
+
+/*
+  Valeurs envoyées par le dernier « Save all » de cet
+  onglet : une ligne modifiée à nouveau pendant l'envoi
+  n'est pas en conflit avec sa propre publication.
+*/
+const sentValues =
+  new Map<number, BudgetLineValues>();
+
+let sentYear: number | null = null;
+
+/*
+  Valeurs publiées identiques au brouillon : ligne
+  enregistrée, retirée du brouillon. Valeurs publiées
+  identiques à l'envoi : la saisie suivante repart de là.
+*/
+watch(
+  [budgetYears, year],
+
+  () => {
+    if (!budgetYears.value.length) {
+      return;
+    }
+
+    budgetDraft.prune(year.value, publishedValues);
+
+    if (sentYear !== year.value) {
+      return;
+    }
+
+    for (const [id, sent] of sentValues) {
+      const published =
+        publishedValues(id);
+
+      if (sameValues(sent, published)) {
+        if (budgetDraft.entry(year.value, id)) {
+          budgetDraft.rebase(year.value, id, published);
+        }
+
+        sentValues.delete(id);
+      }
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
+/*
+  Lignes du brouillon changées ailleurs depuis leur saisie :
+  la version publiée n'est plus celle sur laquelle la saisie
+  a été faite.
+*/
+const conflictIds =
+  computed(() =>
+    Object.entries(draftEntries.value)
+      .filter(
+        ([id, entry]) =>
+          !sameValues(entry.base, publishedValues(Number(id)))
+      )
+      .map(([id]) => Number(id))
+  );
+
+/* Lignes affichées : budget.json, brouillon appliqué par-dessus. */
+const yearLines =
+  computed<BudgetLine[]>(() => {
+    const entries =
+      draftEntries.value;
+
+    const lines =
+      publishedLines.value.map(
+        line => {
+          const entry =
+            entries[line.subCategoryId];
+
+          return entry
+            ? { ...line, ...entry.values }
+            : line;
+        }
+      );
+
+    for (const [id, entry] of Object.entries(entries)) {
+      const subCategoryId =
+        Number(id);
+
+      if (publishedById.value.has(subCategoryId)) {
+        continue;
+      }
+
+      lines.push({
+        categoryId:
+          subCategoryIndex.value.get(subCategoryId)?.categoryId ?? 0,
+        subCategoryId,
+        ...entry.values,
+      });
+    }
+
+    return lines;
+  });
+
+function isDrafted(
+  line: BudgetLine
+): boolean {
+  return line.subCategoryId in draftEntries.value;
+}
+
+/* Mois modifiés par le brouillon (différents de la version publiée). */
+function isChangedMonth(
+  line: BudgetLine,
+  index: number
+): boolean {
+  return (
+    isDrafted(line) &&
+    line.months[index] !==
+      publishedValues(line.subCategoryId).months[index]
+  );
+}
+
+/* =========================
+   Save all
+========================= */
+
+/* Limite du contrat par événement. */
+const BATCH_MAX_LINES = 500;
+
+/*
+  Sans réponse du Mac au-delà de ce délai, l'envoi passe en
+  erreur et la saisie est débloquée (brouillon intact).
+*/
+const BATCH_TIMEOUT_MS =
+  5 * 60 * 1000;
+
+const batchRequest =
+  useEventRequest({
+    trigram: "BUD",
+    noAnswerDelayMs: NO_ANSWER_DELAY_MS,
+    timeoutMs: BATCH_TIMEOUT_MS,
+    persistKey: "budgetBatchEvent",
+  });
+
+/*
+  Lot envoyé depuis un autre onglet ou avant un
+  rechargement, encore en attente dans events/.
+*/
+const batchWaiting =
+  computed(() =>
+    batchRequest.request.value === null &&
+    batchRequest.waitingFiles.value.some(
+      name => name.endsWith("_BATCH.json")
+    )
+  );
+
+/*
+  Envoi en attente du Mac (depuis cet onglet, ou depuis un
+  autre appareil) : aucune saisie tant qu'il n'est pas
+  traité ou refusé.
+*/
+const editLocked =
+  computed(() =>
+    batchRequest.inProgress.value ||
+    batchWaiting.value
+  );
+
+const canSaveAll =
+  computed(() =>
+    draftCount.value > 0 &&
+    draftCount.value <= BATCH_MAX_LINES &&
+    !conflictIds.value.length &&
+    !editLocked.value
+  );
+
+async function saveAll() {
+  if (!canSaveAll.value) {
+    return;
+  }
+
+  const lines =
+    Object.entries(draftEntries.value)
+      .map(([id, entry]) => ({
+        subCategoryId: Number(id),
+        months: entry.values.months,
+        open: entry.values.open,
+        memo: entry.values.memo?.trim() || null,
+      }));
+
+  sentValues.clear();
+  sentYear = year.value;
+
+  for (const line of lines) {
+    sentValues.set(line.subCategoryId, {
+      months: line.months,
+      open: line.open,
+      memo: line.memo,
+    });
+  }
+
+  await batchRequest.send(
+    {
+      eventType: "BUDGET_BATCH_UPDATED",
+      version: 1,
+      timestamp: new Date().toISOString(),
+      payload: {
+        year: year.value,
+        lines,
+        source: deviceName(),
+      },
+    },
+    "BATCH"
+  );
+}
+
+async function discardAll() {
+  if (
+    !draftCount.value ||
+    editLocked.value ||
+    !(await confirmDialog({
+      title: `Discard the ${draftCount.value} pending changes of ${year.value}?`,
+      message: "The published values are shown again.",
+      confirmLabel: "Discard",
+      destructive: true,
+    }))
+  ) {
+    return;
+  }
+
+  budgetDraft.discard(year.value);
+}
+
+/* Conflits : garder sa saisie (sur la version publiée) ou l'abandonner. */
+function keepMine() {
+  if (editLocked.value) {
+    return;
+  }
+
+  for (const id of conflictIds.value) {
+    budgetDraft.rebase(year.value, id, publishedValues(id));
+  }
+}
+
+async function useTheirs() {
+  if (
+    editLocked.value ||
+    !(await confirmDialog({
+      title: "Discard your changes on these lines?",
+      message: "The values published from the other device are kept.",
+      confirmLabel: "Discard mine",
+      destructive: true,
+    }))
+  ) {
+    return;
+  }
+
+  budgetDraft.discard(year.value, conflictIds.value);
+}
+
+const batchMessage =
+  computed(() => {
+    if (batchWaiting.value) {
+      return waitingElsewhereMessage("A budget update");
+    }
+
+    const current =
+      batchRequest.request.value;
+
+    switch (current?.phase) {
+      case "requested":
+        return pendingMessage("Budget sent", batchRequest.noAnswerYet.value);
+
+      case "started":
+        return processingMessage("Saving the budget");
+
+      case "completed":
+        return "Budget saved.";
+
+      case "error":
+        return `Budget rejected: ${current.message ?? "unknown error"}`;
+
+      default:
+        return draftCount.value > BATCH_MAX_LINES
+          ? `At most ${BATCH_MAX_LINES} lines per save.`
+          : "";
+    }
+  });
 
 function natureOf(
   line: BudgetLine
@@ -745,6 +1086,46 @@ function addLine(
   };
 }
 
+function applyLine(
+  values: BudgetLineValues
+) {
+  const line =
+    editedLine.value?.row.line;
+
+  if (!line) {
+    return;
+  }
+
+  budgetDraft.apply(
+    year.value,
+    line.subCategoryId,
+    publishedValues(line.subCategoryId),
+    values
+  );
+
+  editedLine.value =
+    null;
+}
+
+function revertLine() {
+  const line =
+    editedLine.value?.row.line;
+
+  if (!line) {
+    return;
+  }
+
+  budgetDraft.discard(year.value, [line.subCategoryId]);
+
+  editedLine.value =
+    null;
+}
+
+/* Ligne supprimée sur le Mac : sa saisie éventuelle n'a plus d'objet. */
+function lineDeleted() {
+  revertLine();
+}
+
 function natureLabelOf(
   line: BudgetLine
 ): string {
@@ -963,12 +1344,16 @@ watch(
           Open only
         </PillButton>
 
-        <PillButton @click="addingLine = true">
+        <PillButton
+          :disabled="editLocked"
+          @click="addingLine = true"
+        >
           + Line
         </PillButton>
 
         <PillButton
           v-if="canCreateNewYear && latestYear !== null"
+          :disabled="editLocked"
           @click="createNewYear"
         >
           + New year {{ latestYear + 1 }}
@@ -988,6 +1373,76 @@ watch(
         label="Category"
         :items="categoryItems"
       />
+
+      <!-- Brouillon de l'année -->
+
+      <div
+        v-if="draftCount || batchMessage"
+        class="draft-bar"
+        :class="{ pending: draftCount > 0 }"
+      >
+        <span
+          v-if="draftCount"
+          class="draft-count"
+        >
+          {{ draftCount }} pending {{ draftCount === 1 ? "change" : "changes" }}
+        </span>
+
+        <span
+          v-if="batchMessage"
+          class="request-message"
+          :class="batchRequest.request.value?.phase"
+        >
+          {{ batchMessage }}
+        </span>
+
+        <span
+          v-if="draftCount"
+          class="draft-actions"
+        >
+          <PillButton
+            :disabled="editLocked"
+            @click="discardAll"
+          >
+            Discard
+          </PillButton>
+
+          <PillButton
+            variant="primary"
+            :disabled="!canSaveAll"
+            @click="saveAll"
+          >
+            Save all
+          </PillButton>
+        </span>
+      </div>
+
+      <div
+        v-if="conflictIds.length"
+        class="draft-bar conflict"
+      >
+        <span>
+          {{ conflictIds.length }} {{ conflictIds.length === 1 ? "line was" : "lines were" }}
+          changed on another device since your edit.
+        </span>
+
+        <span class="draft-actions">
+          <PillButton
+            :disabled="editLocked"
+            @click="useTheirs"
+          >
+            Use theirs
+          </PillButton>
+
+          <PillButton
+            variant="primary"
+            :disabled="editLocked"
+            @click="keepMine"
+          >
+            Keep mine
+          </PillButton>
+        </span>
+      </div>
     </section>
 
     <!-- Summary -->
@@ -1124,7 +1579,11 @@ watch(
             v-for="row in isCollapsed(group) ? [] : group.rows"
             :key="row.line.subCategoryId"
             class="line-row"
-            :class="{ 'to-confirm': row.line.open }"
+            :class="{
+              'to-confirm': row.line.open,
+              drafted: isDrafted(row.line),
+              conflict: conflictIds.includes(row.line.subCategoryId),
+            }"
             title="Edit this line"
             @click="openLine(row, group)"
           >
@@ -1157,6 +1616,7 @@ watch(
             <td
               v-for="(amount, index) in row.line.months"
               :key="index"
+              :class="{ 'changed-cell': isChangedMonth(row.line, index) }"
             >
               {{ formatCell(amount) }}
             </td>
@@ -1192,6 +1652,11 @@ watch(
     :category-label="editedLine.categoryLabel"
     :nature-label="natureLabelOf(editedLine.row.line)"
     :closed="subCategoryIndex.get(editedLine.row.line.subCategoryId)?.closed ?? false"
+    :drafted="isDrafted(editedLine.row.line)"
+    :locked="editLocked"
+    @apply="applyLine"
+    @revert="revertLine"
+    @deleted="lineDeleted"
     @close="editedLine = null"
   />
 
@@ -1262,6 +1727,46 @@ watch(
 
 .request-message.error {
   color: var(--negative);
+}
+
+/* =========================
+   Brouillon
+========================= */
+
+.draft-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+
+  padding: 8px 12px;
+
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  background: var(--surface);
+  font-size: var(--font-size-sm);
+}
+
+.draft-bar.pending {
+  border-color: var(--primary);
+}
+
+.draft-bar.conflict {
+  border-color: var(--negative);
+
+  color: var(--negative);
+}
+
+.draft-count {
+  font-weight: 700;
+}
+
+.draft-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+
+  margin-left: auto;
 }
 
 /* =========================
@@ -1402,6 +1907,25 @@ tr.to-confirm td {
 
 tr.to-confirm .label-cell {
   box-shadow: inset 3px 0 0 var(--warning);
+}
+
+/*
+  Brouillon : ligne modifiée, pas encore envoyée ; mois
+  changés en gras. Conflit : changée ailleurs depuis.
+*/
+tr.drafted .label-cell {
+  box-shadow: inset 3px 0 0 var(--primary);
+
+  font-style: italic;
+}
+
+tr.conflict .label-cell {
+  box-shadow: inset 3px 0 0 var(--negative);
+}
+
+td.changed-cell {
+  color: var(--primary);
+  font-weight: 700;
 }
 
 .balance-row th,

@@ -13,6 +13,7 @@ import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import { useEventRequest } from "@/composables/useEventRequest";
 
 import type { BudgetLine } from "@/contracts/budget";
+import type { BudgetLineValues } from "@/composables/useBudgetDraft";
 
 import { formatInteger } from "@/utils/amountFormat";
 import { confirmDialog } from "@/services/dialog/appDialog";
@@ -28,23 +29,20 @@ import {
 /* =========================
    Fiche budget d'une sous-catégorie
 
-   12 montants, statut et mémo d'une année. L'enregistrement
-   envoie au Mac :
-     events/PWA-BUD_<AAAAMMJJHHMMSS>_<SubCategoryID>.json
-     { "eventType": "BUDGET_UPDATED",
-       "payload": { "year", "subCategoryId",
-                    "months": [12 entiers ≥ 0],
-                    "open", "memo", "source" } }
-   puis se ferme une fois la demande traitée (budget.json
-   republié). Une sous-catégorie absente du budget de
-   l'année s'ouvre avec 12 mois à 0, Open et sans mémo ;
-   le Mac crée sa ligne au premier enregistrement.
+   12 montants, statut et mémo d'une année, brouillon
+   compris. « Apply » rend la saisie à la page, qui la garde
+   dans le brouillon (useBudgetDraft) jusqu'à « Save all » ;
+   « Revert » retire la ligne du brouillon. Une sous-catégorie
+   absente du budget de l'année s'ouvre avec 12 mois à 0,
+   Open et sans mémo ; le Mac crée sa ligne à l'envoi.
 
    Sous-catégorie clôturée, année en cours : la ligne peut
    être supprimée (montants, statut et mémo de l'année) :
      events/PWA-BUD_<AAAAMMJJHHMMSS>_<SubCategoryID>_DEL.json
      { "eventType": "BUDGET_LINE_DELETED",
        "payload": { "year", "subCategoryId", "source" } }
+   envoyé tout de suite, hors brouillon ; la fiche se ferme
+   une fois la demande traitée.
 ========================= */
 
 const props = defineProps<{
@@ -56,10 +54,19 @@ const props = defineProps<{
 
   /* Sous-catégorie clôturée (statut autre que « A »). */
   closed: boolean;
+
+  /* Ligne modifiée dans le brouillon. */
+  drafted: boolean;
+
+  /* « Save all » en attente du Mac : lecture seule. */
+  locked: boolean;
 }>();
 
 const emit = defineEmits<{
   close: [];
+  apply: [values: BudgetLineValues];
+  revert: [];
+  deleted: [];
 }>();
 
 const MONTH_LABELS = [
@@ -171,64 +178,42 @@ function copyJanuary() {
 }
 
 /* =========================
-   Enregistrement
+   Saisie appliquée au brouillon
 ========================= */
 
-const updateRequest =
-  useEventRequest({
-    trigram: "BUD",
-    noAnswerDelayMs: NO_ANSWER_DELAY_MS,
-  });
-
-/*
-  Mise à jour de cette ligne déjà en attente dans events/
-  (autre onglet, ou envoyée avant un rechargement).
-*/
-const waitingElsewhere =
+/* Lecture seule : envoi du budget ou suppression en cours. */
+const busy =
   computed(() =>
-    updateRequest.request.value === null &&
-    updateRequest.waitingFiles.value.some(
-      name =>
-        name.endsWith(
-          `_${props.line.subCategoryId}.json`
-        ) ||
-        name.endsWith(
-          `_${props.line.subCategoryId}_DEL.json`
-        )
-    )
+    props.locked ||
+    deleteRequest.inProgress.value
   );
 
-const canSave =
-  computed(() =>
-    changed.value &&
-    !updateRequest.inProgress.value &&
-    !waitingElsewhere.value
-  );
-
-async function save() {
-  if (!canSave.value) {
+function apply() {
+  if (!changed.value || busy.value) {
     return;
   }
 
-  deleting.value =
-    false;
+  emit("apply", {
+    months: months.value,
+    open: status.value === "open",
+    memo: memo.value.trim() || null,
+  });
+}
 
-  await updateRequest.send(
-    {
-      eventType: "BUDGET_UPDATED",
-      version: 1,
-      timestamp: new Date().toISOString(),
-      payload: {
-        year: props.year,
-        subCategoryId: props.line.subCategoryId,
-        months: months.value,
-        open: status.value === "open",
-        memo: memo.value.trim() || null,
-        source: deviceName(),
-      },
-    },
-    String(props.line.subCategoryId)
-  );
+async function revert() {
+  if (
+    busy.value ||
+    !(await confirmDialog({
+      title: "Revert this line?",
+      message: "Its draft changes are discarded; the published values are shown again.",
+      confirmLabel: "Revert",
+      destructive: true,
+    }))
+  ) {
+    return;
+  }
+
+  emit("revert");
 }
 
 /* =========================
@@ -239,13 +224,31 @@ const canDelete =
   props.closed &&
   props.year === new Date().getFullYear();
 
-const deleting =
-  ref(false);
+const deleteRequest =
+  useEventRequest({
+    trigram: "BUD",
+    noAnswerDelayMs: NO_ANSWER_DELAY_MS,
+  });
+
+/*
+  Suppression de cette ligne déjà en attente dans events/
+  (autre onglet, ou envoyée avant un rechargement).
+*/
+const waitingElsewhere =
+  computed(() =>
+    deleteRequest.request.value === null &&
+    deleteRequest.waitingFiles.value.some(
+      name =>
+        name.endsWith(
+          `_${props.line.subCategoryId}_DEL.json`
+        )
+    )
+  );
 
 async function remove() {
   if (
     !canDelete ||
-    updateRequest.inProgress.value ||
+    busy.value ||
     waitingElsewhere.value ||
     !(await confirmDialog({
       title: `Delete the ${props.year} budget of "${props.label}"?`,
@@ -257,10 +260,7 @@ async function remove() {
     return;
   }
 
-  deleting.value =
-    true;
-
-  await updateRequest.send(
+  await deleteRequest.send(
     {
       eventType: "BUDGET_LINE_DELETED",
       version: 1,
@@ -276,11 +276,11 @@ async function remove() {
 }
 
 watch(
-  () => updateRequest.request.value?.phase,
+  () => deleteRequest.request.value?.phase,
 
   phase => {
     if (phase === "completed") {
-      emit("close");
+      emit("deleted");
     }
   }
 );
@@ -288,26 +288,28 @@ watch(
 const requestMessage =
   computed(() => {
     if (waitingElsewhere.value) {
-      return waitingElsewhereMessage("An update of this line");
+      return waitingElsewhereMessage("A deletion of this line");
     }
 
     const current =
-      updateRequest.request.value;
+      deleteRequest.request.value;
 
     switch (current?.phase) {
       case "requested":
-        return pendingMessage("Sent", updateRequest.noAnswerYet.value);
+        return pendingMessage("Delete sent", deleteRequest.noAnswerYet.value);
 
       case "started":
-        return deleting.value
-          ? processingMessage("Deleting")
-          : processingMessage("Saving");
+        return processingMessage("Deleting");
 
       case "error":
         return `Rejected: ${current.message ?? "unknown error"}`;
 
       default:
-        return "";
+        return props.locked
+          ? "Editing is locked while the budget is being saved."
+          : props.drafted
+            ? "Draft: not sent yet"
+            : "";
     }
   });
 
@@ -318,7 +320,7 @@ const requestMessage =
 async function close() {
   if (
     changed.value &&
-    !updateRequest.inProgress.value &&
+    !deleteRequest.inProgress.value &&
     !(await confirmDialog({
       title: "Discard the changes of this line?",
       confirmLabel: "Discard",
@@ -392,7 +394,7 @@ onBeforeUnmount(() => {
       <h3>Monthly amounts</h3>
 
       <PillButton
-        :disabled="updateRequest.inProgress.value"
+        :disabled="busy"
         @click="copyJanuary"
       >
         Copy January to all months
@@ -412,7 +414,7 @@ onBeforeUnmount(() => {
           type="text"
           inputmode="numeric"
           placeholder="0"
-          :disabled="updateRequest.inProgress.value"
+          :disabled="busy"
           @blur="normalizeMonth(index)"
         />
       </label>
@@ -441,7 +443,7 @@ onBeforeUnmount(() => {
       <textarea
         v-model="memo"
         rows="8"
-        :disabled="updateRequest.inProgress.value"
+        :disabled="busy"
       ></textarea>
     </label>
 
@@ -451,15 +453,23 @@ onBeforeUnmount(() => {
       <PillButton
         v-if="canDelete"
         variant="danger"
-        :disabled="updateRequest.inProgress.value || waitingElsewhere"
+        :disabled="busy || waitingElsewhere"
         @click="remove"
       >
         Delete
       </PillButton>
 
+      <PillButton
+        v-if="drafted"
+        :disabled="busy"
+        @click="revert"
+      >
+        Revert
+      </PillButton>
+
       <span
         class="request-message"
-        :class="updateRequest.request.value?.phase"
+        :class="deleteRequest.request.value?.phase ?? (drafted ? 'draft' : '')"
       >
         {{ requestMessage }}
       </span>
@@ -470,10 +480,10 @@ onBeforeUnmount(() => {
 
       <PillButton
         variant="primary"
-        :disabled="!canSave"
-        @click="save"
+        :disabled="!changed || busy"
+        @click="apply"
       >
-        Save
+        Apply
       </PillButton>
     </footer>
   </section>
@@ -673,5 +683,9 @@ h3 {
 
 .request-message.error {
   color: var(--negative);
+}
+
+.request-message.draft {
+  color: var(--warning);
 }
 </style>

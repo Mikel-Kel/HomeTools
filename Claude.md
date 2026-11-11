@@ -131,6 +131,9 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 
 - Budget (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/budget-contract.md`
   (section `years` de `budget.json`, événements `PWA-BUD_…`, journal `budgetLog-<année>.json`).
+  Saisie en brouillon par année (`src/composables/useBudgetDraft.ts`, localStorage préfixé) : « Save all » envoie un seul
+  `BUDGET_BATCH_UPDATED` (`PWA-BUD_…_BATCH.json`) ; `BUDGET_UPDATED` n'est plus émis. Suppression d'une ligne et création
+  d'année restent immédiates.
 
 - Master data (catégories, parties, tags) : contrats dans `../Backend/docs/categories-contract.md`, `parties-contract.md`
   et `tags-contract.md` (table `Tags`, tags `Acc` numérotés à partir de 1, `0` = sans tag, seul tag hors budget = tag réservé 1 ;
