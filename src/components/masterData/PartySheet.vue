@@ -35,7 +35,7 @@ import {
      events/PWA-PTY_<AAAAMMJJHHMMSS>_P<PartyID|NEW>.json
        { "eventType": "PARTY_SAVED",
          "payload": { "partyId" | null, "label", "typeId",
-                      "seq", "aliases": [liste complète],
+                      "seq", "generic", "aliases": [liste complète],
                       "source" } }
      events/PWA-PTY_<AAAAMMJJHHMMSS>_P<PartyID>_DEL.json
        { "eventType": "PARTY_DELETED",
@@ -46,7 +46,9 @@ import {
    Sous-dossier d'archives (types -1, -2, ouvert depuis
    « Party types ») : nom seulement, type fixe ; l'ordre se
    règle par ↑ ↓, un nouveau dossier se place à la fin.
-   Vraie partie : nom, type ordinaire et alias.
+   Vraie partie : nom, type ordinaire, case « Generic » et
+   alias. generic n'est jamais envoyé pour un dossier : le Mac
+   y force 0.
 
    Les alias ne sont jamais rognés : leurs espaces de début
    et de fin comptent dans la recherche du Mac.
@@ -88,6 +90,7 @@ const original = {
   label: props.party?.label ?? "",
   typeId: props.party?.typeId ?? props.defaultTypeId ?? 0,
   seq: props.party?.seq ?? DEFAULT_SEQ,
+  generic: props.party?.generic ?? false,
   aliases: [...(props.party?.aliases ?? [])],
 };
 
@@ -96,6 +99,9 @@ const label =
 
 const typeId =
   ref(original.typeId);
+
+const generic =
+  ref(original.generic);
 
 const aliases =
   ref<string[]>([...original.aliases]);
@@ -148,6 +154,7 @@ const changed =
   computed(() =>
     trimmedLabel.value !== original.label ||
     typeId.value !== original.typeId ||
+    generic.value !== original.generic ||
     aliases.value.length !== original.aliases.length ||
     aliases.value.some(
       (alias, index) => alias !== original.aliases[index]
@@ -321,6 +328,7 @@ async function save() {
         label: trimmedLabel.value,
         typeId: typeId.value,
         seq,
+        ...(isFolder.value ? {} : { generic: generic.value }),
         aliases: aliases.value,
         source: deviceName(),
       },
@@ -440,6 +448,25 @@ const usageText =
       </select>
     </div>
 
+    <div
+      v-if="!isFolder"
+      class="field"
+    >
+      <label class="generic-check">
+        <input
+          v-model="generic"
+          type="checkbox"
+          :disabled="saveRequest.inProgress.value"
+        />
+
+        <h3>Generic</h3>
+      </label>
+
+      <p class="note">
+        Groups several parties: its name is never put in the bank description.
+      </p>
+    </div>
+
     <!-- Aliases -->
 
     <div
@@ -506,6 +533,21 @@ const usageText =
 </template>
 
 <style scoped>
+.generic-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  cursor: pointer;
+}
+
+.generic-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+}
+
 .alias-list {
   display: flex;
   flex-wrap: wrap;

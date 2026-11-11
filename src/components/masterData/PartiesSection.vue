@@ -82,6 +82,9 @@ watch(
 const unusedOnly =
   usePersistentRef("masterData.parties.unusedOnly", false);
 
+const genericOnly =
+  usePersistentRef("masterData.parties.genericOnly", false);
+
 const selectedId =
   ref<number | null>(null);
 
@@ -154,6 +157,7 @@ const filteredParties =
         (typeFilter.value === null ||
           party.typeId === typeFilter.value) &&
         (!unusedOnly.value || !isPartyUsed(party)) &&
+        (!genericOnly.value || party.generic) &&
         (!text ||
           party.id === matchId ||
           party.label.toLowerCase().includes(text) ||
@@ -275,6 +279,13 @@ const usageText =
         >
           Unused only
         </PillButton>
+
+        <PillButton
+          :active="genericOnly"
+          @click="genericOnly = !genericOnly"
+        >
+          Generic only
+        </PillButton>
       </div>
 
       <ChipSelector
@@ -318,6 +329,10 @@ const usageText =
             <span class="item-label">{{ party.label }}</span>
 
             <span class="item-meta">
+              <StatusPill v-if="party.generic">
+                Generic
+              </StatusPill>
+
               <StatusPill
                 v-if="!isPartyUsed(party)"
                 dashed
@@ -354,6 +369,10 @@ const usageText =
           <h2>{{ selected.label }}</h2>
 
           <span class="panel-actions">
+            <StatusPill v-if="selected.generic">
+              Generic
+            </StatusPill>
+
             <StatusPill
               v-if="!isPartyUsed(selected)"
               dashed

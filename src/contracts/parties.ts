@@ -17,6 +17,7 @@ import {
        "partyTypes": [ { "id": 5, "label": "Boutique" } ],
        "parties": [ { "id": 852, "label": "Nike",
                       "typeId": 5, "seq": 100,
+                      "generic": false,
                       "aliases": ["NIKE FACT"],
                       "usage": { "allocations": 12, "rules": 1,
                                  "archives": 0, "banks": 0 } } ] }
@@ -24,6 +25,11 @@ import {
    Toutes les parties, dossiers d'archives compris (types -1
    et -2). Les alias sont gardés tels quels : leurs espaces de
    début et de fin sont significatifs.
+
+   generic : partie générique (« Restaurant (générique) »),
+   qui regroupe des tiers sans fiche propre ; son nom n'est
+   jamais repris dans le libellé bancaire. Absent (export
+   antérieur au 2026-11-11) : false.
 ========================= */
 
 export const PARTIES_FOLDER = "settings";
@@ -79,6 +85,7 @@ export interface Party {
   label: string;
   typeId: number;
   seq: number;
+  generic: boolean;
   aliases: string[];
   usage: PartyUsage;
 }
@@ -159,6 +166,7 @@ export function readParties(
             label: asString(party.label),
             typeId: asNumber(party.typeId),
             seq: asNumber(party.seq),
+            generic: party.generic === true,
 
             aliases: asArray(party.aliases)
               .filter(
