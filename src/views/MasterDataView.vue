@@ -15,6 +15,7 @@ import DocumentsSection from "@/components/masterData/DocumentsSection.vue";
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useCategories } from "@/composables/useCategories";
 import { useParties } from "@/composables/useParties";
+import { useTransferTypes } from "@/composables/useTransferTypes";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
 import { useDocumentTags } from "@/composables/archives/useDocumentTags";
 
@@ -41,6 +42,13 @@ import {
   PARTIES_FOLDER,
   readParties,
 } from "@/contracts/parties";
+
+import {
+  readTransferTypes,
+  TRANSFER_TYPES_FILE,
+  TRANSFER_TYPES_FOLDER,
+} from "@/contracts/transferTypes";
+
 import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
@@ -80,6 +88,9 @@ const categoriesStore =
 
 const partiesStore =
   useParties();
+
+const transferTypesStore =
+  useTransferTypes();
 
 const tagsStore =
   useAllocationTags();
@@ -121,6 +132,31 @@ const partiesFile =
     folder: PARTIES_FOLDER,
     file: () => (partiesWanted.value ? PARTIES_FILE : null),
     read: readParties,
+  });
+
+/* Types d'opération (famille de « Spending ») : chargés à la première ouverture de la section. */
+const transferTypesWanted =
+  ref(false);
+
+watch(
+  section,
+
+  value => {
+    if (value === "spending") {
+      transferTypesWanted.value = true;
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
+const transferTypesFile =
+  useRemoteJson({
+    folder: TRANSFER_TYPES_FOLDER,
+    file: () => (transferTypesWanted.value ? TRANSFER_TYPES_FILE : null),
+    read: readTransferTypes,
   });
 
 /* Tags : chargés à la première ouverture de leur section. */
@@ -187,6 +223,16 @@ watch(
 );
 
 watch(
+  transferTypesFile.data,
+
+  data => {
+    if (data) {
+      transferTypesStore.set(data.transferTypes);
+    }
+  }
+);
+
+watch(
   tagsFile.data,
 
   list => {
@@ -209,10 +255,14 @@ watch(
 const current =
   computed(() =>
     section.value === "spending"
-      ? (tagsFile.error.value ? tagsFile : categoriesFile)
+      ? (tagsFile.error.value
+          ? tagsFile
+          : transferTypesFile.error.value
+            ? transferTypesFile
+            : categoriesFile)
       : section.value === "documents" && documentTagsFile.error.value
-          ? documentTagsFile
-          : partiesFile
+        ? documentTagsFile
+        : partiesFile
   );
 </script>
 
@@ -259,6 +309,7 @@ const current =
         v-else-if="section === 'spending' && categoriesFile.data.value"
         :categories="categoriesFile.data.value"
         :allocation-tags="tagsFile.data.value"
+        :transfer-types="transferTypesFile.data.value"
       />
 
       <DocumentsSection
