@@ -184,6 +184,18 @@ const currencyFilter =
     new Set()
   );
 
+/*
+  Année des mouvements (chips de « Period ») ; null : toutes.
+  Par défaut l'année courante, même sans mouvement.
+*/
+const CURRENT_YEAR =
+  String(new Date().getFullYear());
+
+const yearFilter =
+  ref<string | null>(
+    CURRENT_YEAR
+  );
+
 const dateFrom =
   ref("");
 
@@ -396,6 +408,75 @@ const currencyFilterArray =
   });
 
 /* =========================
+   Year filter
+========================= */
+
+/* Années des mouvements encore à allouer, la plus récente d'abord. */
+const recordYears =
+  computed(() =>
+    new Set(
+      spending.records.value.map(
+        record =>
+          record.date.slice(0, 4)
+      )
+    )
+  );
+
+/* L'année courante est toujours proposée. */
+const availableYears =
+  computed(() =>
+    Array
+      .from(
+        new Set([
+          CURRENT_YEAR,
+          ...recordYears.value,
+        ])
+      )
+      .sort()
+      .reverse()
+  );
+
+/* Année choisie sans aucun mouvement à allouer. */
+const selectedYearEmpty =
+  computed(() =>
+    spendingFile.data.value !== null &&
+    yearFilter.value !== null &&
+    !recordYears.value.has(
+      yearFilter.value
+    )
+  );
+
+const yearItems =
+  computed(() =>
+    availableYears.value.map(
+      year => ({
+        id: year,
+        label: year,
+      })
+    )
+  );
+
+/*
+  Année passée choisie dont tout est alloué : retour à
+  l'année courante.
+*/
+watch(
+  availableYears,
+  years => {
+    if (
+      spendingFile.data.value &&
+      yearFilter.value !== null &&
+      !years.includes(
+        yearFilter.value
+      )
+    ) {
+      yearFilter.value =
+        CURRENT_YEAR;
+    }
+  }
+);
+
+/* =========================
    Filter helpers
 ========================= */
 
@@ -408,6 +489,9 @@ function resetFilters() {
 
   currencyFilter.value =
     new Set();
+
+  yearFilter.value =
+    CURRENT_YEAR;
 
   dateFrom.value = "";
   dateTo.value = "";
@@ -474,6 +558,15 @@ function applyFilters(
       }
 
       if (
+        yearFilter.value &&
+        !record.date.startsWith(
+          yearFilter.value
+        )
+      ) {
+        return false;
+      }
+
+      if (
         dateFrom.value &&
         record.date <
           dateFrom.value
@@ -535,6 +628,9 @@ function saveFiltersToSession() {
           currencyFilter.value
         ),
 
+      year:
+        yearFilter.value,
+
       dateFrom:
         dateFrom.value,
 
@@ -581,6 +677,11 @@ function restoreFiltersFromSession() {
       new Set(
         saved.currency ?? []
       );
+
+    if ("year" in saved) {
+      yearFilter.value =
+        saved.year ?? null;
+    }
 
     dateFrom.value =
       saved.dateFrom ?? "";
@@ -1013,6 +1114,7 @@ watch(
     ownerFilter,
     statusFilter,
     currencyFilter,
+    yearFilter,
     dateFrom,
     dateTo,
     minAmount,
@@ -1302,10 +1404,18 @@ onBeforeUnmount(() => {
             "
           />
 
+          <ChipSelector
+            v-model="yearFilter"
+            label="Period"
+            :items="yearItems"
+            :show-all="true"
+            :align-with-content="
+              true
+            "
+          />
+
           <div class="filter-row with-label">
-            <span class="label">
-              Period
-            </span>
+            <span class="label"></span>
 
             <div class="filter-content">
               <div class="dates-row">
@@ -1358,6 +1468,13 @@ onBeforeUnmount(() => {
     <!-- Accounts -->
 
     <div class="spending-view">
+      <p
+        v-if="selectedYearEmpty"
+        class="empty-year"
+      >
+        No unallocated expenses
+      </p>
+
       <section
         v-for="
           account
@@ -1759,6 +1876,14 @@ onBeforeUnmount(() => {
 
 .spending-view {
   padding-bottom: 1rem;
+}
+
+.empty-year {
+  margin: 0.75rem 0;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+  text-align: center;
 }
 
 .account {
