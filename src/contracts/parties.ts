@@ -20,7 +20,8 @@ import {
                       "generic": false,
                       "aliases": ["NIKE FACT"],
                       "usage": { "allocations": 12, "rules": 1,
-                                 "archives": 0, "banks": 0 } } ] }
+                                 "archives": 0, "banks": 0,
+                                 "movements": 30 } } ] }
 
    Toutes les parties, dossiers d'archives compris (types -1
    et -2). Les alias sont gardés tels quels : leurs espaces de
@@ -30,6 +31,10 @@ import {
    qui regroupe des tiers sans fiche propre ; son nom n'est
    jamais repris dans le libellé bancaire. Absent (export
    antérieur au 2026-11-11) : false.
+
+   usage.movements : mouvements dont la partie est la
+   contrepartie identifiée (accmovement.PartyID). Absent
+   (export antérieur au 2026-11-13) : 0.
 ========================= */
 
 export const PARTIES_FOLDER = "settings";
@@ -78,6 +83,7 @@ export interface PartyUsage {
   rules: number;
   archives: number;
   banks: number;
+  movements: number;
 }
 
 export interface Party {
@@ -110,7 +116,8 @@ export function isPartyUsed(
     usage.allocations +
     usage.rules +
     usage.archives +
-    usage.banks
+    usage.banks +
+    usage.movements
   ) > 0;
 }
 
@@ -180,6 +187,7 @@ export function readParties(
               rules: asNumber(usage?.rules),
               archives: asNumber(usage?.archives),
               banks: asNumber(usage?.banks),
+              movements: asNumber(usage?.movements),
             },
           };
         }

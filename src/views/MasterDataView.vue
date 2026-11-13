@@ -8,6 +8,7 @@ import {
 import PageHeader from "@/components/PageHeader.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import PartiesSection from "@/components/masterData/PartiesSection.vue";
+import PartiesToIdentifySection from "@/components/masterData/PartiesToIdentifySection.vue";
 import PartyTypesSection from "@/components/masterData/PartyTypesSection.vue";
 import SpendingSection from "@/components/masterData/SpendingSection.vue";
 import DocumentsSection from "@/components/masterData/DocumentsSection.vue";
@@ -44,6 +45,12 @@ import {
 } from "@/contracts/parties";
 
 import {
+  PARTIES_TO_IDENTIFY_FILE,
+  PARTIES_TO_IDENTIFY_FOLDER,
+  readPartiesToIdentify,
+} from "@/contracts/partiesToIdentify";
+
+import {
   readTransferTypes,
   TRANSFER_TYPES_FILE,
   TRANSFER_TYPES_FOLDER,
@@ -61,6 +68,7 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
 
 type MasterDataSection =
   | "parties"
+  | "toIdentify"
   | "partyTypes"
   | "spending"
   | "documents";
@@ -70,6 +78,7 @@ const sectionOptions: {
   label: string;
 }[] = [
   { value: "parties", label: "Parties" },
+  { value: "toIdentify", label: "To identify" },
   { value: "partyTypes", label: "Party types" },
   { value: "spending", label: "Spending" },
   { value: "documents", label: "Documents" },
@@ -115,6 +124,7 @@ watch(
   value => {
     if (
       value === "parties" ||
+      value === "toIdentify" ||
       value === "partyTypes" ||
       value === "documents"
     ) {
@@ -132,6 +142,36 @@ const partiesFile =
     folder: PARTIES_FOLDER,
     file: () => (partiesWanted.value ? PARTIES_FILE : null),
     read: readParties,
+  });
+
+/*
+  Contreparties à identifier : chargées à la première
+  ouverture de la section. Fichier absent (pas encore
+  publié) : section vide, sans erreur.
+*/
+const toIdentifyWanted =
+  ref(false);
+
+watch(
+  section,
+
+  value => {
+    if (value === "toIdentify") {
+      toIdentifyWanted.value = true;
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
+const toIdentifyFile =
+  useRemoteJson({
+    folder: PARTIES_TO_IDENTIFY_FOLDER,
+    file: () => (toIdentifyWanted.value ? PARTIES_TO_IDENTIFY_FILE : null),
+    read: readPartiesToIdentify,
+    optional: true,
   });
 
 /* Types d'opération (famille de « Spending ») : chargés à la première ouverture de la section. */
@@ -262,7 +302,9 @@ const current =
             : categoriesFile)
       : section.value === "documents" && documentTagsFile.error.value
         ? documentTagsFile
-        : partiesFile
+        : section.value === "toIdentify" && toIdentifyFile.error.value
+          ? toIdentifyFile
+          : partiesFile
   );
 </script>
 
@@ -298,6 +340,13 @@ const current =
       <PartiesSection
         v-if="section === 'parties' && partiesFile.data.value"
         :data="partiesFile.data.value"
+      />
+
+      <PartiesToIdentifySection
+        v-else-if="section === 'toIdentify' && partiesFile.data.value"
+        :data="toIdentifyFile.data.value"
+        :loading="toIdentifyFile.loading.value"
+        :parties="partiesFile.data.value"
       />
 
       <PartyTypesSection

@@ -52,6 +52,11 @@ import {
 
    Les alias ne sont jamais rognés : leurs espaces de début
    et de fin comptent dans la recherche du Mac.
+
+   initialAlias (écran « To identify ») : alias prérempli
+   dans la saisie, modifiable, ajouté à l'enregistrement.
+   Le message du statut (« …, 14 movements identified »)
+   est transmis par « saved » avant la fermeture.
 ========================= */
 
 const props = defineProps<{
@@ -60,10 +65,14 @@ const props = defineProps<{
 
   /* Type proposé à la création. */
   defaultTypeId?: number;
+
+  /* Alias proposé dans la saisie. */
+  initialAlias?: string;
 }>();
 
 const emit = defineEmits<{
   close: [];
+  saved: [message: string | null];
 }>();
 
 const NO_ANSWER_DELAY_MS =
@@ -107,7 +116,7 @@ const aliases =
   ref<string[]>([...original.aliases]);
 
 const newAlias =
-  ref("");
+  ref(props.initialAlias ?? "");
 
 const isFolder =
   computed(() =>
@@ -155,6 +164,7 @@ const changed =
     trimmedLabel.value !== original.label ||
     typeId.value !== original.typeId ||
     generic.value !== original.generic ||
+    newAlias.value.trim() !== "" ||
     aliases.value.length !== original.aliases.length ||
     aliases.value.some(
       (alias, index) => alias !== original.aliases[index]
@@ -304,6 +314,7 @@ const canSave =
   computed(() =>
     changed.value &&
     !formError.value &&
+    !newAliasError.value &&
     !saveRequest.inProgress.value &&
     !waitingElsewhere.value
   );
@@ -378,6 +389,7 @@ watch(
 
   phase => {
     if (phase === "completed") {
+      emit("saved", saveRequest.request.value?.message ?? null);
       emit("close");
     }
   }
@@ -398,7 +410,7 @@ const usageText =
       props.party?.usage;
 
     return usage
-      ? `${usage.allocations} allocations · ${usage.rules} rules · ${usage.archives} archives · ${usage.banks} banks`
+      ? `${usage.movements} movements · ${usage.allocations} allocations · ${usage.rules} rules · ${usage.archives} archives · ${usage.banks} banks`
       : "";
   });
 </script>
@@ -476,7 +488,7 @@ const usageText =
       <h3>Aliases ({{ aliases.length }})</h3>
 
       <p class="note">
-        Text found in the bank description; the longest matching alias wins. Spaces count (shown as ␣).
+        Text found in the bank description. Spaces count (shown as ␣).
       </p>
 
       <ul

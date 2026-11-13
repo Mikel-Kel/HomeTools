@@ -311,11 +311,14 @@ export function useEventRequest({
       return;
     }
 
+    /* Succès : message du statut conservé (ex. « Party 852 updated, 14 movements identified »). */
     if (status?.status === "success") {
       update(
         completeOnSuccess
           ? "completed"
-          : "started"
+          : "started",
+        status.message ||
+          null
       );
 
       return;

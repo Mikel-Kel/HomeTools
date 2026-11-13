@@ -34,16 +34,23 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
    Recherche : une partie est trouvée si son nom ou l'un de
    ses alias contient le texte saisi. Un libellé bancaire
    collé tel quel est aussi reconnu comme le fait le Mac
-   (sp_find_allocation_rule) : l'alias le plus long contenu
-   dans le texte désigne la partie.
+   pour la contrepartie d'un mouvement
+   (../Backend/docs/parties-contract.md, § 3,
+   sp_fill_movement_party), dans l'ordre :
+   1. libellé égal à un alias, puis à un nom de partie ;
+   2. sinon, alias d'au moins 4 caractères contenus dans le
+      libellé, retenus s'ils sont tous de la même partie ;
+   3. sinon, aucune partie.
+   Comparaison comme MySQL (utf8mb4_unicode_ci) : casse et
+   accents ignorés ; espaces de fin ignorés pour l'égalité.
 ========================= */
 
 const props = defineProps<{
   data: PartiesData;
 }>();
 
-/* Texte assez long pour chercher un alias à l'intérieur. */
-const BANK_TEXT_MIN_LENGTH = 4;
+/* Alias assez long pour être cherché dans un libellé. */
+const CONTAINED_ALIAS_MIN_LENGTH = 4;
 
 const query =
   usePersistentRef("masterData.parties.query", "");
@@ -115,33 +122,104 @@ const normalizedQuery =
     query.value.trim().toLowerCase()
   );
 
-/*
-  Alias le plus long contenu dans le texte saisi (espaces
-  compris, sans tenir compte de la casse).
-*/
-const bankTextMatch =
-  computed(() => {
-    const text =
-      query.value.toLowerCase();
+/* Casse et accents ignorés, comme utf8mb4_unicode_ci. */
+function fold(
+  text: string
+): string {
+  return text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+}
 
-    if (text.trim().length < BANK_TEXT_MIN_LENGTH) {
+/* Égalité MySQL (PAD SPACE) : espaces de fin ignorés. */
+function foldEqual(
+  text: string
+): string {
+  return fold(text.replace(/ +$/, ""));
+}
+
+/*
+  Partie identifiée par le texte saisi, lu comme un libellé
+  bancaire. aliases : alias reconnus (vide pour un nom).
+  ambiguous : alias contenus de plusieurs parties.
+*/
+type BankTextMatch =
+  | { party: Party; aliases: string[]; by: "alias" | "name" | "contained" }
+  | { ambiguous: true };
+
+const bankTextMatch =
+  computed<BankTextMatch | null>(() => {
+    const text =
+      query.value.trim();
+
+    if (!text) {
       return null;
     }
 
-    let best: { party: Party; alias: string } | null = null;
+    /* Toutes les parties d'identifiant positif, comme le Mac. */
+    const candidates =
+      props.data.parties.filter(party => party.id > 0);
 
-    for (const party of parties.value) {
-      for (const alias of party.aliases) {
-        if (
-          text.includes(alias.toLowerCase()) &&
-          (!best || alias.length > best.alias.length)
-        ) {
-          best = { party, alias };
-        }
+    const equal =
+      foldEqual(text);
+
+    for (const party of candidates) {
+      const alias =
+        party.aliases.find(other => foldEqual(other) === equal);
+
+      if (alias !== undefined) {
+        return { party, aliases: [alias], by: "alias" };
       }
     }
 
-    return best;
+    const named =
+      candidates.find(party => foldEqual(party.label) === equal);
+
+    if (named) {
+      return { party: named, aliases: [], by: "name" };
+    }
+
+    const folded =
+      fold(query.value);
+
+    const found =
+      new Map<Party, string[]>();
+
+    for (const party of candidates) {
+      const aliases =
+        party.aliases.filter(
+          alias =>
+            alias.length >= CONTAINED_ALIAS_MIN_LENGTH &&
+            folded.includes(fold(alias))
+        );
+
+      if (aliases.length) {
+        found.set(party, aliases);
+      }
+    }
+
+    if (found.size > 1) {
+      return { ambiguous: true };
+    }
+
+    const [match] =
+      found;
+
+    return match
+      ? { party: match[0], aliases: match[1], by: "contained" }
+      : null;
+  });
+
+/* Partie identifiée (ni ambiguïté ni absence). */
+const bankTextParty =
+  computed(() => {
+    const match =
+      bankTextMatch.value;
+
+    return match && "party" in match
+      ? match
+      : null;
   });
 
 const filteredParties =
@@ -150,7 +228,7 @@ const filteredParties =
       normalizedQuery.value;
 
     const matchId =
-      bankTextMatch.value?.party.id;
+      bankTextParty.value?.party.id;
 
     return parties.value.filter(
       party =>
@@ -234,6 +312,7 @@ const usageText =
     }
 
     return [
+      plural(usage.movements, "movement"),
       plural(usage.allocations, "allocation"),
       plural(usage.rules, "rule"),
       plural(usage.archives, "archive"),
@@ -296,14 +375,32 @@ const usageText =
       />
 
       <button
-        v-if="bankTextMatch"
+        v-if="bankTextParty"
         type="button"
         class="bank-match"
-        @click="selectedId = bankTextMatch.party.id"
+        @click="selectedId = bankTextParty.party.id"
       >
-        Bank text matches <code>{{ showAlias(bankTextMatch.alias) }}</code>
-        → <strong>{{ bankTextMatch.party.label }}</strong>
+        <template v-if="bankTextParty.by === 'name'">
+          Bank text equals the name
+        </template>
+
+        <template v-else>
+          Bank text {{ bankTextParty.by === "alias" ? "equals" : "contains" }}
+          <code
+            v-for="alias in bankTextParty.aliases"
+            :key="alias"
+          >{{ showAlias(alias) }}</code>
+        </template>
+
+        → <strong>{{ bankTextParty.party.label }}</strong>
       </button>
+
+      <p
+        v-else-if="bankTextMatch"
+        class="bank-match ambiguous"
+      >
+        Bank text contains aliases of several parties: no party identified.
+      </p>
 
       <p
         v-if="!filteredParties.length"
@@ -414,7 +511,7 @@ const usageText =
             v-for="alias in selected.aliases"
             :key="alias"
             class="alias"
-            :class="{ matched: alias === bankTextMatch?.alias && selected.id === bankTextMatch?.party.id }"
+            :class="{ matched: selected.id === bankTextParty?.party.id && bankTextParty.aliases.includes(alias) }"
           >
             {{ showAlias(alias) }}
           </li>
@@ -565,6 +662,15 @@ h3 {
 
 .bank-match code {
   font-family: ui-monospace, Menlo, monospace;
+}
+
+.bank-match code + code {
+  margin-left: 0.4rem;
+}
+
+.bank-match.ambiguous {
+  color: var(--text-soft);
+  cursor: default;
 }
 
 /* =========================

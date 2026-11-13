@@ -12,7 +12,14 @@ export interface SpendingRecord {
   id: string;
   accountId: string;
   date: string;
+  /* Texte de la banque (partyName, « - » s'il est vide). */
   party: string;
+  /* Texte de la banque tel quel, éventuellement vide. */
+  bankDescription: string;
+  /* Contrepartie identifiée (accmovement.PartyID), distincte de la partie d'allocation. */
+  movementPartyID: number | null;
+  transferTypeID: number | null;
+  /* Partie proposée pour l'allocation. */
   partyID: number | null;
   amount: number;
   owner: string;

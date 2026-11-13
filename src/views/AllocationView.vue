@@ -17,6 +17,7 @@ import { useStorageAccess } from "@/composables/useStorageAccess";
 
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useSpending } from "@/composables/spending/useSpending";
+import { useMovementLabel } from "@/composables/spending/useMovementLabel";
 import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
@@ -70,6 +71,9 @@ const categoriesStore =
 
 const tagsStore =
   useAllocationTags();
+
+const movementLabel =
+  useMovementLabel();
 
 /* =========================
    Record
@@ -416,6 +420,8 @@ onMounted(async () => {
   }
 
   await loadSettings();
+
+  await movementLabel.load();
 
   if (!allocation.value) {
     return;
@@ -771,7 +777,14 @@ function onEditAllocation(
     <section class="allocation-record">
       <div class="record-main">
         <div class="record-party">
-          {{ recordSafe.party }}
+          {{ movementLabel.label(recordSafe) }}
+        </div>
+
+        <div
+          v-if="movementLabel.secondLine(recordSafe)"
+          class="record-bank"
+        >
+          {{ movementLabel.secondLine(recordSafe) }}
         </div>
 
         <div class="record-meta">
@@ -1156,6 +1169,12 @@ function onEditAllocation(
 .record-party {
   font-size: 1.1rem;
   font-weight: 600;
+}
+
+.record-bank {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
 }
 
 .record-meta {

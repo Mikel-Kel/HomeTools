@@ -22,6 +22,7 @@ import { useDriveWatcher } from "@/composables/useDriveWatcher";
 import { useEventRequest } from "@/composables/useEventRequest";
 
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
+import { useMovementLabel } from "@/composables/spending/useMovementLabel";
 
 import {
   useSpending,
@@ -90,6 +91,9 @@ const {
 
 const spending =
   useSpending();
+
+const movementLabel =
+  useMovementLabel();
 
 /* =========================
    View state
@@ -1161,6 +1165,8 @@ async function initializeView() {
 
     await loadSettings();
 
+    await movementLabel.load();
+
     bootstrapped.value =
       true;
 
@@ -1575,7 +1581,16 @@ onBeforeUnmount(() => {
               </td>
 
               <td>
-                {{ record.party }}
+                <div class="movement-label">
+                  {{ movementLabel.label(record) }}
+                </div>
+
+                <div
+                  v-if="movementLabel.secondLine(record)"
+                  class="bank-text"
+                >
+                  {{ movementLabel.secondLine(record) }}
+                </div>
               </td>
 
               <td>
@@ -2019,6 +2034,17 @@ onBeforeUnmount(() => {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.movement-label,
+.bank-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bank-text {
+  color: var(--text-soft);
+  font-size: var(--font-size-xs);
 }
 
 .spending-table tbody tr:nth-child(even) {

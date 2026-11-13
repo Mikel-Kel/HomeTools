@@ -15,6 +15,8 @@ import {
 /* =========================
    spending/spending.json
 
+   Contrat complet : ../Backend/docs/spending-contract.md.
+
    Exporté par exportSpending : les mouvements non encore
    alloués (AllocationChecked = 0), avec la suggestion
    d’allocation de sp_find_allocation_rule.
@@ -26,9 +28,17 @@ import {
            "expenseOwner": "…", "transferTypeID": 0,
            "cardHolderID": 0, "bankDescription": "…",
            "currency": "CHF", "foreignAmount": null,
+           "movementPartyID": 802 | null,
            "partyID": 0, "allocPartyName": "…",
            "categoryID": 0, "subCategoryID": 0,
            "allocComment": "…", "tagID": 0 } ] }
+
+   partyName et bankDescription : texte de la banque
+   (partyName vaut « - » s'il est vide). movementPartyID :
+   contrepartie identifiée d'après ce texte, null si inconnue
+   (absent avant le 2026-11-13 : null) ; partyID : partie
+   proposée pour l'allocation. L'une n'est jamais déduite de
+   l'autre. Libellé affiché : useMovementLabel.
 
    Un mouvement sans fitid, compte, partie, date ou montant
    rend le fichier invalide.
@@ -123,6 +133,9 @@ export function readSpending(
           accountId: account,
           date: valueDate,
           party: partyName,
+          bankDescription: asString(row.bankDescription),
+          movementPartyID: asNullableNumber(row.movementPartyID),
+          transferTypeID: asNullableNumber(row.transferTypeID),
           partyID: asNullableNumber(row.partyID),
           amount: row.amount,
           owner: asString(row.expenseOwner),
