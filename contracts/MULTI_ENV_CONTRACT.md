@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.5.1** — 2026-11-09
+**Version : 1.6.0** — 2026-11-14
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -74,7 +74,7 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
               "endpoint": "<URL https>", "awsProfile": "<profil AWS CLI>" },
       "events": {},
       "localArchive": { "root": "<chemin absolu>" },
-      "capabilities": { "localArchive": false, "card24": false },
+      "capabilities": { "localArchive": false, "card24": false, "wineCellar": false },
       "jobs": ["<nom de job>"]
     }
   }
@@ -102,6 +102,7 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 |---|---|
 | `localArchive` | Autorise `/api/local/read` sur `localArchive.root` (copie locale du magasin `archives`, §6). `/api/local/open` exige en plus que l'appareil appelant soit le serveur (`isServer: true`). |
 | `card24` | Autorise le job Card24 et les vues de suivi associées. |
+| `wineCellar` | Active la cave à vins : page de la PWA, export `wine/cellar.json` par le housekeeping et événements `WIN` (contrat du backend `docs/wine-cellar-contract.md`). |
 
 ---
 
@@ -137,7 +138,7 @@ Premier appel de la PWA, avant toute autre requête.
   "device": "iPad Michel",
   "kind": "ios",
   "isServer": false,
-  "capabilities": { "localArchive": true, "card24": true }
+  "capabilities": { "localArchive": true, "card24": true, "wineCellar": true }
 }
 ```
 
@@ -290,3 +291,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.4.0 | 2026-11-09 | §6, §3.3, §3.4 : le magasin `archives` est la référence des archives de chaque environnement, `localArchive.root` en est une copie locale facultative ; transition pour `hometools`, dont le disque reste la source. Évolution MINOR : nouvelle règle, sans changement de code pour le proxy et la PWA, et `hometools` inchangé |
 | 1.5.0 | 2026-11-09 | §6 : règles du magasin `archives` de référence (écritures dans le magasin d'abord, clés NFC, corbeille `_deleted/` purgée après 90 jours, copie locale sans suppression, réconciliation sur le magasin), transition précisée ; §3.3 : `localArchive.root` dans un dossier synchronisé ; §5.3 : `404 NOT_FOUND` pour un fichier local absent ou non téléchargé ; §10 : repli de la PWA sur le magasin. Évolution MINOR : `hometools` inchangé jusqu'à la bascule, les lectures locales qui réussissent aujourd'hui sont inchangées |
 | 1.5.1 | 2026-11-09 | §6 : fin de la transition, `hometools` écrit aussi d'abord dans le magasin `archives` et sa copie locale en est alimentée ; la publication disque → magasin est retirée. Publié en PATCH : bascule annoncée en 1.5.0, sans changement d'interface |
+| 1.6.0 | 2026-11-14 | §3.4 : capacité `wineCellar` (cave à vins), `false` par défaut ; schéma et exemples complétés. Évolution MINOR : nouvelle capacité avec défaut `false`, aucun comportement existant ne change |

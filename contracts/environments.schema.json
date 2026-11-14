@@ -93,7 +93,8 @@
           "additionalProperties": false,
           "properties": {
             "localArchive": { "type": "boolean", "default": false },
-            "card24": { "type": "boolean", "default": false }
+            "card24": { "type": "boolean", "default": false },
+            "wineCellar": { "type": "boolean", "default": false }
           }
         },
         "jobs": {
