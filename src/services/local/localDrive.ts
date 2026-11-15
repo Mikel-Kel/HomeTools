@@ -45,6 +45,30 @@ export async function readLocalJSON<T>(
 }
 
 /* =========================================================
+   Load file (binaire : image…)
+========================================================= */
+export async function readLocalBlob(
+  folder: string,
+  filename: string
+): Promise<Blob | null> {
+  const root = getLocalDirectory();
+  if (!root) {
+    throw new Error("LOCAL_DIRECTORY_NOT_SELECTED");
+  }
+  try {
+    const dir = await resolveDirectory(root, folder);
+    const fileHandle = await dir.getFileHandle(filename);
+    return await fileHandle.getFile();
+  }
+  catch (err: any) {
+    if (err?.name === "NotFoundError") {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/* =========================================================
    Save JSON
 ========================================================= */
 export async function saveLocalJSON(

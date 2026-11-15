@@ -180,6 +180,37 @@ export async function readS3Text(
 
 
 /* =========================
+   Read binary (image…)
+========================= */
+
+/* Octets bruts de l'objet (magasin data), null s'il n'existe pas. */
+export async function readS3Blob(
+  path: string
+): Promise<Blob | null> {
+  const key =
+    normalizeS3Path(path);
+
+  const response =
+    await proxyFetch(
+      "/api/s3/read",
+      { params: { store: DATA_STORE, key } }
+    );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `S3 proxy read failed: HTTP ${response.status} for ${key}`
+    );
+  }
+
+  return await response.blob();
+}
+
+
+/* =========================
    Read JSON
 ========================= */
 

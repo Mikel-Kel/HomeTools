@@ -9,6 +9,8 @@ import {
 
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
+import WinePhoto from "@/components/wineCellar/WinePhoto.vue";
+import WinePhotoViewer from "@/components/wineCellar/WinePhotoViewer.vue";
 import WineTastings from "@/components/wineCellar/WineTastings.vue";
 
 import type {
@@ -31,8 +33,9 @@ import { formatDate } from "@/utils/dateFormat";
    emplacement par son libellé, commentaires sur plusieurs
    lignes, dégustations dans l'ordre du fichier (la plus
    récente en premier), dates partielles telles quelles.
-   Zone de la photo réservée (photos : lot W5), pictogramme
-   neutre en attendant.
+   Photo de l'étiquette (§ 5, WinePhoto), pictogramme neutre
+   sans photo ou si elle ne se charge pas ; un appui l'ouvre
+   en grand (WinePhotoViewer).
 
    Fermeture : ✕, Échap, clic hors de la fiche.
 
@@ -60,6 +63,19 @@ const pending =
   computed(() =>
     props.events.isWinePending(props.wine.id)
   );
+
+/* =========================
+   Photo
+========================= */
+
+const photo =
+  ref<InstanceType<typeof WinePhoto> | null>(null);
+
+const photoUrl =
+  computed(() => photo.value?.url ?? null);
+
+const photoOpen =
+  ref(false);
 
 /* =========================
    Stock
@@ -274,26 +290,6 @@ onBeforeUnmount(() => {
     </header>
 
     <div class="summary">
-      <div
-        class="photo"
-        :title="wine.photo ? undefined : 'No label photo'"
-      >
-        <svg
-          viewBox="0 0 24 64"
-          aria-hidden="true"
-        >
-          <path
-            d="M9 2h6v14c0 3 6 6 6 13v31a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V29c0-7 6-10 6-13z"
-          />
-          <rect
-            x="5"
-            y="34"
-            width="14"
-            height="14"
-            rx="1"
-          />
-        </svg>
-      </div>
 
       <div class="summary-main">
         <dl class="key-figures">
@@ -371,6 +367,20 @@ onBeforeUnmount(() => {
           </span>
         </div>
       </div>
+
+      <button
+        type="button"
+        class="photo"
+        :disabled="!photoUrl"
+        :title="photoUrl ? 'Show the label' : wine.photo ? undefined : 'No label photo'"
+        @click="photoOpen = true"
+      >
+        <WinePhoto
+          ref="photo"
+          :photo-key="wine.photo"
+          size="sheet"
+        />
+      </button>
     </div>
 
     <dl class="fields">
@@ -417,6 +427,16 @@ onBeforeUnmount(() => {
         Updated {{ formatDate(wine.updatedAt) }}
       </span>
     </footer>
+
+    <!-- Hors de la fiche : sa transformation confinerait la vue en plein écran. -->
+    <Teleport to="body">
+      <WinePhotoViewer
+        v-if="photoOpen && photoUrl"
+        :url="photoUrl"
+        :title="wine.name"
+        @close="photoOpen = false"
+      />
+    </Teleport>
   </section>
 </template>
 
@@ -515,34 +535,26 @@ onBeforeUnmount(() => {
 
 .summary {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 1.25rem;
 }
 
 .photo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
 
-  width: 96px;
-  height: 128px;
+  padding: 0;
 
-  border: 1px dashed var(--border);
+  border: none;
   border-radius: 10px;
 
-  background: var(--bg-soft);
+  background: none;
+
+  cursor: zoom-in;
 }
 
-.photo svg {
-  height: 88px;
-
-  fill: var(--text-muted);
-  opacity: 0.5;
-}
-
-.photo svg rect {
-  fill: var(--bg-soft);
+.photo:disabled {
+  cursor: default;
 }
 
 .key-figures {

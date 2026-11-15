@@ -7,6 +7,7 @@ import {
 } from "@/services/local/localDirectory";
 
 import {
+  readLocalBlob,
   readLocalJSON,
   saveLocalJSON,
   deleteLocalFile,
@@ -21,6 +22,7 @@ import {
   findS3FileByName,
   getS3FileModifiedTime,
   listS3FilesInFolder,
+  readS3Blob,
   readS3JSON,
   writeS3JSON,
 } from "@/services/s3/s3StorageAdapter";
@@ -104,6 +106,38 @@ export async function loadJSONFromFolder<
       fileName
     )
   );
+}
+
+/* =========================
+   Load file (binaire)
+========================= */
+
+/*
+  Fichier désigné par son chemin relatif au dossier de base
+  (clé S3 du magasin data), ex. wine/Etiquettes/w7.jpg ;
+  null s'il n'existe pas.
+*/
+export async function loadFileFromPath(
+  path: string
+): Promise<Blob | null> {
+  const {
+    backend,
+  } = useStorageBackend();
+
+  if (
+    backend.value ===
+    "LOCAL_DRIVE"
+  ) {
+    const separator =
+      path.lastIndexOf("/");
+
+    return await readLocalBlob(
+      separator >= 0 ? path.slice(0, separator) : "",
+      path.slice(separator + 1)
+    );
+  }
+
+  return await readS3Blob(path);
 }
 
 /* =========================

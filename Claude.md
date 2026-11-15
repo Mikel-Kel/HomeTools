@@ -150,7 +150,10 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   basculé, § 8). Liste `WineCellarView.vue`, composants dans `src/components/wineCellar/` ; saisies par événements
   `PWA-WIN_…_<W|L|C|G|P|B><id ou NEW>.json`, toutes émises par `useWineEvents` (`src/composables/wineCellar/`), « Pending »
   déduit des événements en attente dans `events/`. Données de base (pays, régions, producteurs, emplacements, tailles) :
-  section « Wine » de Master data (`WineSection.vue`), « Waiting for backend update » en version 1. Photos : lot W5.
+  section « Wine » de Master data (`WineSection.vue`), « Waiting for backend update » en version 1. Photos des étiquettes
+  (§ 5, champ `photo` = clé dans le magasin `data`) : lues par `loadFileFromPath` (`driveAdapter.ts`, binaire, deux
+  backends), cache mémoire de session `useWinePhoto` ; vignettes de la liste chargées à l'approche de l'écran. Ajout
+  d'une photo depuis la PWA : pas encore défini.
 
 ## Points ouverts connus
 

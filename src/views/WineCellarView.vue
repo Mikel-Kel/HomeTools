@@ -13,6 +13,7 @@ import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import WineEditSheet from "@/components/wineCellar/WineEditSheet.vue";
 import WineLocationsSheet from "@/components/wineCellar/WineLocationsSheet.vue";
+import WinePhoto from "@/components/wineCellar/WinePhoto.vue";
 import WineSheet from "@/components/wineCellar/WineSheet.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
@@ -36,7 +37,8 @@ import { formatInteger } from "@/utils/amountFormat";
    §3.4). Cave relue dès que le Mac republie wine/cellar.json
    (../Backend/docs/wine-cellar-contract.md).
 
-   Une ligne par vin. Filtres : stock (« In stock » par
+   Une ligne par vin, avec la vignette de l'étiquette
+   (chargée quand la ligne approche de l'écran). Filtres : stock (« In stock » par
    défaut, « History » = vins bus, « All »), favoris, pays,
    région (des pays choisis), couleur, millésime, emplacement
    (en version 2 du fichier : par identifiant, libellés des
@@ -679,6 +681,7 @@ function plural(
           <thead>
             <tr>
               <th class="col-favorite"></th>
+              <th class="col-photo"></th>
               <th>Name</th>
               <th class="col-number">Vintage</th>
               <th>Winery</th>
@@ -705,6 +708,13 @@ function plural(
                 :title="wine.favorite ? 'Favorite' : undefined"
               >
                 {{ wine.favorite ? "★" : "" }}
+              </td>
+
+              <td class="col-photo">
+                <WinePhoto
+                  :photo-key="wine.photo"
+                  size="thumb"
+                />
               </td>
 
               <td class="col-name">
@@ -989,6 +999,14 @@ function plural(
 
   color: var(--primary);
   text-align: center;
+}
+
+.col-photo {
+  width: 1%;
+}
+
+.wines-table td.col-photo {
+  padding: 3px 0 3px 8px;
 }
 
 .col-name {
