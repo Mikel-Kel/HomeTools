@@ -16,7 +16,7 @@ import {
 
 /* Version du contrat implémentée par la PWA. */
 export const CONTRACT_VERSION =
-  "1.3.0";
+  "1.6.0";
 
 export const WHOAMI_PATH =
   "/api/whoami";
@@ -44,6 +44,9 @@ export const ENVIRONMENT_ERROR_CODES: readonly string[] = [
 export interface Capabilities {
   localArchive: boolean;
   card24: boolean;
+
+  /* Cave à vins (depuis 1.6.0). */
+  wineCellar: boolean;
 }
 
 export interface EnvironmentInfo {
@@ -128,6 +131,9 @@ export function readWhoami(
 
       card24:
         asBoolean(capabilities?.card24),
+
+      wineCellar:
+        asBoolean(capabilities?.wineCellar),
     },
   };
 }

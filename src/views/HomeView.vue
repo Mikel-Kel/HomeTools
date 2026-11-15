@@ -102,7 +102,7 @@ import {
 } from "@/composables/useHousekeepingHealth";
 
 import {
-  NAVIGATION_ITEMS,
+  navigationItems,
 } from "@/config/navigation";
 
 import {
@@ -476,7 +476,7 @@ function performanceClass(
       <div class="home-left">
         <ul class="menu">
           <li
-            v-for="item in NAVIGATION_ITEMS"
+            v-for="item in navigationItems()"
             :key="item.path"
             :class="{ 'group-start': item.groupStart }"
           >

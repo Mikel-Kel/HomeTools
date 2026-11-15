@@ -65,6 +65,8 @@ après chaque navigation, au retour au premier plan et toutes les 30 min (au plu
 - Thème : tokens `--positive`, `--negative`, `--warning` dans `src/assets/theme.css`, variantes clair/sombre (`[data-theme="dark"]`).
 - Navigation : liste des pages dans `src/config/navigation.ts`, partagée par le menu de l'accueil et la barre
   d'icônes `AppNavRail.vue` (toutes les pages sauf l'accueil, montée dans `App.vue`). Une nouvelle page s'y ajoute.
+  Page réservée à une capacité : champ `capability` de l'entrée (lue par `navigationItems()`) et `meta.capability`
+  de la route (garde du routeur, retour à l'accueil sans la capacité).
   Appareils cibles : Mac et iPad (pas d'iPhone).
 - Composants d'interface communs dans `src/components/ui/` : `PillButton`, `SegmentedControl`, `StatusPill`, `ScrollRow`
   (rangée défilante « ‹ › », aussi utilisée par `ChipSelector`). Les utiliser plutôt que de redéfinir des styles locaux.
@@ -142,6 +144,10 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 
 - Indicateurs (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/indicators-contract.md`
   (exports `indicators/indicators.json` et `values-<famille>.json`, événements `PWA-IND_…`).
+
+- Cave à vins (page « Wine cellar », capacité `wineCellar`) : contrat d'échange dans `../Backend/docs/wine-cellar-contract.md`
+  (export `wine/cellar.json`, lecteur `src/contracts/wineCellar.ts`). Lot W3 : lecture seule (liste `WineCellarView.vue`,
+  fiche `src/components/wineCellar/WineSheet.vue`) ; saisie par événements `PWA-WIN_…` au lot W4, photos au lot W5.
 
 ## Points ouverts connus
 

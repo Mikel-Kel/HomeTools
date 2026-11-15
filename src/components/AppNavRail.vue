@@ -4,8 +4,8 @@ import { useRoute } from "vue-router";
 import AppIcon from "@/components/AppIcon.vue";
 
 import {
-  NAVIGATION_ITEMS,
   isNavigationItemActive,
+  navigationItems,
 } from "@/config/navigation";
 
 import { useHousekeepingHealth } from "@/composables/useHousekeepingHealth";
@@ -54,7 +54,7 @@ const {
     <div class="rail-separator"></div>
 
     <router-link
-      v-for="item in NAVIGATION_ITEMS"
+      v-for="item in navigationItems()"
       :key="item.path"
       :to="item.path"
       class="rail-item"

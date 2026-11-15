@@ -2,7 +2,12 @@ import { createRouter, createWebHashHistory } from "vue-router";
 
 import { getLocalDirectory } from "@/services/local/localDirectory";
 import { detectStorageBackend } from "@/utils/storageBackend";
-import { whenEnvironmentReady } from "@/services/environment/environmentState";
+import {
+  hasCapability,
+  whenEnvironmentReady,
+} from "@/services/environment/environmentState";
+
+import type { Capabilities } from "@/contracts/environment";
 
 import { checkAppVersion } from "@/services/version/versionGuard";
 import { checkAppStatus } from "@/services/appStatus/appStatusGuard";
@@ -18,6 +23,7 @@ import BudgetView from "../views/BudgetView.vue";
 import IndicatorsView from "../views/IndicatorsView.vue";
 import IndicatorHistoryView from "../views/IndicatorHistoryView.vue";
 import MasterDataView from "../views/MasterDataView.vue";
+import WineCellarView from "../views/WineCellarView.vue";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -132,6 +138,17 @@ const router = createRouter({
       },
     },
     {
+      path: "/wine-cellar",
+      name: "wineCellar",
+      component: WineCellarView,
+      meta: {
+        level: 1,
+        title: "Wine cellar",
+        requiresDrive: true,
+        capability: "wineCellar",
+      },
+    },
+    {
       path: "/master-data",
       name: "masterData",
       component: MasterDataView,
@@ -164,6 +181,19 @@ router.beforeEach(async (to) => {
     connu : la première navigation l'attend.
   */
   await whenEnvironmentReady();
+
+  /* Page d'une capacité absente de l'environnement : accueil. */
+  const capability =
+    to.meta?.capability as keyof Capabilities | undefined;
+
+  if (
+    capability &&
+    !hasCapability(capability)
+  ) {
+    return {
+      name: "home",
+    };
+  }
 
   const backend =
     detectStorageBackend();
