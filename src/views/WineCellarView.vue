@@ -10,10 +10,13 @@ import PageHeader from "@/components/PageHeader.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
+import StatusPill from "@/components/ui/StatusPill.vue";
+import WineEditSheet from "@/components/wineCellar/WineEditSheet.vue";
 import WineSheet from "@/components/wineCellar/WineSheet.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { usePersistentRef } from "@/composables/usePersistentRef";
+import { useWineEvents } from "@/composables/wineCellar/useWineEvents";
 
 import {
   readWineCellar,
@@ -40,7 +43,16 @@ import { formatInteger } from "@/utils/amountFormat";
    stock dont l'année « drink before » est passée est signalé.
    Les choix proposés et les totaux portent sur la sélection.
    Filtres conservés pendant la session. Un clic sur une
-   ligne ouvre la fiche du vin (lecture).
+   ligne ouvre la fiche du vin.
+
+   Saisies par événements WIN (useWineEvents, une instance
+   pour la page, partagée avec la fiche) : vin en attente
+   marqué « Pending », message de la dernière demande au-dessus
+   de la liste. Boutons +/- de chaque ligne : une bouteille
+   achetée (purchase) ou ouverte (opened), « - » désactivé à 0
+   et tant que le vin est en attente. « New wine » et
+   « Edit » (fiche du vin) : fiche complète, WineEditSheet ;
+   la fiche du vin est masquée pendant la saisie.
 ========================= */
 
 type StockScope = "inStock" | "history" | "all";
@@ -79,6 +91,9 @@ const cellar =
   computed(() =>
     cellarFile.data.value
   );
+
+const wineEvents =
+  useWineEvents();
 
 /* =========================
    Filtres
@@ -418,6 +433,16 @@ const openWineLocation =
       : cellar.value?.locations.find(location => location.id === openWine.value?.locationId) ?? null
   );
 
+/* Fiche complète : undefined fermée, wine null nouveau vin. */
+const editing =
+  ref<{ wine: Wine | null } | undefined>(undefined);
+
+function editOpenWine() {
+  if (openWine.value) {
+    editing.value = { wine: openWine.value };
+  }
+}
+
 function plural(
   count: number,
   word: string
@@ -536,8 +561,23 @@ function plural(
             v-model="sortKey"
             :options="sortOptions"
           />
+
+          <PillButton
+            variant="primary"
+            @click="editing = { wine: null }"
+          >
+            New wine
+          </PillButton>
         </span>
       </header>
+
+      <p
+        v-if="wineEvents.message.value"
+        class="request-message"
+        :class="wineEvents.messageTone.value"
+      >
+        {{ wineEvents.message.value }}
+      </p>
 
       <p
         v-if="!sortedWines.length"
@@ -561,7 +601,7 @@ function plural(
               <th>Color</th>
               <th>Location</th>
               <th class="col-number">Drink before</th>
-              <th class="col-number">Qty</th>
+              <th class="col-quantity">Qty</th>
             </tr>
           </thead>
 
@@ -582,7 +622,17 @@ function plural(
                 {{ wine.favorite ? "★" : "" }}
               </td>
 
-              <td class="col-name">{{ wine.name }}</td>
+              <td class="col-name">
+                {{ wine.name }}
+
+                <StatusPill
+                  v-if="wineEvents.isWinePending(wine.id)"
+                  class="pending-pill"
+                  tone="warning"
+                >
+                  Pending
+                </StatusPill>
+              </td>
               <td class="col-number">{{ wine.vintage ?? "" }}</td>
               <td class="soft">{{ wine.winery ?? "" }}</td>
 
@@ -608,7 +658,35 @@ function plural(
                 {{ wine.drinkBefore ?? "" }}
               </td>
 
-              <td class="col-number col-quantity">{{ wine.quantity }}</td>
+              <td
+                class="col-quantity"
+                @click.stop
+                @keydown.enter.stop
+              >
+                <span class="stepper">
+                  <PillButton
+                    class="step-button"
+                    title="Bottle opened"
+                    aria-label="Remove a bottle"
+                    :disabled="wine.quantity === 0 || wineEvents.isWinePending(wine.id)"
+                    @click="wineEvents.changeStock({ wineId: wine.id, delta: -1, reason: 'opened' })"
+                  >
+                    −
+                  </PillButton>
+
+                  <span class="quantity">{{ wine.quantity }}</span>
+
+                  <PillButton
+                    class="step-button"
+                    title="Bottle purchased"
+                    aria-label="Add a bottle"
+                    :disabled="wineEvents.isWinePending(wine.id)"
+                    @click="wineEvents.changeStock({ wineId: wine.id, delta: 1, reason: 'purchase' })"
+                  >
+                    +
+                  </PillButton>
+                </span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -616,11 +694,21 @@ function plural(
     </section>
 
     <WineSheet
-      v-if="openWine"
+      v-if="openWine && !editing"
       :wine="openWine"
       :location="openWineLocation"
       :past-drink-before="isPastDrinkBefore(openWine)"
+      :events="wineEvents"
       @close="openWineId = null"
+      @edit="editOpenWine"
+    />
+
+    <WineEditSheet
+      v-if="editing"
+      :wine="editing.wine"
+      :cellar="cellar"
+      :events="wineEvents"
+      @close="editing = undefined"
     />
   </main>
 </template>
@@ -717,6 +805,21 @@ function plural(
   font-size: var(--font-size-sm);
 }
 
+.request-message {
+  margin: 0 0 0.5rem;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.request-message.completed {
+  color: var(--positive);
+}
+
+.request-message.error {
+  color: var(--negative);
+}
+
 .empty {
   margin: 0.5rem 0;
 
@@ -804,7 +907,32 @@ function plural(
 }
 
 .col-quantity {
+  width: 1%;
+
+  cursor: default;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.step-button {
+  min-width: 28px;
+  padding: 2px 8px;
+
+  font-weight: 700;
+}
+
+.quantity {
+  min-width: 1.75rem;
+
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .soft {
@@ -821,5 +949,11 @@ function plural(
 .wines-table td.late {
   color: var(--warning);
   font-weight: 700;
+}
+
+.pending-pill {
+  margin-left: 0.5rem;
+
+  vertical-align: middle;
 }
 </style>

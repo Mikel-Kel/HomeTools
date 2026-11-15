@@ -243,3 +243,159 @@ export function readWineCellar(
       ),
   };
 }
+
+/* =========================
+   Événements émis par la PWA (§ 3)
+
+   events/PWA-WIN_<AAAAMMJJHHMMSS>_W<WineID ou NEW>.json
+   (vins, stock, dégustations) et
+   events/PWA-WIN_<AAAAMMJJHHMMSS>_L<LocationID ou NEW>.json
+   (emplacements). { eventType, version: 1, timestamp,
+   payload: { …, source } } ; statut écrit par
+   processEvent_WIN, message affiché tel quel.
+========================= */
+
+export const WINE_EVENT_TRIGRAM = "WIN";
+
+export const WINE_EVENT_VERSION = 1;
+
+export type WineEventType =
+  | "WINE_SAVED"
+  | "WINE_STOCK_CHANGED"
+  | "WINE_TASTING_SAVED"
+  | "WINE_TASTING_DELETED"
+  | "WINE_DELETED"
+  | "WINE_LOCATION_SAVED"
+  | "WINE_LOCATION_DELETED";
+
+/*
+  WINE_SAVED : payload { wineId, name, vintage, country,
+  region, color, winery, locationId, priceChf, favorite,
+  drinkBefore, holdUntil, purchasedAt, comments, quantity,
+  source }. wineId null : création, quantity = stock
+  initial ; modification : tous les champs remplacés,
+  quantity ignoré. Refus : nom vide ou de plus de 100
+  caractères, années hors de 1900–2100, couleur hors de
+  WINE_COLORS, emplacement inconnu, prix négatif, date
+  d'achat invalide, quantity négative, vin inconnu.
+  Longueurs des colonnes (§ 1) : pays et région 50,
+  producteur 100.
+*/
+export const WINE_NAME_MAX_LENGTH = 100;
+export const WINE_COUNTRY_MAX_LENGTH = 50;
+export const WINE_REGION_MAX_LENGTH = 50;
+export const WINE_WINERY_MAX_LENGTH = 100;
+export const WINE_YEAR_MIN = 1900;
+export const WINE_YEAR_MAX = 2100;
+
+export interface WineSave {
+  wineId: number | null;
+  name: string;
+  vintage: number | null;
+  country: string | null;
+  region: string | null;
+  color: string | null;
+  winery: string | null;
+  locationId: number | null;
+  priceChf: number | null;
+  favorite: boolean;
+  drinkBefore: number | null;
+  holdUntil: number | null;
+  purchasedAt: string | null;
+  comments: string | null;
+  quantity: number;
+}
+
+/*
+  WINE_DELETED : payload { wineId, source }. Efface
+  définitivement la fiche, ses dégustations et son journal
+  du stock ; un vin bu reste normalement dans l'historique
+  (quantity 0).
+*/
+
+/*
+  WINE_STOCK_CHANGED : payload { wineId, delta, reason,
+  source }. Variation (jamais une quantité) : deux appareils
+  ne s'écrasent pas. Refus : delta nul ou non entier, stock
+  qui deviendrait négatif.
+*/
+export type WineStockReason =
+  | "purchase"
+  | "opened"
+  | "correction";
+
+export interface WineStockChange {
+  wineId: number;
+  delta: number;
+  reason: WineStockReason;
+}
+
+/*
+  WINE_TASTING_SAVED : payload { wineId, tastingId, date,
+  note, bottleOpened, source } ; tastingId null : ajout.
+  date AAAA-MM-JJ, ni invalide ni future ; une date
+  partielle importée peut rester inchangée. bottleOpened
+  (ajout seulement) retire aussi une bouteille.
+  WINE_TASTING_DELETED : payload { wineId, tastingId, source }.
+*/
+export const TASTING_NOTE_MAX_LENGTH = 500;
+
+export interface WineTastingSave {
+  wineId: number;
+  tastingId: number | null;
+  date: string;
+  note: string;
+  bottleOpened: boolean;
+}
+
+/*
+  WINE_LOCATION_SAVED : payload { locationId, shelf, level,
+  source } ; locationId null : création. Refus : étagère
+  vide ou de plus de 50 caractères, étage de plus de 20,
+  couple (shelf, level) déjà utilisé (casse, accents et
+  espaces de fin ignorés ; deux emplacements sans étage ne
+  partagent pas une étagère).
+  WINE_LOCATION_DELETED : payload { locationId, source } ;
+  refus si un vin s'y trouve (en stock ou bu).
+*/
+export const LOCATION_SHELF_MAX_LENGTH = 50;
+export const LOCATION_LEVEL_MAX_LENGTH = 20;
+
+export interface WineLocationSave {
+  locationId: number | null;
+  shelf: string;
+  level: string | null;
+}
+
+/*
+  Libellé calculé par le backend (§ 1), pour l'aperçu :
+  <Shelf><Level> si l'étagère est faite de lettres et
+  l'étage commence par un chiffre (EC6), <Shelf> (<Level>)
+  sinon, <Shelf> sans étage.
+*/
+export function locationLabel(
+  shelf: string,
+  level: string | null
+): string {
+  if (!level) {
+    return shelf;
+  }
+
+  return /^\p{L}+$/u.test(shelf) && /^\d/.test(level)
+    ? `${shelf}${level}`
+    : `${shelf} (${level})`;
+}
+
+/* Suffixe du nom de fichier d'un événement de vin (null : création). */
+export function wineEventSuffix(
+  wineId: number | null
+): string {
+  return `W${wineId ?? "NEW"}`;
+}
+
+/* Suffixe du nom de fichier d'un événement d'emplacement (null : création). */
+export function locationEventSuffix(
+  locationId: number | null
+): string {
+  return `L${locationId ?? "NEW"}`;
+}

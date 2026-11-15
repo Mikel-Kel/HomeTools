@@ -3,12 +3,23 @@ import {
   computed,
   onBeforeUnmount,
   onMounted,
+  ref,
+  watch,
 } from "vue";
+
+import PillButton from "@/components/ui/PillButton.vue";
+import StatusPill from "@/components/ui/StatusPill.vue";
+import WineTastings from "@/components/wineCellar/WineTastings.vue";
 
 import type {
   Wine,
   WineLocation,
+  WineStockReason,
 } from "@/contracts/wineCellar";
+
+import type { WineEvents } from "@/composables/wineCellar/useWineEvents";
+
+import { confirmDialog } from "@/services/dialog/appDialog";
 
 import { formatAmount } from "@/utils/amountFormat";
 import { formatDate } from "@/utils/dateFormat";
@@ -24,18 +35,106 @@ import { formatDate } from "@/utils/dateFormat";
    Zone de la photo réservée (photos : lot W5), pictogramme
    neutre en attendant.
 
-   Fermeture : ✕, Échap, clic hors de la fiche. Aucune
-   saisie : modification de la cave par événements (lot W4).
+   Fermeture : ✕, Échap, clic hors de la fiche.
+
+   Saisies par les événements de la page (events) : fiche
+   marquée « Pending » tant qu'un événement du vin attend,
+   message de la dernière demande quand elle porte sur ce vin.
+   Stock : « - » (bouteille ouverte), « + » (achetée) et
+   correction (quantité constatée → variation, reason
+   correction). Actions désactivées tant que le vin attend.
+   Dégustations : WineTastings ; une saisie non envoyée est
+   confirmée avant de fermer la fiche. « Edit » : fiche
+   complète (WineEditSheet, ouverte par la page).
 ========================= */
 
 const props = defineProps<{
   wine: Wine;
   location: WineLocation | null;
   pastDrinkBefore: boolean;
+  events: WineEvents;
 }>();
+
+const pending =
+  computed(() =>
+    props.events.isWinePending(props.wine.id)
+  );
+
+/* =========================
+   Stock
+========================= */
+
+function changeStock(
+  delta: number,
+  reason: WineStockReason
+) {
+  props.events.changeStock({
+    wineId: props.wine.id,
+    delta,
+    reason,
+  });
+}
+
+/*
+  Quantité constatée, saisie pour une correction : préremplie
+  avec le stock affiché, remise à jour à chaque republication.
+*/
+const countedText =
+  ref(String(props.wine.quantity));
+
+watch(
+  () => props.wine.quantity,
+
+  quantity => {
+    countedText.value = String(quantity);
+  }
+);
+
+const countedQuantity =
+  computed(() => {
+    const text =
+      countedText.value.trim();
+
+    return /^\d+$/.test(text)
+      ? Number(text)
+      : null;
+  });
+
+const correctionError =
+  computed(() =>
+    countedQuantity.value === null
+      ? "Enter a whole number of bottles (0 or more)."
+      : ""
+  );
+
+const canCorrect =
+  computed(() =>
+    !pending.value &&
+    countedQuantity.value !== null &&
+    countedQuantity.value !== props.wine.quantity
+  );
+
+function correctStock() {
+  if (!canCorrect.value || countedQuantity.value === null) {
+    return;
+  }
+
+  changeStock(
+    countedQuantity.value - props.wine.quantity,
+    "correction"
+  );
+}
+
+const requestMessage =
+  computed(() =>
+    props.events.concernsWine(props.wine.id)
+      ? props.events.message.value
+      : ""
+  );
 
 const emit = defineEmits<{
   close: [];
+  edit: [];
 }>();
 
 const subtitle =
@@ -80,11 +179,30 @@ const fields =
     { label: "Hold until", value: props.wine.holdUntil?.toString() ?? "" },
   ]);
 
+/* Dégustation saisie mais pas encore envoyée. */
+const tastingDirty =
+  ref(false);
+
+async function close() {
+  if (
+    tastingDirty.value &&
+    !(await confirmDialog({
+      title: "Discard the tasting?",
+      confirmLabel: "Discard",
+      destructive: true,
+    }))
+  ) {
+    return;
+  }
+
+  emit("close");
+}
+
 function onKeydown(
   event: KeyboardEvent
 ) {
   if (event.key === "Escape") {
-    emit("close");
+    close();
   }
 }
 
@@ -106,7 +224,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="overlay"
-    @click="emit('close')"
+    @click="close"
   ></div>
 
   <section
@@ -123,6 +241,14 @@ onBeforeUnmount(() => {
             title="Favorite"
           >★</span>
           {{ wine.name }}
+
+          <StatusPill
+            v-if="pending"
+            class="pending-pill"
+            tone="warning"
+          >
+            Pending
+          </StatusPill>
         </h2>
 
         <div
@@ -133,14 +259,23 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <button
-        type="button"
-        class="close-btn"
-        aria-label="Close"
-        @click="emit('close')"
-      >
-        ✕
-      </button>
+      <div class="header-actions">
+        <PillButton
+          :disabled="pending || tastingDirty"
+          @click="emit('edit')"
+        >
+          Edit
+        </PillButton>
+
+        <button
+          type="button"
+          class="close-btn"
+          aria-label="Close"
+          @click="close"
+        >
+          ✕
+        </button>
+      </div>
     </header>
 
     <div class="summary">
@@ -165,24 +300,82 @@ onBeforeUnmount(() => {
         </svg>
       </div>
 
-      <dl class="key-figures">
-        <div>
-          <dt>Bottles</dt>
-          <dd :class="{ consumed: wine.quantity === 0 }">
-            {{ wine.quantity }}
-          </dd>
-        </div>
+      <div class="summary-main">
+        <dl class="key-figures">
+          <div>
+            <dt>Bottles</dt>
+            <dd class="stock">
+              <PillButton
+                class="step-button"
+                title="Bottle opened"
+                aria-label="Remove a bottle"
+                :disabled="wine.quantity === 0 || pending"
+                @click="changeStock(-1, 'opened')"
+              >
+                −
+              </PillButton>
 
-        <div>
-          <dt>Drink before</dt>
-          <dd
-            :class="{ late: pastDrinkBefore }"
-            :title="pastDrinkBefore ? 'Drink-before year passed' : undefined"
+              <span :class="{ consumed: wine.quantity === 0 }">
+                {{ wine.quantity }}
+              </span>
+
+              <PillButton
+                class="step-button"
+                title="Bottle purchased"
+                aria-label="Add a bottle"
+                :disabled="pending"
+                @click="changeStock(1, 'purchase')"
+              >
+                +
+              </PillButton>
+            </dd>
+          </div>
+
+          <div>
+            <dt>Drink before</dt>
+            <dd
+              :class="{ late: pastDrinkBefore }"
+              :title="pastDrinkBefore ? 'Drink-before year passed' : undefined"
+            >
+              {{ wine.drinkBefore ?? "—" }}
+            </dd>
+          </div>
+        </dl>
+
+        <div class="correction">
+          <label
+            class="correction-label"
+            for="wine-counted"
           >
-            {{ wine.drinkBefore ?? "—" }}
-          </dd>
+            Counted bottles
+          </label>
+
+          <input
+            id="wine-counted"
+            v-model="countedText"
+            class="correction-input"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            @keydown.enter="correctStock"
+          />
+
+          <PillButton
+            title="Set the stock to the counted bottles"
+            :disabled="!canCorrect"
+            @click="correctStock"
+          >
+            Correct stock
+          </PillButton>
+
+          <span
+            v-if="correctionError"
+            class="correction-error"
+          >
+            {{ correctionError }}
+          </span>
         </div>
-      </dl>
+      </div>
     </div>
 
     <dl class="fields">
@@ -203,35 +396,31 @@ onBeforeUnmount(() => {
       <p class="comments">{{ wine.comments }}</p>
     </div>
 
-    <div class="block">
-      <h3>Tastings</h3>
-
-      <p
-        v-if="!wine.tastings.length"
-        class="note"
-      >
-        No tasting yet.
-      </p>
-
-      <ul
-        v-else
-        class="tastings"
-      >
-        <li
-          v-for="tasting in wine.tastings"
-          :key="tasting.id"
-        >
-          <span class="tasting-date">{{ tasting.date || "—" }}</span>
-          <span class="tasting-note">{{ tasting.note }}</span>
-        </li>
-      </ul>
-    </div>
+    <WineTastings
+      :wine="wine"
+      :events="events"
+      :pending="pending"
+      @dirty="tastingDirty = $event"
+    />
 
     <footer
-      v-if="wine.updatedAt"
+      v-if="wine.updatedAt || requestMessage"
       class="sheet-footer"
     >
-      Updated {{ formatDate(wine.updatedAt) }}
+      <span
+        v-if="requestMessage"
+        class="request-message"
+        :class="events.messageTone.value"
+      >
+        {{ requestMessage }}
+      </span>
+
+      <span
+        v-if="wine.updatedAt"
+        class="updated"
+      >
+        Updated {{ formatDate(wine.updatedAt) }}
+      </span>
     </footer>
   </section>
 </template>
@@ -297,6 +486,13 @@ onBeforeUnmount(() => {
 
   color: var(--text-soft);
   font-size: var(--font-size-sm);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0.5rem;
 }
 
 .close-btn {
@@ -375,8 +571,61 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 
-.key-figures dd.consumed {
+.summary-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.stock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-button {
+  min-width: 32px;
+  padding: 3px 10px;
+
+  font-size: var(--font-size-md);
+  font-weight: 700;
+}
+
+.consumed {
   color: var(--text-muted);
+}
+
+.correction {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+}
+
+.correction-label {
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.correction-input {
+  width: 4.5rem;
+  box-sizing: border-box;
+
+  padding: 5px 8px;
+
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.correction-error {
+  flex-basis: 100%;
+
+  color: var(--negative);
+  font-size: var(--font-size-sm);
 }
 
 .key-figures dd.late {
@@ -420,13 +669,6 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
-.note {
-  margin: 0;
-
-  color: var(--text-soft);
-  font-size: var(--font-size-sm);
-}
-
 .comments {
   margin: 0;
 
@@ -434,41 +676,39 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
 }
 
-.tastings {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-
-  margin: 0;
-  padding: 0;
-
-  list-style: none;
-}
-
-.tastings li {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.tasting-date {
-  flex-shrink: 0;
-  min-width: 5.5rem;
-
-  color: var(--text-soft);
-  font-variant-numeric: tabular-nums;
-}
-
-.tasting-note {
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-}
-
 .sheet-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+
   padding-top: 10px;
 
   border-top: 1px solid var(--border);
 
   color: var(--text-soft);
   font-size: var(--font-size-sm);
+}
+
+.request-message {
+  flex: 1;
+}
+
+.request-message.completed {
+  color: var(--positive);
+}
+
+.request-message.error {
+  color: var(--negative);
+}
+
+.updated {
+  margin-left: auto;
+}
+
+.pending-pill {
+  margin-left: 0.5rem;
+
+  vertical-align: middle;
 }
 </style>
