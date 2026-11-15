@@ -12,6 +12,7 @@ import PartiesToIdentifySection from "@/components/masterData/PartiesToIdentifyS
 import PartyTypesSection from "@/components/masterData/PartyTypesSection.vue";
 import SpendingSection from "@/components/masterData/SpendingSection.vue";
 import DocumentsSection from "@/components/masterData/DocumentsSection.vue";
+import WineSection from "@/components/masterData/WineSection.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useCategories } from "@/composables/useCategories";
@@ -51,6 +52,14 @@ import {
 } from "@/contracts/partiesToIdentify";
 
 import {
+  readWineCellar,
+  WINE_CELLAR_FILE,
+  WINE_CELLAR_FOLDER,
+} from "@/contracts/wineCellar";
+
+import { hasCapability } from "@/services/environment/environmentState";
+
+import {
   readTransferTypes,
   TRANSFER_TYPES_FILE,
   TRANSFER_TYPES_FOLDER,
@@ -63,7 +72,9 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
 
    Une section par type de données de base ; modifications
    envoyées au Mac par événements, données relues dès que
-   le backend republie leur export.
+   le backend republie leur export. Section « Wine »
+   (données de base de la cave) avec la capacité
+   wineCellar seulement.
 ========================= */
 
 type MasterDataSection =
@@ -71,7 +82,8 @@ type MasterDataSection =
   | "toIdentify"
   | "partyTypes"
   | "spending"
-  | "documents";
+  | "documents"
+  | "wine";
 
 const sectionOptions: {
   value: MasterDataSection;
@@ -82,6 +94,9 @@ const sectionOptions: {
   { value: "partyTypes", label: "Party types" },
   { value: "spending", label: "Spending" },
   { value: "documents", label: "Documents" },
+  ...(hasCapability("wineCellar")
+    ? [{ value: "wine" as const, label: "Wine" }]
+    : []),
 ];
 
 const section =
@@ -224,6 +239,31 @@ watch(
   }
 );
 
+/* Cave à vins (section « Wine ») : chargée à la première ouverture de la section. */
+const cellarWanted =
+  ref(false);
+
+watch(
+  section,
+
+  value => {
+    if (value === "wine") {
+      cellarWanted.value = true;
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
+const cellarFile =
+  useRemoteJson({
+    folder: WINE_CELLAR_FOLDER,
+    file: () => (cellarWanted.value ? WINE_CELLAR_FILE : null),
+    read: readWineCellar,
+  });
+
 const tagsFile =
   useRemoteJson({
     folder: ALLOCATION_TAGS_FOLDER,
@@ -304,7 +344,9 @@ const current =
         ? documentTagsFile
         : section.value === "toIdentify" && toIdentifyFile.error.value
           ? toIdentifyFile
-          : partiesFile
+          : section.value === "wine"
+            ? cellarFile
+            : partiesFile
   );
 </script>
 
@@ -365,6 +407,11 @@ const current =
         v-else-if="section === 'documents' && partiesFile.data.value"
         :data="partiesFile.data.value"
         :document-tags="documentTagsFile.data.value"
+      />
+
+      <WineSection
+        v-else-if="section === 'wine' && cellarFile.data.value"
+        :cellar="cellarFile.data.value"
       />
     </template>
   </main>

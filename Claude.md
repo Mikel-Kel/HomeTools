@@ -146,8 +146,11 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   (exports `indicators/indicators.json` et `values-<famille>.json`, événements `PWA-IND_…`).
 
 - Cave à vins (page « Wine cellar », capacité `wineCellar`) : contrat d'échange dans `../Backend/docs/wine-cellar-contract.md`
-  (export `wine/cellar.json`, lecteur `src/contracts/wineCellar.ts`). Lot W3 : lecture seule (liste `WineCellarView.vue`,
-  fiche `src/components/wineCellar/WineSheet.vue`) ; saisie par événements `PWA-WIN_…` au lot W4, photos au lot W5.
+  (export `wine/cellar.json`, lecteur `src/contracts/wineCellar.ts`, versions 1 et 2 lues tant que le backend n'a pas
+  basculé, § 8). Liste `WineCellarView.vue`, composants dans `src/components/wineCellar/` ; saisies par événements
+  `PWA-WIN_…_<W|L|C|G|P|B><id ou NEW>.json`, toutes émises par `useWineEvents` (`src/composables/wineCellar/`), « Pending »
+  déduit des événements en attente dans `events/`. Données de base (pays, régions, producteurs, emplacements, tailles) :
+  section « Wine » de Master data (`WineSection.vue`), « Waiting for backend update » en version 1. Photos : lot W5.
 
 ## Points ouverts connus
 

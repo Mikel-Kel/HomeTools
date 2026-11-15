@@ -6,13 +6,19 @@ import {
 import { useEventRequest } from "@/composables/useEventRequest";
 
 import {
+  isReferenceEventSuffix,
   locationEventSuffix,
+  referenceEventSuffix,
   WINE_EVENT_TRIGRAM,
   WINE_EVENT_VERSION,
   wineEventSuffix,
   type WineEventType,
   type WineLocationSave,
+  type WineReferenceKind,
+  type WineReferenceSave,
+  WINE_SAVED_VERSION_2,
   type WineSave,
+  type WineSaveV2,
   type WineStockChange,
   type WineTastingSave,
 } from "@/contracts/wineCellar";
@@ -102,6 +108,21 @@ export function useWineEvents() {
     );
   }
 
+  function isReferencePending(
+    kind: WineReferenceKind,
+    id: number | null
+  ): boolean {
+    return isPending(referenceEventSuffix(kind, id));
+  }
+
+  /* La dernière demande porte sur des données de base (section « Wine » de Master data). */
+  const concernsReferences =
+    computed(() =>
+      tracker.request.value !== null &&
+      !!currentSuffix.value &&
+      isReferenceEventSuffix(currentSuffix.value)
+    );
+
   /* La dernière demande porte sur un emplacement (écran des emplacements). */
   const concernsLocations =
     computed(() =>
@@ -112,14 +133,15 @@ export function useWineEvents() {
   async function send(
     eventType: WineEventType,
     suffix: string,
-    payload: object
+    payload: object,
+    version = WINE_EVENT_VERSION
   ): Promise<void> {
     currentSuffix.value = suffix;
 
     await tracker.send(
       {
         eventType,
-        version: WINE_EVENT_VERSION,
+        version,
         timestamp: new Date().toISOString(),
         payload: {
           ...payload,
@@ -143,12 +165,14 @@ export function useWineEvents() {
   function sendWineEvent(
     eventType: WineEventType,
     wineId: number | null,
-    payload: object
+    payload: object,
+    version?: number
   ): Promise<void> {
     return send(
       eventType,
       wineEventSuffix(wineId),
-      payload
+      payload,
+      version
     );
   }
 
@@ -165,7 +189,7 @@ export function useWineEvents() {
     );
   }
 
-  /* Création (wineId null) ou modification de la fiche. */
+  /* Création (wineId null) ou modification de la fiche, version 1 (cellar.json version 1). */
   function saveWine(
     wine: WineSave
   ): Promise<void> {
@@ -173,6 +197,18 @@ export function useWineEvents() {
       "WINE_SAVED",
       wine.wineId,
       wine
+    );
+  }
+
+  /* Même chose en version 2 (cellar.json version 2) : références et taille. */
+  function saveWineV2(
+    wine: WineSaveV2
+  ): Promise<void> {
+    return sendWineEvent(
+      "WINE_SAVED",
+      wine.wineId,
+      wine,
+      WINE_SAVED_VERSION_2
     );
   }
 
@@ -241,6 +277,41 @@ export function useWineEvents() {
     );
   }
 
+  /* Création (id null) ou modification d'un élément de données de base. */
+  function saveReference(
+    reference: WineReferenceSave
+  ): Promise<void> {
+    return send(
+      "WINE_REFERENCE_SAVED",
+      referenceEventSuffix(reference.kind, reference.id),
+      reference
+    );
+  }
+
+  function deleteReference(
+    kind: WineReferenceKind,
+    id: number
+  ): Promise<void> {
+    return send(
+      "WINE_REFERENCE_DELETED",
+      referenceEventSuffix(kind, id),
+      { kind, id }
+    );
+  }
+
+  /* sourceId remplacé par targetId partout ; suffixe : l'élément qui disparaît. */
+  function mergeReference(
+    kind: WineReferenceKind,
+    sourceId: number,
+    targetId: number
+  ): Promise<void> {
+    return send(
+      "WINE_REFERENCE_MERGED",
+      referenceEventSuffix(kind, sourceId),
+      { kind, sourceId, targetId }
+    );
+  }
+
   /* Message de la dernière demande : attente, traitement, statut du Mac. */
   const message =
     computed(() => {
@@ -278,15 +349,21 @@ export function useWineEvents() {
     isLocationPending,
     concernsWine,
     concernsLocations,
+    concernsReferences,
+    isReferencePending,
     sendWineEvent,
     sendLocationEvent,
     saveWine,
+    saveWineV2,
     deleteWine,
     changeStock,
     saveTasting,
     deleteTasting,
     saveLocation,
     deleteLocation,
+    saveReference,
+    deleteReference,
+    mergeReference,
   };
 
 }

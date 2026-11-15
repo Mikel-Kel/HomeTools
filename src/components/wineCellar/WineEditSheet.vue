@@ -20,7 +20,9 @@ import {
   WINE_YEAR_MIN,
   type Wine,
   type WineCellarData,
+  type WineReference,
   type WineSave,
+  type WineSaveV2,
 } from "@/contracts/wineCellar";
 
 import type { WineEvents } from "@/composables/wineCellar/useWineEvents";
@@ -54,6 +56,15 @@ import {
    normalement dans l'historique, la suppression sert aux
    erreurs de saisie.
 
+   Version 2 de cellar.json : WINE_SAVED version 2. Pays,
+   région et producteur suggérés depuis les listes de
+   référence (régions du pays saisi seulement) et envoyés
+   comme références ({ id } si le nom existe, au sens de la
+   collation ; { id: null, name } sinon) ; taille obligatoire
+   (bouteille de 75 cl par défaut) ; étage parmi les
+   levelCount étages de l'emplacement (1 en haut). Version 1 :
+   fiche de W4, pays, région et producteur en texte.
+
    La fiche se ferme à l'envoi : suivi (« Pending », statut)
    dans la fiche du vin ou au-dessus de la liste.
 ========================= */
@@ -71,6 +82,35 @@ const emit = defineEmits<{
 
 const isNew =
   props.wine === null;
+
+/* Fichier en version 2 : listes de référence, sinon null. */
+const v2 =
+  props.cellar.version === 2
+    ? props.cellar
+    : null;
+
+/* Comparaison MySQL utf8mb4_unicode_ci : casse, accents et espaces ignorés. */
+function fold(
+  value: string
+): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+/* Taille par défaut : la bouteille de 75 cl (facteur 1), sinon la première. */
+function defaultBottleSizeId(): number | null {
+  if (!v2) {
+    return null;
+  }
+
+  return (
+    v2.bottleSizes.find(size => size.factor === 1) ??
+    v2.bottleSizes[0]
+  )?.id ?? null;
+}
 
 /* =========================
    Saisie (textes, convertis à l'envoi)
@@ -98,6 +138,28 @@ const holdUntil = ref(text(props.wine?.holdUntil));
 const purchasedAt = ref(props.wine?.purchasedAt ?? "");
 const comments = ref(props.wine?.comments ?? "");
 const quantity = ref(isNew ? "0" : text(props.wine?.quantity));
+const bottleSizeId = ref<number | null>(props.wine?.bottleSizeId ?? defaultBottleSizeId());
+const locationLevel = ref<number | null>(props.wine?.locationLevel ?? null);
+
+/* Étages de l'emplacement choisi (version 2), 1 en haut ; [] sans étages. */
+const levelOptions =
+  computed(() => {
+    const count =
+      v2?.locations.find(location => location.id === locationId.value)?.levelCount ?? 0;
+
+    return Array.from({ length: count }, (_, index) => index + 1);
+  });
+
+/* Emplacement changé : étage retiré s'il n'existe pas dans le nouveau. */
+watch(
+  levelOptions,
+
+  options => {
+    if (locationLevel.value !== null && !options.includes(locationLevel.value)) {
+      locationLevel.value = null;
+    }
+  }
+);
 
 /* Couleur importée hors de la liste : gardée dans le choix pour ne pas la perdre en silence. */
 const colorOptions =
@@ -118,14 +180,42 @@ function distinct(
     .sort((a, b) => a.localeCompare(b));
 }
 
+/* Version 2 : pays de la liste dont le nom correspond au texte saisi. */
+const matchedCountry =
+  computed(() => {
+    const typed =
+      fold(country.value);
+
+    return typed
+      ? v2?.countries.find(item => fold(item.name) === typed) ?? null
+      : null;
+  });
+
 const countrySuggestions =
   computed(() =>
-    distinct(props.cellar.wines.map(wine => wine.country))
+    v2
+      ? v2.countries.map(item => item.name)
+      : distinct(props.cellar.wines.map(wine => wine.country))
   );
 
-/* Régions du pays saisi s'il est connu, sinon toutes. */
+/*
+  Version 2 : régions du pays saisi, aucune pour un pays
+  nouveau ou vide. Version 1 : régions du pays saisi s'il
+  est connu, sinon toutes.
+*/
 const regionSuggestions =
   computed(() => {
+    if (v2) {
+      const countryId =
+        matchedCountry.value?.id;
+
+      return countryId === undefined
+        ? []
+        : v2.regions
+            .filter(item => item.countryId === countryId)
+            .map(item => item.name);
+    }
+
     const typed =
       country.value.trim().toLowerCase();
 
@@ -141,7 +231,9 @@ const regionSuggestions =
 
 const winerySuggestions =
   computed(() =>
-    distinct(props.cellar.wines.map(wine => wine.winery))
+    v2
+      ? v2.wineries.map(item => item.name)
+      : distinct(props.cellar.wines.map(wine => wine.winery))
   );
 
 const nameSuggestions =
@@ -152,16 +244,6 @@ const nameSuggestions =
 /* =========================
    Création : reprise d'un vin du même nom
 ========================= */
-
-function fold(
-  value: string
-): string {
-  return value
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .trim();
-}
 
 /* Vin du même nom, dernier millésime (sans millésime en dernier), puis le plus récent saisi. */
 const sameNameWine =
@@ -319,14 +401,59 @@ const errors =
       !props.cellar.locations.some(location => location.id === locationId.value)
         ? "Unknown location."
         : "",
+      v2 && region.value.trim() && !country.value.trim()
+        ? "Region: enter its country first."
+        : "",
+      v2 && !v2.bottleSizes.some(size => size.id === bottleSizeId.value)
+        ? "Choose a bottle size."
+        : "",
+      locationLevel.value !== null && !levelOptions.value.includes(locationLevel.value)
+        ? "Level: not a level of this location."
+        : "",
     ].filter(Boolean)
   );
+
+/* =========================
+   Références (version 2)
+========================= */
+
+function reference(
+  value: string,
+  existing: { id: number; name: string }[]
+): WineReference | null {
+  const typed =
+    value.trim();
+
+  if (!typed) {
+    return null;
+  }
+
+  const match =
+    existing.find(item => fold(item.name) === fold(typed));
+
+  return match
+    ? { id: match.id }
+    : { id: null, name: typed };
+}
+
+/* Région cherchée dans le pays saisi ; pays nouveau : région nouvelle. */
+function regionReference(): WineReference | null {
+  const countryId =
+    matchedCountry.value?.id;
+
+  return reference(
+    region.value,
+    countryId === undefined
+      ? []
+      : v2?.regions.filter(item => item.countryId === countryId) ?? []
+  );
+}
 
 /* =========================
    Envoi
 ========================= */
 
-const payload =
+const payloadV1 =
   computed<WineSave>(() => ({
     wineId: props.wine?.id ?? null,
     name: name.value.trim(),
@@ -344,6 +471,32 @@ const payload =
     comments: optionalText(comments.value),
     quantity: isNew ? Number(quantity.value.trim()) : props.wine?.quantity ?? 0,
   }));
+
+const payloadV2 =
+  computed<WineSaveV2>(() => ({
+    wineId: props.wine?.id ?? null,
+    name: name.value.trim(),
+    vintage: parseYear(vintage.value),
+    country: reference(country.value, v2?.countries ?? []),
+    region: regionReference(),
+    color: color.value || null,
+    winery: reference(winery.value, v2?.wineries ?? []),
+    bottleSizeId: bottleSizeId.value ?? 0,
+    locationId: locationId.value,
+    locationLevel: locationId.value === null ? null : locationLevel.value,
+    priceChf: parsePrice(price.value),
+    favorite: favorite.value,
+    drinkBefore: parseYear(drinkBefore.value),
+    holdUntil: parseYear(holdUntil.value),
+    purchasedAt: purchasedAt.value || null,
+    comments: optionalText(comments.value),
+    quantity: isNew ? Number(quantity.value.trim()) : props.wine?.quantity ?? 0,
+  }));
+
+const payload =
+  computed(() =>
+    v2 ? payloadV2.value : payloadV1.value
+  );
 
 const initialPayload =
   JSON.stringify(payload.value);
@@ -371,7 +524,11 @@ function save() {
     return;
   }
 
-  props.events.saveWine(payload.value);
+  if (v2) {
+    props.events.saveWineV2(payloadV2.value);
+  } else {
+    props.events.saveWine(payloadV1.value);
+  }
 
   emit("close");
 }
@@ -537,6 +694,23 @@ onBeforeUnmount(() => {
         </select>
       </label>
 
+      <label
+        v-if="v2"
+        class="field"
+      >
+        <span class="field-label">Bottle size</span>
+
+        <select v-model="bottleSizeId">
+          <option
+            v-for="size in v2.bottleSizes"
+            :key="size.id"
+            :value="size.id"
+          >
+            {{ size.name }}
+          </option>
+        </select>
+      </label>
+
       <label class="field">
         <span class="field-label">Country</span>
 
@@ -579,6 +753,25 @@ onBeforeUnmount(() => {
             :value="location.id"
           >
             {{ location.label }}
+          </option>
+        </select>
+      </label>
+
+      <label
+        v-if="levelOptions.length"
+        class="field"
+      >
+        <span class="field-label">Level (1 = top)</span>
+
+        <select v-model="locationLevel">
+          <option :value="null">—</option>
+
+          <option
+            v-for="level in levelOptions"
+            :key="level"
+            :value="level"
+          >
+            {{ level }}
           </option>
         </select>
       </label>

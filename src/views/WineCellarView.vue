@@ -38,7 +38,9 @@ import { formatInteger } from "@/utils/amountFormat";
 
    Une ligne par vin. Filtres : stock (« In stock » par
    défaut, « History » = vins bus, « All »), favoris, pays,
-   région (des pays choisis), couleur, millésime, emplacement ; recherche
+   région (des pays choisis), couleur, millésime, emplacement
+   (en version 2 du fichier : par identifiant, libellés des
+   listes de référence ; en version 1 : par texte) ; recherche
    dans le nom et le producteur (casse et accents ignorés).
    Tri par nom, millésime ou « drink before » ; un vin en
    stock dont l'année « drink before » est passée est signalé.
@@ -54,8 +56,10 @@ import { formatInteger } from "@/utils/amountFormat";
    et tant que le vin est en attente. « New wine » et
    « Edit » (fiche du vin) : fiche complète, WineEditSheet ;
    la fiche du vin est masquée pendant la saisie.
-   « Locations » : gestion des emplacements
-   (WineLocationsSheet).
+   Taille affichée quand elle n'est pas la bouteille de 75 cl
+   (facteur 1, version 2). « Locations » : gestion des
+   emplacements (WineLocationsSheet), en version 1 seulement ;
+   en version 2, dans la section « Wine » de Master data.
 ========================= */
 
 type StockScope = "inStock" | "history" | "all";
@@ -159,19 +163,29 @@ function locationKey(
   return wine.locationId ?? NO_LOCATION;
 }
 
-const locationLabels =
-  computed(() =>
-    new Map(
-      (cellar.value?.locations ?? []).map(location => [location.id, location.label])
-    )
-  );
-
-function locationLabel(
+/* Clé du filtre pays : identifiant en version 2, nom en version 1. */
+function countryKey(
   wine: Wine
-): string {
-  return wine.locationId === null
-    ? ""
-    : locationLabels.value.get(wine.locationId) ?? `#${wine.locationId}`;
+): string | null {
+  return cellar.value?.version === 2
+    ? wine.countryId === null ? null : String(wine.countryId)
+    : wine.country;
+}
+
+/* Clé du filtre région (deux pays peuvent avoir une région de même nom). */
+function regionKey(
+  wine: Wine
+): string | null {
+  return cellar.value?.version === 2
+    ? wine.regionId === null ? null : String(wine.regionId)
+    : wine.region;
+}
+
+function inSelection(
+  selection: string[],
+  key: string | null
+): boolean {
+  return !selection.length || (key !== null && selection.includes(key));
 }
 
 /* Vins du stock choisi (base des choix proposés). */
@@ -192,25 +206,69 @@ function distinct(
     .sort((a, b) => a.localeCompare(b));
 }
 
+/* Pays présents dans la sélection, dans l'ordre de la liste de référence en version 2. */
 const countryItems =
-  computed(() =>
-    distinct(scopedWines.value.map(wine => wine.country))
-      .map(country => ({ id: country, label: country }))
-  );
+  computed(() => {
+    const data =
+      cellar.value;
 
-/* Régions des pays choisis. */
+    if (data?.version !== 2) {
+      return distinct(scopedWines.value.map(wine => wine.country))
+        .map(country => ({ id: country, label: country }));
+    }
+
+    const used =
+      new Set(scopedWines.value.map(countryKey));
+
+    return data.countries
+      .filter(country => used.has(String(country.id)))
+      .map(country => ({ id: String(country.id), label: country.name }));
+  });
+
+/*
+  Régions des pays choisis. Version 2 : ordre de la liste
+  (pays puis nom), pays ajouté au nom porté par deux régions
+  proposées.
+*/
 const regionItems =
-  computed(() =>
-    distinct(
-      scopedWines.value
-        .filter(
-          wine =>
-            !countryFilter.value.length ||
-            (wine.country !== null && countryFilter.value.includes(wine.country))
-        )
-        .map(wine => wine.region)
-    ).map(region => ({ id: region, label: region }))
-  );
+  computed(() => {
+    const data =
+      cellar.value;
+
+    const wines =
+      scopedWines.value.filter(
+        wine => inSelection(countryFilter.value, countryKey(wine))
+      );
+
+    if (data?.version !== 2) {
+      return distinct(wines.map(wine => wine.region))
+        .map(region => ({ id: region, label: region }));
+    }
+
+    const used =
+      new Set(wines.map(regionKey));
+
+    const regions =
+      data.regions.filter(region => used.has(String(region.id)));
+
+    const countryNames =
+      new Map(data.countries.map(country => [country.id, country.name]));
+
+    return regions.map(region => {
+      const shared =
+        regions.some(
+          other => other.id !== region.id && fold(other.name) === fold(region.name)
+        );
+
+      const country =
+        region.countryId === null ? undefined : countryNames.get(region.countryId);
+
+      return {
+        id: String(region.id),
+        label: shared && country ? `${region.name} (${country})` : region.name,
+      };
+    });
+  });
 
 /* Couleurs dans l'ordre du contrat, puis les autres éventuelles. */
 const colorItems =
@@ -300,10 +358,8 @@ const filteredWines =
 
     return scopedWines.value.filter(
       wine =>
-        (!countryFilter.value.length ||
-          (wine.country !== null && countryFilter.value.includes(wine.country))) &&
-        (!regionFilter.value.length ||
-          (wine.region !== null && regionFilter.value.includes(wine.region))) &&
+        inSelection(countryFilter.value, countryKey(wine)) &&
+        inSelection(regionFilter.value, regionKey(wine)) &&
         (!colorFilter.value.length ||
           (wine.color !== null && colorFilter.value.includes(wine.color))) &&
         (!vintageFilter.value.length ||
@@ -407,6 +463,29 @@ function isPastDrinkBefore(
   );
 }
 
+/* Taille autre que la bouteille de 75 cl (version 2), sinon null. */
+const bottleSizes =
+  computed(() =>
+    cellar.value?.version === 2
+      ? new Map(cellar.value.bottleSizes.map(size => [size.id, size]))
+      : null
+  );
+
+function sizeTag(
+  wine: Wine
+): string | null {
+  if (!bottleSizes.value || wine.bottleSizeId === null) {
+    return null;
+  }
+
+  const size =
+    bottleSizes.value.get(wine.bottleSizeId);
+
+  return size?.factor === 1
+    ? null
+    : wine.bottleSize ?? size?.name ?? null;
+}
+
 const bottleCount =
   computed(() =>
     filteredWines.value.reduce((total, wine) => total + wine.quantity, 0)
@@ -427,13 +506,6 @@ const openWine =
     openWineId.value === null
       ? null
       : cellar.value?.wines.find(wine => wine.id === openWineId.value) ?? null
-  );
-
-const openWineLocation =
-  computed(() =>
-    openWine.value?.locationId == null
-      ? null
-      : cellar.value?.locations.find(location => location.id === openWine.value?.locationId) ?? null
   );
 
 /* Fiche complète : undefined fermée, wine null nouveau vin. */
@@ -568,7 +640,10 @@ function plural(
             :options="sortOptions"
           />
 
-          <PillButton @click="locationsOpen = true">
+          <PillButton
+            v-if="cellar.version === 1"
+            @click="locationsOpen = true"
+          >
             Locations
           </PillButton>
 
@@ -635,6 +710,13 @@ function plural(
               <td class="col-name">
                 {{ wine.name }}
 
+                <span
+                  v-if="sizeTag(wine)"
+                  class="size"
+                >
+                  {{ sizeTag(wine) }}
+                </span>
+
                 <StatusPill
                   v-if="wineEvents.isWinePending(wine.id)"
                   class="pending-pill"
@@ -658,7 +740,7 @@ function plural(
               </td>
 
               <td>{{ wine.color ?? "" }}</td>
-              <td class="soft">{{ locationLabel(wine) }}</td>
+              <td class="soft">{{ wine.locationLabel ?? "" }}</td>
 
               <td
                 class="col-number"
@@ -706,15 +788,15 @@ function plural(
     <WineSheet
       v-if="openWine && !editing"
       :wine="openWine"
-      :location="openWineLocation"
       :past-drink-before="isPastDrinkBefore(openWine)"
+      :size-label="sizeTag(openWine)"
       :events="wineEvents"
       @close="openWineId = null"
       @edit="editOpenWine"
     />
 
     <WineLocationsSheet
-      v-if="locationsOpen"
+      v-if="locationsOpen && cellar.version === 1"
       :cellar="cellar"
       :events="wineEvents"
       @close="locationsOpen = false"
@@ -954,6 +1036,14 @@ function plural(
 
 .soft {
   color: var(--text-soft);
+}
+
+.size {
+  margin-left: 0.4rem;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
 }
 
 .country {

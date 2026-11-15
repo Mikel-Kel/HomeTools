@@ -13,8 +13,8 @@ import {
   LOCATION_LEVEL_MAX_LENGTH,
   LOCATION_SHELF_MAX_LENGTH,
   locationLabel,
-  type WineCellarData,
-  type WineLocation,
+  type WineCellarV1,
+  type WineLocationV1,
 } from "@/contracts/wineCellar";
 
 import type { WineEvents } from "@/composables/wineCellar/useWineEvents";
@@ -22,7 +22,7 @@ import type { WineEvents } from "@/composables/wineCellar/useWineEvents";
 import { confirmDialog } from "@/services/dialog/appDialog";
 
 /* =========================
-   Emplacements de la cave
+   Emplacements de la cave (cellar.json version 1)
 
    Contrat : ../Backend/docs/wine-cellar-contract.md, § 1
    (winelocation) et § 3 (WINE_LOCATION_SAVED,
@@ -41,7 +41,7 @@ import { confirmDialog } from "@/services/dialog/appDialog";
 ========================= */
 
 const props = defineProps<{
-  cellar: WineCellarData;
+  cellar: WineCellarV1;
   events: WineEvents;
 }>();
 
@@ -65,7 +65,7 @@ function fold(
 ========================= */
 
 interface LocationRow {
-  location: WineLocation;
+  location: WineLocationV1;
   inStock: number;
   drunk: number;
 }
@@ -102,7 +102,7 @@ const withoutLocation =
 ========================= */
 
 const editor =
-  ref<{ location: WineLocation | null } | undefined>(undefined);
+  ref<{ location: WineLocationV1 | null } | undefined>(undefined);
 
 const shelf =
   ref("");
@@ -111,7 +111,7 @@ const level =
   ref("");
 
 function openEditor(
-  location: WineLocation | null
+  location: WineLocationV1 | null
 ) {
   editor.value = { location };
   shelf.value = location?.shelf ?? "";

@@ -13,7 +13,6 @@ import WineTastings from "@/components/wineCellar/WineTastings.vue";
 
 import type {
   Wine,
-  WineLocation,
   WineStockReason,
 } from "@/contracts/wineCellar";
 
@@ -50,8 +49,10 @@ import { formatDate } from "@/utils/dateFormat";
 
 const props = defineProps<{
   wine: Wine;
-  location: WineLocation | null;
   pastDrinkBefore: boolean;
+
+  /* Taille autre que la bouteille de 75 cl, sinon null. */
+  sizeLabel: string | null;
   events: WineEvents;
 }>();
 
@@ -141,6 +142,7 @@ const subtitle =
   computed(() =>
     [
       props.wine.vintage,
+      props.sizeLabel,
       props.wine.color,
       props.wine.winery,
     ]
@@ -155,13 +157,6 @@ const origin =
       .join(", ")
   );
 
-const locationText =
-  computed(() =>
-    props.wine.locationId === null
-      ? ""
-      : props.location?.label ?? `#${props.wine.locationId}`
-  );
-
 const priceText =
   computed(() =>
     props.wine.priceChf === null
@@ -173,7 +168,7 @@ const priceText =
 const fields =
   computed(() => [
     { label: "Region", value: origin.value },
-    { label: "Location", value: locationText.value },
+    { label: "Location", value: props.wine.locationLabel ?? "" },
     { label: "Price", value: priceText.value },
     { label: "Purchased", value: formatDate(props.wine.purchasedAt) },
     { label: "Hold until", value: props.wine.holdUntil?.toString() ?? "" },
