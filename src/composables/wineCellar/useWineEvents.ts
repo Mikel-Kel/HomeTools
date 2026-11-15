@@ -102,20 +102,11 @@ export function useWineEvents() {
     );
   }
 
-  function concernsLocation(
-    locationId: number | null
-  ): boolean {
-    return (
-      tracker.request.value !== null &&
-      currentSuffix.value === locationEventSuffix(locationId)
-    );
-  }
-
   /* La dernière demande porte sur un emplacement (écran des emplacements). */
   const concernsLocations =
     computed(() =>
       tracker.request.value !== null &&
-      !!currentSuffix.value?.startsWith(locationEventSuffix(null).charAt(0))
+      !!currentSuffix.value?.startsWith("L")
     );
 
   async function send(
@@ -286,7 +277,6 @@ export function useWineEvents() {
     isWinePending,
     isLocationPending,
     concernsWine,
-    concernsLocation,
     concernsLocations,
     sendWineEvent,
     sendLocationEvent,

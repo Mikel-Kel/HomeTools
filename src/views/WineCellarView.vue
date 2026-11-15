@@ -12,6 +12,7 @@ import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import WineEditSheet from "@/components/wineCellar/WineEditSheet.vue";
+import WineLocationsSheet from "@/components/wineCellar/WineLocationsSheet.vue";
 import WineSheet from "@/components/wineCellar/WineSheet.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
@@ -53,6 +54,8 @@ import { formatInteger } from "@/utils/amountFormat";
    et tant que le vin est en attente. « New wine » et
    « Edit » (fiche du vin) : fiche complète, WineEditSheet ;
    la fiche du vin est masquée pendant la saisie.
+   « Locations » : gestion des emplacements
+   (WineLocationsSheet).
 ========================= */
 
 type StockScope = "inStock" | "history" | "all";
@@ -437,6 +440,9 @@ const openWineLocation =
 const editing =
   ref<{ wine: Wine | null } | undefined>(undefined);
 
+const locationsOpen =
+  ref(false);
+
 function editOpenWine() {
   if (openWine.value) {
     editing.value = { wine: openWine.value };
@@ -561,6 +567,10 @@ function plural(
             v-model="sortKey"
             :options="sortOptions"
           />
+
+          <PillButton @click="locationsOpen = true">
+            Locations
+          </PillButton>
 
           <PillButton
             variant="primary"
@@ -701,6 +711,13 @@ function plural(
       :events="wineEvents"
       @close="openWineId = null"
       @edit="editOpenWine"
+    />
+
+    <WineLocationsSheet
+      v-if="locationsOpen"
+      :cellar="cellar"
+      :events="wineEvents"
+      @close="locationsOpen = false"
     />
 
     <WineEditSheet
