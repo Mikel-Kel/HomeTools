@@ -19,6 +19,7 @@ import type {
 } from "@/contracts/wineCellar";
 
 import type { WineEvents } from "@/composables/wineCellar/useWineEvents";
+import { useWinePhotoDraft } from "@/composables/wineCellar/useWinePhotoDraft";
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
@@ -35,7 +36,12 @@ import { formatDate } from "@/utils/dateFormat";
    récente en premier), dates partielles telles quelles.
    Photo de l'étiquette (§ 5, WinePhoto), pictogramme neutre
    sans photo ou si elle ne se charge pas ; un appui l'ouvre
-   en grand (WinePhotoViewer).
+   en grand (WinePhotoViewer). Sous la photo (W7, § 5) :
+   choix d'une image (fichier sur Mac ; appareil photo,
+   photothèque ou fichiers sur iPad), préparée puis montrée
+   en aperçu avant l'envoi (WINE_PHOTO_SAVED) ; retrait après
+   confirmation (WINE_PHOTO_DELETED). La nouvelle photo
+   s'affiche à la republication, sous sa nouvelle clé.
 
    Fermeture : ✕, Échap, clic hors de la fiche.
 
@@ -45,8 +51,9 @@ import { formatDate } from "@/utils/dateFormat";
    Stock : « - » (bouteille ouverte), « + » (achetée) et
    correction (quantité constatée → variation, reason
    correction). Actions désactivées tant que le vin attend.
-   Dégustations : WineTastings ; une saisie non envoyée est
-   confirmée avant de fermer la fiche. « Edit » : fiche
+   Dégustations : WineTastings ; une saisie non envoyée
+   (dégustation ou photo) est confirmée avant de fermer la
+   fiche. « Edit » : fiche
    complète (WineEditSheet, ouverte par la page).
 ========================= */
 
@@ -76,6 +83,59 @@ const photoUrl =
 
 const photoOpen =
   ref(false);
+
+const photoDraft =
+  useWinePhotoDraft();
+
+const photoInput =
+  ref<HTMLInputElement | null>(null);
+
+/* Image montrée : aperçu de la photo choisie, sinon photo actuelle. */
+const shownPhotoUrl =
+  computed(() =>
+    photoDraft.draft.value?.previewUrl ?? photoUrl.value
+  );
+
+const photoBusy =
+  computed(() =>
+    pending.value || photoDraft.preparing.value
+  );
+
+function choosePhoto() {
+  photoInput.value?.click();
+}
+
+async function sendPhoto() {
+  const draft =
+    photoDraft.draft.value;
+
+  if (!draft || pending.value) {
+    return;
+  }
+
+  await props.events.savePhoto(
+    props.wine.id,
+    draft.image
+  );
+
+  photoDraft.clear();
+}
+
+async function removePhoto() {
+  if (
+    pending.value ||
+    !(await confirmDialog({
+      title: "Remove the label photo?",
+      message: `${props.wine.name}: the photo will be deleted.`,
+      confirmLabel: "Remove",
+      destructive: true,
+    }))
+  ) {
+    return;
+  }
+
+  props.events.deletePhoto(props.wine.id);
+}
 
 /* =========================
    Stock
@@ -195,6 +255,17 @@ const tastingDirty =
   ref(false);
 
 async function close() {
+  if (
+    photoDraft.draft.value &&
+    !(await confirmDialog({
+      title: "Discard the new photo?",
+      confirmLabel: "Discard",
+      destructive: true,
+    }))
+  ) {
+    return;
+  }
+
   if (
     tastingDirty.value &&
     !(await confirmDialog({
@@ -368,19 +439,83 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <button
-        type="button"
-        class="photo"
-        :disabled="!photoUrl"
-        :title="photoUrl ? 'Show the label' : wine.photo ? undefined : 'No label photo'"
-        @click="photoOpen = true"
-      >
-        <WinePhoto
-          ref="photo"
-          :photo-key="wine.photo"
-          size="sheet"
+      <div class="photo-column">
+        <button
+          type="button"
+          class="photo"
+          :disabled="!shownPhotoUrl"
+          :title="shownPhotoUrl ? 'Show the label' : wine.photo ? undefined : 'No label photo'"
+          @click="photoOpen = true"
+        >
+          <img
+            v-if="photoDraft.draft.value"
+            class="photo-preview"
+            :src="photoDraft.draft.value.previewUrl"
+            alt="New label"
+            draggable="false"
+          />
+
+          <WinePhoto
+            v-else
+            ref="photo"
+            :photo-key="wine.photo"
+            size="sheet"
+          />
+        </button>
+
+        <input
+          ref="photoInput"
+          class="photo-input"
+          type="file"
+          accept="image/*"
+          @change="photoDraft.onFileInput"
         />
-      </button>
+
+        <div
+          v-if="photoDraft.draft.value"
+          class="photo-actions"
+        >
+          <PillButton
+            variant="primary"
+            :disabled="pending"
+            @click="sendPhoto"
+          >
+            Save photo
+          </PillButton>
+
+          <PillButton @click="photoDraft.clear">
+            Cancel
+          </PillButton>
+        </div>
+
+        <div
+          v-else
+          class="photo-actions"
+        >
+          <PillButton
+            :disabled="photoBusy"
+            @click="choosePhoto"
+          >
+            {{ photoDraft.preparing.value ? "Preparing…" : wine.photo ? "Change…" : "Add photo…" }}
+          </PillButton>
+
+          <PillButton
+            v-if="wine.photo"
+            variant="danger"
+            :disabled="photoBusy"
+            @click="removePhoto"
+          >
+            Remove
+          </PillButton>
+        </div>
+
+        <span
+          v-if="photoDraft.error.value"
+          class="photo-error"
+        >
+          {{ photoDraft.error.value }}
+        </span>
+      </div>
     </div>
 
     <dl class="fields">
@@ -431,8 +566,8 @@ onBeforeUnmount(() => {
     <!-- Hors de la fiche : sa transformation confinerait la vue en plein écran. -->
     <Teleport to="body">
       <WinePhotoViewer
-        v-if="photoOpen && photoUrl"
-        :url="photoUrl"
+        v-if="photoOpen && shownPhotoUrl"
+        :url="shownPhotoUrl"
         :title="wine.name"
         @close="photoOpen = false"
       />
@@ -538,6 +673,48 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1.25rem;
+}
+
+.photo-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0.5rem;
+
+  width: 160px;
+}
+
+.photo-input {
+  display: none;
+}
+
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.photo-error {
+  color: var(--negative);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.photo-preview {
+  display: block;
+
+  width: 160px;
+  height: 160px;
+  box-sizing: border-box;
+
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  background: var(--bg-soft);
+
+  object-fit: contain;
 }
 
 .photo {

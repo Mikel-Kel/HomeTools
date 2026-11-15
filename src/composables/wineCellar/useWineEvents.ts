@@ -13,6 +13,7 @@ import {
   WINE_EVENT_VERSION,
   wineEventSuffix,
   type WineEventType,
+  type WineImage,
   type WineLocationSave,
   type WineReferenceKind,
   type WineReferenceSave,
@@ -223,6 +224,29 @@ export function useWineEvents() {
     );
   }
 
+  /* Ajout ou remplacement de la photo (image préparée par prepareWineImage). */
+  function savePhoto(
+    wineId: number,
+    image: WineImage
+  ): Promise<void> {
+    return sendWineEvent(
+      "WINE_PHOTO_SAVED",
+      wineId,
+      { wineId, image }
+    );
+  }
+
+  /* Retrait de la photo (après confirmation par la vue). */
+  function deletePhoto(
+    wineId: number
+  ): Promise<void> {
+    return sendWineEvent(
+      "WINE_PHOTO_DELETED",
+      wineId,
+      { wineId }
+    );
+  }
+
   /* Variation du stock (+1 purchase, -1 opened, correction). */
   function changeStock(
     change: WineStockChange
@@ -343,6 +367,8 @@ export function useWineEvents() {
     saveWine,
     saveWineV2,
     deleteWine,
+    savePhoto,
+    deletePhoto,
     changeStock,
     saveTasting,
     deleteTasting,

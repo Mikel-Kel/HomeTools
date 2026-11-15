@@ -443,6 +443,8 @@ export type WineEventType =
   | "WINE_TASTING_SAVED"
   | "WINE_TASTING_DELETED"
   | "WINE_DELETED"
+  | "WINE_PHOTO_SAVED"
+  | "WINE_PHOTO_DELETED"
   | "WINE_LOCATION_SAVED"
   | "WINE_LOCATION_DELETED"
   | "WINE_REFERENCE_SAVED"
@@ -498,6 +500,14 @@ export interface WineSave {
   région sans pays ou d'un autre pays, nom de plus de 50
   caractères (100 pour un producteur), taille inconnue,
   étage sans emplacement ou hors de ses levelCount étages.
+
+  photo (facultatif, W7) : { copyFrom: <WineID> } (héritage,
+  copie de la photo de ce vin) ou { image } (nouvelle image,
+  mêmes règles que WINE_PHOTO_SAVED) ; absent : pas de photo
+  à la création, photo inchangée à la modification. Une
+  image refusée refuse toute la saisie ; copyFrom d'un vin
+  sans photo n'est pas un refus (fiche enregistrée sans
+  photo, statut qui le dit).
 */
 export const WINE_SAVED_VERSION_2 = 2;
 
@@ -523,13 +533,46 @@ export interface WineSaveV2 {
   purchasedAt: string | null;
   comments: string | null;
   quantity: number;
+  photo?: WinePhotoSave;
 }
+
+/*
+  WINE_PHOTO_SAVED (W7) : payload { wineId, image, source },
+  ajout ou remplacement de la photo d'un vin existant.
+  WINE_PHOTO_DELETED : payload { wineId, source }, retrait
+  (un vin déjà sans photo n'est pas une erreur). Fichier
+  …_W<WineID>.json, version 1.
+
+  Image : JPEG brut en base64 (sans préfixe data:), relu par
+  sips sur le Mac, dont les dimensions font foi (width et
+  height de l'événement : journal seulement) ; pixels déjà
+  dans le bon sens (l'orientation EXIF n'est pas lue).
+  Refus : 1 Mo au plus avant encodage, grand côté de
+  1600 px au plus, petit côté de 100 px au moins.
+  Chaque nouvelle image prend une nouvelle clé
+  (w<WineID>_<AAAAMMJJHHMMSS>.jpg), exportée dans photo.
+*/
+export const WINE_PHOTO_MIME_TYPE = "image/jpeg";
+export const WINE_PHOTO_MAX_BYTES = 1024 * 1024;
+export const WINE_PHOTO_MAX_SIDE = 1600;
+export const WINE_PHOTO_MIN_SIDE = 100;
+
+export interface WineImage {
+  mimeType: typeof WINE_PHOTO_MIME_TYPE;
+  width: number;
+  height: number;
+  data: string;
+}
+
+export type WinePhotoSave =
+  | { copyFrom: number }
+  | { image: WineImage };
 
 /*
   WINE_DELETED : payload { wineId, source }. Efface
   définitivement la fiche, ses dégustations et son journal
   du stock ; un vin bu reste normalement dans l'historique
-  (quantity 0).
+  (quantity 0). Sa photo est supprimée avec elle.
 */
 
 /*
