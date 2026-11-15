@@ -446,8 +446,7 @@ export type WineEventType =
   | "WINE_LOCATION_SAVED"
   | "WINE_LOCATION_DELETED"
   | "WINE_REFERENCE_SAVED"
-  | "WINE_REFERENCE_DELETED"
-  | "WINE_REFERENCE_MERGED";
+  | "WINE_REFERENCE_DELETED";
 
 /*
   WINE_SAVED : payload { wineId, name, vintage, country,
@@ -617,12 +616,9 @@ export function locationLabel(
     disparaîtrait.
   - WINE_REFERENCE_DELETED { kind, id } : refus tant que
     l'élément est utilisé.
-  - WINE_REFERENCE_MERGED { kind, sourceId, targetId } :
-    sourceId remplacé par targetId partout puis supprimé ;
-    région : même pays ; emplacement : étages des vins dans
-    ceux de la cible.
-  Fichier : suffixe <C|G|P|L|B><id ou NEW> (fusion : id de
-  l'élément qui disparaît).
+  Pas de fusion : un doublon se corrige depuis la fiche des
+  vins, puis l'élément inutilisé est supprimé.
+  Fichier : suffixe <C|G|P|L|B><id ou NEW>.
 */
 export type WineReferenceKind =
   | "country"

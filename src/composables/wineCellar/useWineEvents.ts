@@ -299,19 +299,6 @@ export function useWineEvents() {
     );
   }
 
-  /* sourceId remplacé par targetId partout ; suffixe : l'élément qui disparaît. */
-  function mergeReference(
-    kind: WineReferenceKind,
-    sourceId: number,
-    targetId: number
-  ): Promise<void> {
-    return send(
-      "WINE_REFERENCE_MERGED",
-      referenceEventSuffix(kind, sourceId),
-      { kind, sourceId, targetId }
-    );
-  }
-
   /* Message de la dernière demande : attente, traitement, statut du Mac. */
   const message =
     computed(() => {
@@ -363,7 +350,6 @@ export function useWineEvents() {
     deleteLocation,
     saveReference,
     deleteReference,
-    mergeReference,
   };
 
 }

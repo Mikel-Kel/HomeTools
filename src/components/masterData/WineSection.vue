@@ -37,14 +37,14 @@ import { formatInteger } from "@/utils/amountFormat";
    nombre de vins (calculé à partir de wines ; pour un pays,
    aussi ses régions).
 
-   Actions (WINE_REFERENCE_SAVED, _DELETED, _MERGED) :
+   Actions (WINE_REFERENCE_SAVED, _DELETED) :
    - créer et renommer ; région : changer de pays ;
      emplacement : nombre d'étages ; taille : facteur et
      ordre ;
-   - supprimer, désactivé tant que l'élément est utilisé ;
-   - fusionner dans un élément du même type (région : du même
-     pays), après une confirmation qui chiffre les vins
-     modifiés.
+   - supprimer, désactivé tant que l'élément est utilisé.
+   Pas de fusion : un doublon se corrige en changeant la
+   référence des vins depuis leur fiche, puis en supprimant
+   l'élément devenu inutilisé.
    Contrôles identiques aux refus du contrat ; le Mac reste
    juge et son message est affiché tel quel. Élément en
    attente marqué « Pending », ses actions désactivées.
@@ -305,8 +305,6 @@ function nextSortOrder(): number {
 function openEditor(
   row: ReferenceRow | null
 ) {
-  closeMerge();
-
   editor.value = { row };
   nameText.value = row?.name ?? "";
   countryId.value = row?.countryId ?? v2.value?.countries[0]?.id ?? null;
@@ -319,13 +317,12 @@ function closeEditor() {
   editor.value = undefined;
 }
 
-/* Autre type choisi : saisie et fusion abandonnées. */
+/* Autre type choisi : saisie abandonnée. */
 watch(
   kind,
 
   () => {
     closeEditor();
-    closeMerge();
   }
 );
 
@@ -408,7 +405,7 @@ const formError =
     }
 
     if (duplicate.value) {
-      return `"${duplicate.value.name}" already exists: merge instead.`;
+      return `"${duplicate.value.name}" already exists.`;
     }
 
     if (kind.value === "location") {
@@ -535,118 +532,6 @@ async function remove(
   }
 
   events.deleteReference(kind.value, row.id);
-}
-
-/* =========================
-   Fusion
-========================= */
-
-const mergeSource =
-  ref<ReferenceRow | null>(null);
-
-const mergeTargetId =
-  ref<number | null>(null);
-
-function openMerge(
-  row: ReferenceRow
-) {
-  closeEditor();
-
-  mergeSource.value = row;
-  mergeTargetId.value = null;
-}
-
-function closeMerge() {
-  mergeSource.value = null;
-  mergeTargetId.value = null;
-}
-
-/* Cibles : même type, une région seulement dans le même pays. */
-const mergeTargets =
-  computed(() => {
-    const source =
-      mergeSource.value;
-
-    return source
-      ? rows.value.filter(
-          row =>
-            row.id !== source.id &&
-            (kind.value !== "region" || row.countryId === source.countryId)
-        )
-      : [];
-  });
-
-const mergeTarget =
-  computed(() =>
-    mergeTargets.value.find(row => row.id === mergeTargetId.value) ?? null
-  );
-
-const mergeError =
-  computed(() => {
-    const source =
-      mergeSource.value;
-
-    const target =
-      mergeTarget.value;
-
-    if (!source || !target) {
-      return "";
-    }
-
-    return kind.value === "location" &&
-      source.highestLevelUsed > (target.levelCount ?? 0)
-      ? `Level ${source.highestLevelUsed} of ${source.name} is used and ${target.name} has ` +
-        `${target.levelCount ?? "no"} levels: add levels to ${target.name} first.`
-      : "";
-  });
-
-const canMerge =
-  computed(() =>
-    !!mergeSource.value &&
-    !!mergeTarget.value &&
-    !mergeError.value &&
-    !pending(mergeSource.value) &&
-    !pending(mergeTarget.value)
-  );
-
-async function merge() {
-  const source =
-    mergeSource.value;
-
-  const target =
-    mergeTarget.value;
-
-  if (!source || !target || !canMerge.value) {
-    return;
-  }
-
-  const effects =
-    [
-      source.wines
-        ? `${plural(source.wines, "wine")} will be updated`
-        : "No wine is updated",
-      kind.value === "country" && source.regions
-        ? `its ${plural(source.regions, "region")} move to ${target.name} ` +
-          "(a region of the same name is merged)"
-        : "",
-    ].filter(Boolean);
-
-  if (
-    !(await confirmDialog({
-      title: `Merge ${source.name} into ${target.name}?`,
-      message:
-        `${effects.join("; ")}. ${source.name} is then deleted; ` +
-        `the name kept is ${target.name}.`,
-      confirmLabel: "Merge",
-      destructive: true,
-    }))
-  ) {
-    return;
-  }
-
-  events.mergeReference(kind.value, source.id, target.id);
-
-  closeMerge();
 }
 
 /* =========================
@@ -815,63 +700,6 @@ const columnCount =
         </div>
       </form>
 
-      <div
-        v-if="mergeSource"
-        class="editor"
-      >
-        <div class="editor-line">
-          <label class="field">
-            <span class="field-label">
-              Merge {{ mergeSource.name }} into
-            </span>
-
-            <select v-model="mergeTargetId">
-              <option :value="null">Choose…</option>
-
-              <option
-                v-for="target in mergeTargets"
-                :key="target.id"
-                :value="target.id"
-              >
-                {{ target.name }}
-              </option>
-            </select>
-          </label>
-        </div>
-
-        <p
-          v-if="!mergeTargets.length"
-          class="note"
-        >
-          {{
-            kind === "region"
-              ? "No other region in this country: change the region's country first."
-              : `No other ${noun} to merge into.`
-          }}
-        </p>
-
-        <p
-          v-if="mergeError"
-          class="error"
-        >
-          {{ mergeError }}
-        </p>
-
-        <div class="editor-actions">
-          <PillButton @click="closeMerge">
-            Cancel
-          </PillButton>
-
-          <PillButton
-            variant="primary"
-            :disabled="!canMerge"
-            @click="merge"
-          >
-            Merge…
-          </PillButton>
-        </div>
-      </div>
-
       <p
         v-if="!rows.length"
         class="empty"
@@ -922,7 +750,7 @@ const columnCount =
 
               <tr
                 :class="{
-                  editing: editor?.row?.id === row.id || mergeSource?.id === row.id,
+                  editing: editor?.row?.id === row.id,
                 }"
               >
                 <td class="col-name">
@@ -961,7 +789,7 @@ const columnCount =
                 <td class="col-actions">
                   <PillButton
                     class="small-button"
-                    :disabled="!!editor || !!mergeSource || pending(row)"
+                    :disabled="!!editor || pending(row)"
                     @click="openEditor(row)"
                   >
                     Edit
@@ -969,17 +797,9 @@ const columnCount =
 
                   <PillButton
                     class="small-button"
-                    :disabled="!!editor || !!mergeSource || pending(row)"
-                    @click="openMerge(row)"
-                  >
-                    Merge…
-                  </PillButton>
-
-                  <PillButton
-                    class="small-button"
                     variant="danger"
                     :title="isUsed(row) ? `Used by ${usageText(row)}` : undefined"
-                    :disabled="!!editor || !!mergeSource || isUsed(row) || pending(row)"
+                    :disabled="!!editor || isUsed(row) || pending(row)"
                     @click="remove(row)"
                   >
                     Delete
