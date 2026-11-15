@@ -7,19 +7,16 @@ import { useEventRequest } from "@/composables/useEventRequest";
 
 import {
   isReferenceEventSuffix,
-  locationEventSuffix,
   referenceEventSuffix,
   WINE_EVENT_TRIGRAM,
   WINE_EVENT_VERSION,
   wineEventSuffix,
   type WineEventType,
   type WineImage,
-  type WineLocationSave,
   type WineReferenceKind,
   type WineReferenceSave,
-  WINE_SAVED_VERSION_2,
+  WINE_SAVED_VERSION,
   type WineSave,
-  type WineSaveV2,
   type WineStockChange,
   type WineTastingSave,
 } from "@/contracts/wineCellar";
@@ -44,7 +41,7 @@ import {
    tel quel.
 
    « Pending » est déduit du stockage : un événement WIN du
-   vin (ou de l'emplacement) attend dans events/, quel que
+   vin (ou de l'élément de données de base) attend dans events/, quel que
    soit l'appareil, ou la demande suivie est en cours. Le
    stock affiché vient toujours de wine/cellar.json,
    republié par le Mac.
@@ -64,7 +61,7 @@ export function useWineEvents() {
       noAnswerDelayMs: NO_ANSWER_DELAY_MS,
     });
 
-  /* Suffixe (W12, LNEW…) de la dernière demande envoyée. */
+  /* Suffixe (W12, CNEW…) de la dernière demande envoyée. */
   const currentSuffix =
     ref<string | null>(null);
 
@@ -93,12 +90,6 @@ export function useWineEvents() {
     return isPending(wineEventSuffix(wineId));
   }
 
-  function isLocationPending(
-    locationId: number | null
-  ): boolean {
-    return isPending(locationEventSuffix(locationId));
-  }
-
   /* La dernière demande porte sur ce vin (message à afficher dans sa fiche). */
   function concernsWine(
     wineId: number | null
@@ -122,13 +113,6 @@ export function useWineEvents() {
       tracker.request.value !== null &&
       !!currentSuffix.value &&
       isReferenceEventSuffix(currentSuffix.value)
-    );
-
-  /* La dernière demande porte sur un emplacement (écran des emplacements). */
-  const concernsLocations =
-    computed(() =>
-      tracker.request.value !== null &&
-      !!currentSuffix.value?.startsWith("L")
     );
 
   async function send(
@@ -177,39 +161,15 @@ export function useWineEvents() {
     );
   }
 
-  /* locationId null : création d'un emplacement. */
-  function sendLocationEvent(
-    eventType: WineEventType,
-    locationId: number | null,
-    payload: object
-  ): Promise<void> {
-    return send(
-      eventType,
-      locationEventSuffix(locationId),
-      payload
-    );
-  }
-
-  /* Création (wineId null) ou modification de la fiche, version 1 (cellar.json version 1). */
+  /* Création (wineId null) ou modification de la fiche, photo facultative. */
   function saveWine(
     wine: WineSave
   ): Promise<void> {
     return sendWineEvent(
       "WINE_SAVED",
       wine.wineId,
-      wine
-    );
-  }
-
-  /* Même chose en version 2 (cellar.json version 2) : références et taille. */
-  function saveWineV2(
-    wine: WineSaveV2
-  ): Promise<void> {
-    return sendWineEvent(
-      "WINE_SAVED",
-      wine.wineId,
       wine,
-      WINE_SAVED_VERSION_2
+      WINE_SAVED_VERSION
     );
   }
 
@@ -280,27 +240,6 @@ export function useWineEvents() {
     );
   }
 
-  /* Création (locationId null) ou modification d'un emplacement. */
-  function saveLocation(
-    location: WineLocationSave
-  ): Promise<void> {
-    return sendLocationEvent(
-      "WINE_LOCATION_SAVED",
-      location.locationId,
-      location
-    );
-  }
-
-  function deleteLocation(
-    locationId: number
-  ): Promise<void> {
-    return sendLocationEvent(
-      "WINE_LOCATION_DELETED",
-      locationId,
-      { locationId }
-    );
-  }
-
   /* Création (id null) ou modification d'un élément de données de base. */
   function saveReference(
     reference: WineReferenceSave
@@ -357,23 +296,16 @@ export function useWineEvents() {
     message,
     messageTone,
     isWinePending,
-    isLocationPending,
     concernsWine,
-    concernsLocations,
     concernsReferences,
     isReferencePending,
-    sendWineEvent,
-    sendLocationEvent,
     saveWine,
-    saveWineV2,
     deleteWine,
     savePhoto,
     deletePhoto,
     changeStock,
     saveTasting,
     deleteTasting,
-    saveLocation,
-    deleteLocation,
     saveReference,
     deleteReference,
   };

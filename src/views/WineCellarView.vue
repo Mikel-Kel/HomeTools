@@ -12,7 +12,6 @@ import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import WineEditSheet from "@/components/wineCellar/WineEditSheet.vue";
-import WineLocationsSheet from "@/components/wineCellar/WineLocationsSheet.vue";
 import WinePhoto from "@/components/wineCellar/WinePhoto.vue";
 import WineSheet from "@/components/wineCellar/WineSheet.vue";
 
@@ -41,8 +40,7 @@ import { formatInteger } from "@/utils/amountFormat";
    (chargée quand la ligne approche de l'écran). Filtres : stock (« In stock » par
    défaut, « History » = vins bus, « All »), favoris, pays,
    région (des pays choisis), couleur, millésime, emplacement
-   (en version 2 du fichier : par identifiant, libellés des
-   listes de référence ; en version 1 : par texte) ; recherche
+   (par identifiant, libellés des listes de référence) ; recherche
    dans le nom et le producteur (casse et accents ignorés).
    Tri par nom, millésime ou « drink before » ; un vin en
    stock dont l'année « drink before » est passée est signalé.
@@ -59,9 +57,8 @@ import { formatInteger } from "@/utils/amountFormat";
    « Edit » (fiche du vin) : fiche complète, WineEditSheet ;
    la fiche du vin est masquée pendant la saisie.
    Taille affichée quand elle n'est pas la bouteille de 75 cl
-   (facteur 1, version 2). « Locations » : gestion des
-   emplacements (WineLocationsSheet), en version 1 seulement ;
-   en version 2, dans la section « Wine » de Master data.
+   (facteur 1). Emplacements et autres données de base :
+   section « Wine » de Master data.
 ========================= */
 
 type StockScope = "inStock" | "history" | "all";
@@ -165,22 +162,18 @@ function locationKey(
   return wine.locationId ?? NO_LOCATION;
 }
 
-/* Clé du filtre pays : identifiant en version 2, nom en version 1. */
+/* Clé du filtre pays : identifiant. */
 function countryKey(
   wine: Wine
 ): string | null {
-  return cellar.value?.version === 2
-    ? wine.countryId === null ? null : String(wine.countryId)
-    : wine.country;
+  return wine.countryId === null ? null : String(wine.countryId);
 }
 
 /* Clé du filtre région (deux pays peuvent avoir une région de même nom). */
 function regionKey(
   wine: Wine
 ): string | null {
-  return cellar.value?.version === 2
-    ? wine.regionId === null ? null : String(wine.regionId)
-    : wine.region;
+  return wine.regionId === null ? null : String(wine.regionId);
 }
 
 function inSelection(
@@ -208,28 +201,20 @@ function distinct(
     .sort((a, b) => a.localeCompare(b));
 }
 
-/* Pays présents dans la sélection, dans l'ordre de la liste de référence en version 2. */
+/* Pays présents dans la sélection, dans l'ordre de la liste de référence. */
 const countryItems =
   computed(() => {
-    const data =
-      cellar.value;
-
-    if (data?.version !== 2) {
-      return distinct(scopedWines.value.map(wine => wine.country))
-        .map(country => ({ id: country, label: country }));
-    }
-
     const used =
       new Set(scopedWines.value.map(countryKey));
 
-    return data.countries
+    return (cellar.value?.countries ?? [])
       .filter(country => used.has(String(country.id)))
       .map(country => ({ id: String(country.id), label: country.name }));
   });
 
 /*
-  Régions des pays choisis. Version 2 : ordre de la liste
-  (pays puis nom), pays ajouté au nom porté par deux régions
+  Régions des pays choisis, dans l'ordre de la liste (pays
+  puis nom), pays ajouté au nom porté par deux régions
   proposées.
 */
 const regionItems =
@@ -237,15 +222,14 @@ const regionItems =
     const data =
       cellar.value;
 
+    if (!data) {
+      return [];
+    }
+
     const wines =
       scopedWines.value.filter(
         wine => inSelection(countryFilter.value, countryKey(wine))
       );
-
-    if (data?.version !== 2) {
-      return distinct(wines.map(wine => wine.region))
-        .map(region => ({ id: region, label: region }));
-    }
 
     const used =
       new Set(wines.map(regionKey));
@@ -310,7 +294,7 @@ const locationItems =
     const items =
       (cellar.value?.locations ?? [])
         .filter(location => used.has(location.id))
-        .map(location => ({ id: location.id, label: location.label }));
+        .map(location => ({ id: location.id, label: location.name }));
 
     return used.has(NO_LOCATION)
       ? [...items, { id: NO_LOCATION, label: "None" }]
@@ -465,18 +449,16 @@ function isPastDrinkBefore(
   );
 }
 
-/* Taille autre que la bouteille de 75 cl (version 2), sinon null. */
+/* Taille autre que la bouteille de 75 cl, sinon null. */
 const bottleSizes =
   computed(() =>
-    cellar.value?.version === 2
-      ? new Map(cellar.value.bottleSizes.map(size => [size.id, size]))
-      : null
+    new Map((cellar.value?.bottleSizes ?? []).map(size => [size.id, size]))
   );
 
 function sizeTag(
   wine: Wine
 ): string | null {
-  if (!bottleSizes.value || wine.bottleSizeId === null) {
+  if (wine.bottleSizeId === null) {
     return null;
   }
 
@@ -513,9 +495,6 @@ const openWine =
 /* Fiche complète : undefined fermée, wine null nouveau vin. */
 const editing =
   ref<{ wine: Wine | null } | undefined>(undefined);
-
-const locationsOpen =
-  ref(false);
 
 function editOpenWine() {
   if (openWine.value) {
@@ -641,13 +620,6 @@ function plural(
             v-model="sortKey"
             :options="sortOptions"
           />
-
-          <PillButton
-            v-if="cellar.version === 1"
-            @click="locationsOpen = true"
-          >
-            Locations
-          </PillButton>
 
           <PillButton
             variant="primary"
@@ -803,13 +775,6 @@ function plural(
       :events="wineEvents"
       @close="openWineId = null"
       @edit="editOpenWine"
-    />
-
-    <WineLocationsSheet
-      v-if="locationsOpen && cellar.version === 1"
-      :cellar="cellar"
-      :events="wineEvents"
-      @close="locationsOpen = false"
     />
 
     <WineEditSheet

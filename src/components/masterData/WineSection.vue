@@ -14,8 +14,7 @@ import {
   BOTTLE_SIZE_SORT_ORDER_MAX,
   LOCATION_LEVEL_COUNT_MAX,
   REFERENCE_NAME_MAX_LENGTH,
-  type WineCellarData,
-  type WineCellarV2,
+  type WineCellar,
   type WineReferenceKind,
   type WineReferenceSave,
 } from "@/contracts/wineCellar";
@@ -30,7 +29,7 @@ import { formatInteger } from "@/utils/amountFormat";
 /* =========================
    Section « Wine » de la page Master data
 
-   Données de base de la cave (cellar.json version 2,
+   Données de base de la cave (cellar.json,
    ../Backend/docs/wine-cellar-contract.md, § 1 et § 3) :
    pays, régions (groupées par pays), producteurs,
    emplacements et tailles de bouteille, chacun avec son
@@ -48,13 +47,10 @@ import { formatInteger } from "@/utils/amountFormat";
    Contrôles identiques aux refus du contrat ; le Mac reste
    juge et son message est affiché tel quel. Élément en
    attente marqué « Pending », ses actions désactivées.
-
-   Version 1 du fichier (backend pas encore basculé) :
-   « Waiting for backend update », aucune action.
 ========================= */
 
 const props = defineProps<{
-  cellar: WineCellarData;
+  cellar: WineCellar;
 }>();
 
 const events =
@@ -82,13 +78,6 @@ const kind =
 if (!kindOptions.some(option => option.value === kind.value)) {
   kind.value = "country";
 }
-
-const v2 =
-  computed<WineCellarV2 | null>(() =>
-    props.cellar.version === 2
-      ? props.cellar
-      : null
-  );
 
 /* Comparaison MySQL utf8mb4_unicode_ci : casse, accents et espaces de fin ignorés. */
 function fold(
@@ -167,17 +156,13 @@ function emptyRow(
 
 const countryNames =
   computed(() =>
-    new Map((v2.value?.countries ?? []).map(country => [country.id, country.name]))
+    new Map(props.cellar.countries.map(country => [country.id, country.name]))
   );
 
 const rows =
   computed<ReferenceRow[]>(() => {
     const data =
-      v2.value;
-
-    if (!data) {
-      return [];
-    }
+      props.cellar;
 
     const wines =
       data.wines;
@@ -307,7 +292,7 @@ function openEditor(
 ) {
   editor.value = { row };
   nameText.value = row?.name ?? "";
-  countryId.value = row?.countryId ?? v2.value?.countries[0]?.id ?? null;
+  countryId.value = row?.countryId ?? props.cellar.countries[0]?.id ?? null;
   levelCountText.value = text(row?.levelCount ?? null);
   factorText.value = row ? text(row.factor) : "1";
   sortOrderText.value = row ? text(row.sortOrder) : String(nextSortOrder());
@@ -560,257 +545,248 @@ const columnCount =
 
 <template>
   <section class="panel">
+    <header class="panel-header">
+      <SegmentedControl
+        v-model="kind"
+        :options="kindOptions"
+      />
+
+      <PillButton
+        :disabled="!!editor"
+        @click="openEditor(null)"
+      >
+        New {{ noun }}
+      </PillButton>
+    </header>
+
     <p
-      v-if="!v2"
-      class="empty"
+      v-if="message"
+      class="request-message"
+      :class="events.messageTone.value"
     >
-      Waiting for backend update.
+      {{ message }}
     </p>
 
-    <template v-else>
-      <header class="panel-header">
-        <SegmentedControl
-          v-model="kind"
-          :options="kindOptions"
-        />
+    <form
+      v-if="editor"
+      class="editor"
+      @submit.prevent="save"
+    >
+      <div class="editor-line">
+        <label class="field">
+          <span class="field-label">Name</span>
 
-        <PillButton
-          :disabled="!!editor"
-          @click="openEditor(null)"
+          <input
+            v-model="nameText"
+            type="text"
+            :maxlength="REFERENCE_NAME_MAX_LENGTH[kind]"
+            autocomplete="off"
+          />
+        </label>
+
+        <label
+          v-if="kind === 'region'"
+          class="field"
         >
-          New {{ noun }}
-        </PillButton>
-      </header>
+          <span class="field-label">Country</span>
 
-      <p
-        v-if="message"
-        class="request-message"
-        :class="events.messageTone.value"
-      >
-        {{ message }}
-      </p>
+          <select v-model="countryId">
+            <option
+              v-for="country in cellar.countries"
+              :key="country.id"
+              :value="country.id"
+            >
+              {{ country.name }}
+            </option>
+          </select>
+        </label>
 
-      <form
-        v-if="editor"
-        class="editor"
-        @submit.prevent="save"
-      >
-        <div class="editor-line">
-          <label class="field">
-            <span class="field-label">Name</span>
+        <label
+          v-if="kind === 'location'"
+          class="field short"
+        >
+          <span class="field-label">Levels (optional)</span>
+
+          <input
+            v-model="levelCountText"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="None"
+          />
+        </label>
+
+        <template v-if="kind === 'bottleSize'">
+          <label class="field short">
+            <span class="field-label">Factor (× 75 cl)</span>
 
             <input
-              v-model="nameText"
+              v-model="factorText"
               type="text"
-              :maxlength="REFERENCE_NAME_MAX_LENGTH[kind]"
+              inputmode="decimal"
               autocomplete="off"
             />
           </label>
 
-          <label
-            v-if="kind === 'region'"
-            class="field"
-          >
-            <span class="field-label">Country</span>
-
-            <select v-model="countryId">
-              <option
-                v-for="country in v2.countries"
-                :key="country.id"
-                :value="country.id"
-              >
-                {{ country.name }}
-              </option>
-            </select>
-          </label>
-
-          <label
-            v-if="kind === 'location'"
-            class="field short"
-          >
-            <span class="field-label">Levels (optional)</span>
+          <label class="field short">
+            <span class="field-label">Order</span>
 
             <input
-              v-model="levelCountText"
+              v-model="sortOrderText"
               type="text"
               inputmode="numeric"
               autocomplete="off"
-              placeholder="None"
             />
           </label>
-
-          <template v-if="kind === 'bottleSize'">
-            <label class="field short">
-              <span class="field-label">Factor (× 75 cl)</span>
-
-              <input
-                v-model="factorText"
-                type="text"
-                inputmode="decimal"
-                autocomplete="off"
-              />
-            </label>
-
-            <label class="field short">
-              <span class="field-label">Order</span>
-
-              <input
-                v-model="sortOrderText"
-                type="text"
-                inputmode="numeric"
-                autocomplete="off"
-              />
-            </label>
-          </template>
-        </div>
-
-        <p
-          v-if="kind === 'location'"
-          class="note"
-        >
-          Level 1 is the top level. A wine's level is chosen on its sheet.
-        </p>
-
-        <p
-          v-if="moveNote"
-          class="note"
-        >
-          {{ moveNote }}
-        </p>
-
-        <p
-          v-if="changed && formError"
-          class="error"
-        >
-          {{ formError }}
-        </p>
-
-        <div class="editor-actions">
-          <PillButton @click="closeEditor">
-            Cancel
-          </PillButton>
-
-          <PillButton
-            variant="primary"
-            :disabled="!canSave"
-            @click="save"
-          >
-            {{ editor.row ? "Save" : "Create" }}
-          </PillButton>
-        </div>
-      </form>
+        </template>
+      </div>
 
       <p
-        v-if="!rows.length"
-        class="empty"
+        v-if="kind === 'location'"
+        class="note"
       >
-        No {{ noun }} yet.
+        Level 1 is the top level. A wine's level is chosen on its sheet.
       </p>
 
-      <div
-        v-else
-        class="table-wrapper"
+      <p
+        v-if="moveNote"
+        class="note"
       >
-        <table class="references-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th
+        {{ moveNote }}
+      </p>
+
+      <p
+        v-if="changed && formError"
+        class="error"
+      >
+        {{ formError }}
+      </p>
+
+      <div class="editor-actions">
+        <PillButton @click="closeEditor">
+          Cancel
+        </PillButton>
+
+        <PillButton
+          variant="primary"
+          :disabled="!canSave"
+          @click="save"
+        >
+          {{ editor.row ? "Save" : "Create" }}
+        </PillButton>
+      </div>
+    </form>
+
+    <p
+      v-if="!rows.length"
+      class="empty"
+    >
+      No {{ noun }} yet.
+    </p>
+
+    <div
+      v-else
+      class="table-wrapper"
+    >
+      <table class="references-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th
+              v-if="kind === 'location'"
+              class="col-number"
+            >
+              Levels
+            </th>
+            <template v-if="kind === 'bottleSize'">
+              <th class="col-number">Factor</th>
+              <th class="col-number">Order</th>
+            </template>
+            <th
+              v-if="kind === 'country'"
+              class="col-number"
+            >
+              Regions
+            </th>
+            <th class="col-number">Wines</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <template
+            v-for="row in rows"
+            :key="row.id"
+          >
+            <tr
+              v-if="row.groupLabel"
+              class="group-row"
+            >
+              <td :colspan="columnCount">{{ row.groupLabel }}</td>
+            </tr>
+
+            <tr
+              :class="{
+                editing: editor?.row?.id === row.id,
+              }"
+            >
+              <td class="col-name">
+                {{ row.name }}
+
+                <StatusPill
+                  v-if="pending(row)"
+                  class="pending-pill"
+                  tone="warning"
+                >
+                  Pending
+                </StatusPill>
+              </td>
+
+              <td
                 v-if="kind === 'location'"
                 class="col-number"
               >
-                Levels
-              </th>
+                {{ row.levelCount ?? "" }}
+              </td>
+
               <template v-if="kind === 'bottleSize'">
-                <th class="col-number">Factor</th>
-                <th class="col-number">Order</th>
+                <td class="col-number">× {{ row.factor ?? "?" }}</td>
+                <td class="col-number soft">{{ row.sortOrder ?? "" }}</td>
               </template>
-              <th
+
+              <td
                 v-if="kind === 'country'"
                 class="col-number"
               >
-                Regions
-              </th>
-              <th class="col-number">Wines</th>
-              <th class="col-actions"></th>
+                {{ row.regions || "" }}
+              </td>
+
+              <td class="col-number">{{ row.wines || "" }}</td>
+
+              <td class="col-actions">
+                <PillButton
+                  class="small-button"
+                  :disabled="!!editor || pending(row)"
+                  @click="openEditor(row)"
+                >
+                  Edit
+                </PillButton>
+
+                <PillButton
+                  class="small-button"
+                  variant="danger"
+                  :title="isUsed(row) ? `Used by ${usageText(row)}` : undefined"
+                  :disabled="!!editor || isUsed(row) || pending(row)"
+                  @click="remove(row)"
+                >
+                  Delete
+                </PillButton>
+              </td>
             </tr>
-          </thead>
-
-          <tbody>
-            <template
-              v-for="row in rows"
-              :key="row.id"
-            >
-              <tr
-                v-if="row.groupLabel"
-                class="group-row"
-              >
-                <td :colspan="columnCount">{{ row.groupLabel }}</td>
-              </tr>
-
-              <tr
-                :class="{
-                  editing: editor?.row?.id === row.id,
-                }"
-              >
-                <td class="col-name">
-                  {{ row.name }}
-
-                  <StatusPill
-                    v-if="pending(row)"
-                    class="pending-pill"
-                    tone="warning"
-                  >
-                    Pending
-                  </StatusPill>
-                </td>
-
-                <td
-                  v-if="kind === 'location'"
-                  class="col-number"
-                >
-                  {{ row.levelCount ?? "" }}
-                </td>
-
-                <template v-if="kind === 'bottleSize'">
-                  <td class="col-number">× {{ row.factor ?? "?" }}</td>
-                  <td class="col-number soft">{{ row.sortOrder ?? "" }}</td>
-                </template>
-
-                <td
-                  v-if="kind === 'country'"
-                  class="col-number"
-                >
-                  {{ row.regions || "" }}
-                </td>
-
-                <td class="col-number">{{ row.wines || "" }}</td>
-
-                <td class="col-actions">
-                  <PillButton
-                    class="small-button"
-                    :disabled="!!editor || pending(row)"
-                    @click="openEditor(row)"
-                  >
-                    Edit
-                  </PillButton>
-
-                  <PillButton
-                    class="small-button"
-                    variant="danger"
-                    :title="isUsed(row) ? `Used by ${usageText(row)}` : undefined"
-                    :disabled="!!editor || isUsed(row) || pending(row)"
-                    @click="remove(row)"
-                  >
-                    Delete
-                  </PillButton>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-    </template>
+          </template>
+        </tbody>
+      </table>
+    </div>
   </section>
 </template>
 

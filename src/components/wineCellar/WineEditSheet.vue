@@ -20,11 +20,10 @@ import {
   WINE_YEAR_MAX,
   WINE_YEAR_MIN,
   type Wine,
-  type WineCellarData,
+  type WineCellar,
   type WinePhotoSave,
   type WineReference,
   type WineSave,
-  type WineSaveV2,
 } from "@/contracts/wineCellar";
 
 import type { WineEvents } from "@/composables/wineCellar/useWineEvents";
@@ -41,10 +40,8 @@ import {
    Création et modification d'un vin
 
    Contrat : ../Backend/docs/wine-cellar-contract.md, § 3
-   (WINE_SAVED). Tous les champs de la fiche, commentaires
-   compris ; pays, région et producteur en saisie libre avec
-   les valeurs déjà présentes dans la cave en suggestion ;
-   emplacement choisi dans locations.
+   (WINE_SAVED version 2). Tous les champs de la fiche,
+   commentaires compris.
 
    Contrôles identiques aux refus du contrat (le Mac reste
    juge). Création : quantité initiale, et un nom déjà
@@ -59,8 +56,8 @@ import {
    normalement dans l'historique, la suppression sert aux
    erreurs de saisie.
 
-   Version 2 de cellar.json : WINE_SAVED version 2. Pays,
-   région et producteur suggérés depuis les listes de
+   Pays, région et producteur en saisie libre, suggérés
+   depuis les listes de
    référence (régions du pays saisi seulement) et envoyés
    comme références ({ id } si le nom existe, au sens de la
    collation ; { id: null, name } sinon) ; taille obligatoire
@@ -70,8 +67,7 @@ import {
    dernier millésime du même nom qui en a une (copyFrom),
    remplaçable par une image choisie (préparée, envoyée dans
    photo.image) ou retirée (« No photo »). La photo d'un vin
-   existant se gère dans sa fiche. Version 1 :
-   fiche de W4, pays, région et producteur en texte.
+   existant se gère dans sa fiche.
 
    La fiche se ferme à l'envoi : suivi (« Pending », statut)
    dans la fiche du vin ou au-dessus de la liste.
@@ -80,7 +76,7 @@ import {
 const props = defineProps<{
   /* null : nouveau vin. */
   wine: Wine | null;
-  cellar: WineCellarData;
+  cellar: WineCellar;
   events: WineEvents;
 }>();
 
@@ -90,12 +86,6 @@ const emit = defineEmits<{
 
 const isNew =
   props.wine === null;
-
-/* Fichier en version 2 : listes de référence, sinon null. */
-const v2 =
-  props.cellar.version === 2
-    ? props.cellar
-    : null;
 
 /* Comparaison MySQL utf8mb4_unicode_ci : casse, accents et espaces ignorés. */
 function fold(
@@ -110,13 +100,9 @@ function fold(
 
 /* Taille par défaut : la bouteille de 75 cl (facteur 1), sinon la première. */
 function defaultBottleSizeId(): number | null {
-  if (!v2) {
-    return null;
-  }
-
   return (
-    v2.bottleSizes.find(size => size.factor === 1) ??
-    v2.bottleSizes[0]
+    props.cellar.bottleSizes.find(size => size.factor === 1) ??
+    props.cellar.bottleSizes[0]
   )?.id ?? null;
 }
 
@@ -149,11 +135,11 @@ const quantity = ref(isNew ? "0" : text(props.wine?.quantity));
 const bottleSizeId = ref<number | null>(props.wine?.bottleSizeId ?? defaultBottleSizeId());
 const locationLevel = ref<number | null>(props.wine?.locationLevel ?? null);
 
-/* Étages de l'emplacement choisi (version 2), 1 en haut ; [] sans étages. */
+/* Étages de l'emplacement choisi, 1 en haut ; [] sans étages. */
 const levelOptions =
   computed(() => {
     const count =
-      v2?.locations.find(location => location.id === locationId.value)?.levelCount ?? 0;
+      props.cellar.locations.find(location => location.id === locationId.value)?.levelCount ?? 0;
 
     return Array.from({ length: count }, (_, index) => index + 1);
   });
@@ -188,60 +174,38 @@ function distinct(
     .sort((a, b) => a.localeCompare(b));
 }
 
-/* Version 2 : pays de la liste dont le nom correspond au texte saisi. */
+/* Pays de la liste dont le nom correspond au texte saisi. */
 const matchedCountry =
   computed(() => {
     const typed =
       fold(country.value);
 
     return typed
-      ? v2?.countries.find(item => fold(item.name) === typed) ?? null
+      ? props.cellar.countries.find(item => fold(item.name) === typed) ?? null
       : null;
   });
 
 const countrySuggestions =
   computed(() =>
-    v2
-      ? v2.countries.map(item => item.name)
-      : distinct(props.cellar.wines.map(wine => wine.country))
+    props.cellar.countries.map(item => item.name)
   );
 
-/*
-  Version 2 : régions du pays saisi, aucune pour un pays
-  nouveau ou vide. Version 1 : régions du pays saisi s'il
-  est connu, sinon toutes.
-*/
+/* Régions du pays saisi, aucune pour un pays nouveau ou vide. */
 const regionSuggestions =
   computed(() => {
-    if (v2) {
-      const countryId =
-        matchedCountry.value?.id;
+    const countryId =
+      matchedCountry.value?.id;
 
-      return countryId === undefined
-        ? []
-        : v2.regions
-            .filter(item => item.countryId === countryId)
-            .map(item => item.name);
-    }
-
-    const typed =
-      country.value.trim().toLowerCase();
-
-    const wines =
-      props.cellar.wines.filter(
-        wine => wine.country?.toLowerCase() === typed
-      );
-
-    return distinct(
-      (wines.length ? wines : props.cellar.wines).map(wine => wine.region)
-    );
+    return countryId === undefined
+      ? []
+      : props.cellar.regions
+          .filter(item => item.countryId === countryId)
+          .map(item => item.name);
   });
 
 const winerySuggestions =
   computed(() =>
-    v2
-      ? v2.wineries.map(item => item.name)
-      : distinct(props.cellar.wines.map(wine => wine.winery))
+    props.cellar.wineries.map(item => item.name)
   );
 
 const nameSuggestions =
@@ -293,7 +257,7 @@ watch(
 );
 
 /* =========================
-   Création : photo (version 2)
+   Création : photo
 ========================= */
 
 const photoDraft =
@@ -308,7 +272,7 @@ const photoSource =
     const typed =
       fold(name.value);
 
-    if (!isNew || !v2 || !typed) {
+    if (!isNew || !typed) {
       return null;
     }
 
@@ -483,10 +447,10 @@ const errors =
       !props.cellar.locations.some(location => location.id === locationId.value)
         ? "Unknown location."
         : "",
-      v2 && region.value.trim() && !country.value.trim()
+      region.value.trim() && !country.value.trim()
         ? "Region: enter its country first."
         : "",
-      v2 && !v2.bottleSizes.some(size => size.id === bottleSizeId.value)
+      !props.cellar.bottleSizes.some(size => size.id === bottleSizeId.value)
         ? "Choose a bottle size."
         : "",
       locationLevel.value !== null && !levelOptions.value.includes(locationLevel.value)
@@ -496,7 +460,7 @@ const errors =
   );
 
 /* =========================
-   Références (version 2)
+   Références
 ========================= */
 
 function reference(
@@ -527,7 +491,7 @@ function regionReference(): WineReference | null {
     region.value,
     countryId === undefined
       ? []
-      : v2?.regions.filter(item => item.countryId === countryId) ?? []
+      : props.cellar.regions.filter(item => item.countryId === countryId)
   );
 }
 
@@ -535,34 +499,15 @@ function regionReference(): WineReference | null {
    Envoi
 ========================= */
 
-const payloadV1 =
+const payload =
   computed<WineSave>(() => ({
     wineId: props.wine?.id ?? null,
     name: name.value.trim(),
     vintage: parseYear(vintage.value),
-    country: optionalText(country.value),
-    region: optionalText(region.value),
-    color: color.value || null,
-    winery: optionalText(winery.value),
-    locationId: locationId.value,
-    priceChf: parsePrice(price.value),
-    favorite: favorite.value,
-    drinkBefore: parseYear(drinkBefore.value),
-    holdUntil: parseYear(holdUntil.value),
-    purchasedAt: purchasedAt.value || null,
-    comments: optionalText(comments.value),
-    quantity: isNew ? Number(quantity.value.trim()) : props.wine?.quantity ?? 0,
-  }));
-
-const payloadV2 =
-  computed<WineSaveV2>(() => ({
-    wineId: props.wine?.id ?? null,
-    name: name.value.trim(),
-    vintage: parseYear(vintage.value),
-    country: reference(country.value, v2?.countries ?? []),
+    country: reference(country.value, props.cellar.countries),
     region: regionReference(),
     color: color.value || null,
-    winery: reference(winery.value, v2?.wineries ?? []),
+    winery: reference(winery.value, props.cellar.wineries),
     bottleSizeId: bottleSizeId.value ?? 0,
     locationId: locationId.value,
     locationLevel: locationId.value === null ? null : locationLevel.value,
@@ -574,11 +519,6 @@ const payloadV2 =
     comments: optionalText(comments.value),
     quantity: isNew ? Number(quantity.value.trim()) : props.wine?.quantity ?? 0,
   }));
-
-const payload =
-  computed(() =>
-    v2 ? payloadV2.value : payloadV1.value
-  );
 
 const initialPayload =
   JSON.stringify(payload.value);
@@ -608,14 +548,10 @@ function save() {
     return;
   }
 
-  if (v2) {
-    props.events.saveWineV2({
-      ...payloadV2.value,
-      photo: isNew ? photoPayload() : undefined,
-    });
-  } else {
-    props.events.saveWine(payloadV1.value);
-  }
+  props.events.saveWine({
+    ...payload.value,
+    photo: isNew ? photoPayload() : undefined,
+  });
 
   emit("close");
 }
@@ -781,15 +717,12 @@ onBeforeUnmount(() => {
         </select>
       </label>
 
-      <label
-        v-if="v2"
-        class="field"
-      >
+      <label class="field">
         <span class="field-label">Bottle size</span>
 
         <select v-model="bottleSizeId">
           <option
-            v-for="size in v2.bottleSizes"
+            v-for="size in cellar.bottleSizes"
             :key="size.id"
             :value="size.id"
           >
@@ -839,7 +772,7 @@ onBeforeUnmount(() => {
             :key="location.id"
             :value="location.id"
           >
-            {{ location.label }}
+            {{ location.name }}
           </option>
         </select>
       </label>
@@ -932,7 +865,7 @@ onBeforeUnmount(() => {
       </label>
 
       <div
-        v-if="isNew && v2"
+        v-if="isNew"
         class="field full"
       >
         <span class="field-label">Photo</span>

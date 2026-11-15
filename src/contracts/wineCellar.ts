@@ -11,31 +11,14 @@ import {
    Cave à vins
 
    Contrat complet : ../Backend/docs/wine-cellar-contract.md
-   (§ 2 format, § 7 côté PWA, § 8 transition). Capacité
+   (§ 2 format, § 7 côté PWA). Capacité
    wineCellar (contrat multi-environnements § 3.4).
 
-   wine/cellar.json (exportWineCellar, republié après chaque
-   événement WIN et par le housekeeping), deux versions lues
-   tant que le backend n'a pas basculé (§ 8) :
-
-   Version 1 (W1 à W4) :
-     { "version": 1, "generatedAt": "…",
-       "locations": [ { "id": 7, "shelf": "EC", "level": "6",
-                        "label": "EC6" } ],
-       "wines": [ { "id": 12, "name": "…", "vintage": 1989,
-                    "country": "France", "region": "Pauillac",
-                    "color": "Red", "winery": null,
-                    "quantity": 1, "locationId": 7,
-                    "priceChf": 100.0, "favorite": false,
-                    "drinkBefore": 2010, "holdUntil": null,
-                    "purchasedAt": null, "comments": "…",
-                    "photo": null, "updatedAt": "…",
-                    "tastings": [ { "id": 31, "date": "2016-12",
-                                    "note": "…" } ] } ] }
-
-   Version 2 (W6) : listes de référence complètes (éléments
-   inutilisés compris) et identifiants dans les vins, qui
-   gardent les libellés résolus :
+   wine/cellar.json (exportWineCellar, version 2, republié
+   après chaque événement WIN et par le housekeeping) :
+   listes de référence complètes (éléments inutilisés
+   compris) et identifiants dans les vins, qui gardent les
+   libellés résolus :
      { "version": 2, "generatedAt": "…",
        "countries":   [ { "id": 1, "name": "France" } ],
        "regions":     [ { "id": 9, "countryId": 1,
@@ -45,12 +28,22 @@ import {
                           "factor": 1, "sortOrder": 10 } ],
        "locations":   [ { "id": 3, "name": "EC",
                           "levelCount": 7 } ],
-       "wines": [ { …version 1, "countryId": 1,
-                    "regionId": 9, "wineryId": null,
-                    "bottleSizeId": 1,
+       "wines": [ { "id": 12, "name": "…", "vintage": 1989,
+                    "country": "France", "countryId": 1,
+                    "region": "Pauillac", "regionId": 9,
+                    "color": "Red", "winery": null,
+                    "wineryId": null, "bottleSizeId": 1,
                     "bottleSize": "Bottle 75 cl",
+                    "quantity": 1, "locationId": 3,
                     "location": "EC", "locationLevel": 6,
-                    "locationLabel": "EC6" } ] }
+                    "locationLabel": "EC6",
+                    "priceChf": 100.0, "favorite": false,
+                    "drinkBefore": 2010, "holdUntil": null,
+                    "purchasedAt": null, "comments": "…",
+                    "photo": "wine/Etiquettes/w12.jpg",
+                    "updatedAt": "…",
+                    "tastings": [ { "id": 31, "date": "2016-12",
+                                    "note": "…" } ] } ] }
    Un emplacement y est un meuble nommé, avec un nombre
    d'étages facultatif (1 en haut) ; l'étage est dans le vin.
 
@@ -60,9 +53,8 @@ import {
    (AAAA, AAAA-MM, AAAA-xx), gardées telles quelles.
 
    Valeur absente ou invalide : null ; favorite : false ;
-   listes : []. Champs propres à la version 2 : null en
-   version 1, sauf locationLabel, repris du libellé de
-   l'emplacement.
+   listes : []. La version 1 (avant W6) n'est plus produite
+   par le backend : refusée.
 ========================= */
 
 export const WINE_CELLAR_FOLDER = "wine";
@@ -78,20 +70,9 @@ export const WINE_COLORS = [
   "Dessert",
 ] as const;
 
-/* Partie commune des emplacements des deux versions. */
-export interface WineLocationBase {
+/* Meuble nommé, étages facultatifs (1 en haut). */
+export interface WineLocation {
   id: number;
-  label: string;
-}
-
-/* Version 1 : un emplacement par étagère et étage. */
-export interface WineLocationV1 extends WineLocationBase {
-  shelf: string;
-  level: string | null;
-}
-
-/* Version 2 : meuble nommé, étages facultatifs (label = name). */
-export interface WineLocation extends WineLocationBase {
   name: string;
   levelCount: number | null;
 }
@@ -145,10 +126,9 @@ export interface Wine {
   updatedAt: string | null;
   tastings: WineTasting[];
 
-  /* Libellé affiché de l'emplacement (avec l'étage en version 2). */
+  /* Libellé affiché de l'emplacement, avec l'étage. */
   locationLabel: string | null;
 
-  /* Version 2 seulement (null en version 1). */
   countryId: number | null;
   regionId: number | null;
   wineryId: number | null;
@@ -158,28 +138,15 @@ export interface Wine {
   locationLevel: number | null;
 }
 
-interface WineCellarBase {
+export interface WineCellar {
   generatedAt: string | null;
-  wines: Wine[];
-}
-
-export interface WineCellarV1 extends WineCellarBase {
-  version: 1;
-  locations: WineLocationV1[];
-}
-
-export interface WineCellarV2 extends WineCellarBase {
-  version: 2;
   locations: WineLocation[];
   countries: WineCountry[];
   regions: WineRegion[];
   wineries: Winery[];
   bottleSizes: WineBottleSize[];
+  wines: Wine[];
 }
-
-export type WineCellarData =
-  | WineCellarV1
-  | WineCellarV2;
 
 /* Éléments d'une liste, ceux sans identifiant entier ignorés. */
 function items<T>(
@@ -229,7 +196,7 @@ function asId(
     : null;
 }
 
-/* Élément nommé d'une liste de référence (version 2). */
+/* Élément nommé d'une liste de référence. */
 function readNamed(
   item: JsonObject
 ): { id: number; name: string } | null {
@@ -241,27 +208,6 @@ function readNamed(
     : { id, name: asString(item.name) };
 }
 
-function readLocationV1(
-  location: JsonObject
-): WineLocationV1 | null {
-  const id =
-    asId(location.id);
-
-  if (id === null) {
-    return null;
-  }
-
-  const shelf =
-    asString(location.shelf);
-
-  return {
-    id,
-    shelf,
-    level: asNullableText(location.level),
-    label: asNullableText(location.label) ?? shelf,
-  };
-}
-
 function readLocation(
   location: JsonObject
 ): WineLocation | null {
@@ -270,7 +216,6 @@ function readLocation(
 
   return named && {
     ...named,
-    label: named.name,
     levelCount: asId(location.levelCount),
   };
 }
@@ -315,13 +260,8 @@ function readTasting(
       };
 }
 
-/*
-  locationLabel de la version 1 : libellé de l'emplacement
-  (identifiant entre crochets s'il est inconnu).
-*/
 function readWine(
-  wine: JsonObject,
-  v1Labels: Map<number, string> | null
+  wine: JsonObject
 ): Wine | null {
   const id =
     asId(wine.id);
@@ -329,16 +269,6 @@ function readWine(
   if (id === null) {
     return null;
   }
-
-  const locationId =
-    asId(wine.locationId);
-
-  const locationLabel =
-    v1Labels
-      ? locationId === null
-        ? null
-        : v1Labels.get(locationId) ?? `#${locationId}`
-      : asNullableText(wine.locationLabel);
 
   return {
     id,
@@ -349,7 +279,7 @@ function readWine(
     color: asNullableText(wine.color),
     winery: asNullableText(wine.winery),
     quantity: Math.max(0, asNumber(wine.quantity)),
-    locationId,
+    locationId: asId(wine.locationId),
     priceChf: asNullableNumber(wine.priceChf),
     favorite: wine.favorite === true,
     drinkBefore: asNullableNumber(wine.drinkBefore),
@@ -360,30 +290,26 @@ function readWine(
     updatedAt: asNullableText(wine.updatedAt),
     tastings: items(wine.tastings, readTasting),
 
-    locationLabel,
-
-    countryId: v1Labels ? null : asId(wine.countryId),
-    regionId: v1Labels ? null : asId(wine.regionId),
-    wineryId: v1Labels ? null : asId(wine.wineryId),
-    bottleSizeId: v1Labels ? null : asId(wine.bottleSizeId),
-    bottleSize: v1Labels ? null : asNullableText(wine.bottleSize),
-    location: v1Labels ? null : asNullableText(wine.location),
-    locationLevel: v1Labels ? null : asId(wine.locationLevel),
+    locationLabel: asNullableText(wine.locationLabel),
+    countryId: asId(wine.countryId),
+    regionId: asId(wine.regionId),
+    wineryId: asId(wine.wineryId),
+    bottleSizeId: asId(wine.bottleSizeId),
+    bottleSize: asNullableText(wine.bottleSize),
+    location: asNullableText(wine.location),
+    locationLevel: asId(wine.locationLevel),
   };
 }
 
 export function readWineCellar(
   raw: unknown
-): WineCellarData {
+): WineCellar {
   const file =
     asObject(raw);
 
-  const version =
-    file ? asNumber(file.version) : 0;
-
   if (
     !file ||
-    (version !== 1 && version !== 2) ||
+    asNumber(file.version) !== 2 ||
     !Array.isArray(file.wines)
   ) {
     throw new ContractError(
@@ -392,33 +318,14 @@ export function readWineCellar(
     );
   }
 
-  const generatedAt =
-    asNullableText(file.generatedAt);
-
-  if (version === 1) {
-    const locations =
-      items(file.locations, readLocationV1);
-
-    const labels =
-      new Map(locations.map(location => [location.id, location.label]));
-
-    return {
-      version,
-      generatedAt,
-      locations,
-      wines: items(file.wines, wine => readWine(wine, labels)),
-    };
-  }
-
   return {
-    version,
-    generatedAt,
+    generatedAt: asNullableText(file.generatedAt),
     locations: items(file.locations, readLocation),
     countries: items(file.countries, readNamed),
     regions: items(file.regions, readRegion),
     wineries: items(file.wineries, readNamed),
     bottleSizes: items(file.bottleSizes, readBottleSize),
-    wines: items(file.wines, wine => readWine(wine, null)),
+    wines: items(file.wines, readWine),
   };
 }
 
@@ -426,11 +333,11 @@ export function readWineCellar(
    Événements émis par la PWA (§ 3)
 
    events/PWA-WIN_<AAAAMMJJHHMMSS>_W<WineID ou NEW>.json
-   (vins, stock, dégustations) et
-   events/PWA-WIN_<AAAAMMJJHHMMSS>_L<LocationID ou NEW>.json
-   (emplacements). { eventType, version: 1, timestamp,
-   payload: { …, source } } ; statut écrit par
-   processEvent_WIN, message affiché tel quel.
+   (vins, stock, dégustations, photos) et suffixe
+   <C|G|P|L|B><id ou NEW> pour les données de base.
+   { eventType, version, timestamp, payload: { …, source } } ;
+   version 1, sauf WINE_SAVED en version 2 ; statut écrit
+   par processEvent_WIN, message affiché tel quel.
 ========================= */
 
 export const WINE_EVENT_TRIGRAM = "WIN";
@@ -445,61 +352,28 @@ export type WineEventType =
   | "WINE_DELETED"
   | "WINE_PHOTO_SAVED"
   | "WINE_PHOTO_DELETED"
-  | "WINE_LOCATION_SAVED"
-  | "WINE_LOCATION_DELETED"
   | "WINE_REFERENCE_SAVED"
   | "WINE_REFERENCE_DELETED";
 
 /*
-  WINE_SAVED : payload { wineId, name, vintage, country,
-  region, color, winery, locationId, priceChf, favorite,
-  drinkBefore, holdUntil, purchasedAt, comments, quantity,
-  source }. wineId null : création, quantity = stock
-  initial ; modification : tous les champs remplacés,
-  quantity ignoré. Refus : nom vide ou de plus de 100
+  WINE_SAVED, version 2 : payload { wineId, name, vintage,
+  country, region, color, winery, bottleSizeId, locationId,
+  locationLevel, priceChf, favorite, drinkBefore, holdUntil,
+  purchasedAt, comments, quantity, photo?, source }.
+  wineId null : création, quantity = stock initial ;
+  modification : tous les champs remplacés, quantity ignoré.
+  country, region et winery sont des références : { id }
+  pour un élément existant, { id: null, name } pour un nom
+  saisi (réutilisé s'il existe au sens de la collation,
+  sinon créé avec le vin ; région cherchée dans le pays du
+  vin), null sans valeur. Refus : nom vide ou de plus de 100
   caractères, années hors de 1900–2100, couleur hors de
-  WINE_COLORS, emplacement inconnu, prix négatif, date
-  d'achat invalide, quantity négative, vin inconnu.
-  Longueurs des colonnes (§ 1) : pays et région 50,
-  producteur 100.
-*/
-export const WINE_NAME_MAX_LENGTH = 100;
-export const WINE_COUNTRY_MAX_LENGTH = 50;
-export const WINE_REGION_MAX_LENGTH = 50;
-export const WINE_WINERY_MAX_LENGTH = 100;
-export const WINE_YEAR_MIN = 1900;
-export const WINE_YEAR_MAX = 2100;
-
-/* Version 1 de WINE_SAVED : pays, région et producteur en texte. */
-export interface WineSave {
-  wineId: number | null;
-  name: string;
-  vintage: number | null;
-  country: string | null;
-  region: string | null;
-  color: string | null;
-  winery: string | null;
-  locationId: number | null;
-  priceChf: number | null;
-  favorite: boolean;
-  drinkBefore: number | null;
-  holdUntil: number | null;
-  purchasedAt: string | null;
-  comments: string | null;
-  quantity: number;
-}
-
-/*
-  WINE_SAVED version 2 (cellar.json version 2) : country,
-  region et winery deviennent des références, bottleSizeId
-  (obligatoire) et locationLevel s'ajoutent. Référence :
-  { id } pour un élément existant, { id: null, name } pour
-  un nom saisi (réutilisé s'il existe au sens de la
-  collation, sinon créé avec le vin ; région cherchée dans
-  le pays du vin), null sans valeur. Refus supplémentaires :
-  région sans pays ou d'un autre pays, nom de plus de 50
-  caractères (100 pour un producteur), taille inconnue,
-  étage sans emplacement ou hors de ses levelCount étages.
+  WINE_COLORS, emplacement ou taille inconnus, prix négatif,
+  date d'achat invalide, quantity négative, vin inconnu,
+  région sans pays ou d'un autre pays, nom de référence de
+  plus de 50 caractères (100 pour un producteur), étage sans
+  emplacement ou hors de ses levelCount étages. La version 1
+  est refusée par le Mac depuis W6.
 
   photo (facultatif, W7) : { copyFrom: <WineID> } (héritage,
   copie de la photo de ce vin) ou { image } (nouvelle image,
@@ -509,13 +383,20 @@ export interface WineSave {
   sans photo n'est pas un refus (fiche enregistrée sans
   photo, statut qui le dit).
 */
-export const WINE_SAVED_VERSION_2 = 2;
+export const WINE_NAME_MAX_LENGTH = 100;
+export const WINE_COUNTRY_MAX_LENGTH = 50;
+export const WINE_REGION_MAX_LENGTH = 50;
+export const WINE_WINERY_MAX_LENGTH = 100;
+export const WINE_YEAR_MIN = 1900;
+export const WINE_YEAR_MAX = 2100;
+
+export const WINE_SAVED_VERSION = 2;
 
 export type WineReference =
   | { id: number }
   | { id: null; name: string };
 
-export interface WineSaveV2 {
+export interface WineSave {
   wineId: number | null;
   name: string;
   vintage: number | null;
@@ -611,46 +492,8 @@ export interface WineTastingSave {
 }
 
 /*
-  WINE_LOCATION_SAVED : payload { locationId, shelf, level,
-  source } ; locationId null : création. Refus : étagère
-  vide ou de plus de 50 caractères, étage de plus de 20,
-  couple (shelf, level) déjà utilisé (casse, accents et
-  espaces de fin ignorés ; deux emplacements sans étage ne
-  partagent pas une étagère).
-  WINE_LOCATION_DELETED : payload { locationId, source } ;
-  refus si un vin s'y trouve (en stock ou bu).
-*/
-export const LOCATION_SHELF_MAX_LENGTH = 50;
-export const LOCATION_LEVEL_MAX_LENGTH = 20;
-
-export interface WineLocationSave {
-  locationId: number | null;
-  shelf: string;
-  level: string | null;
-}
-
-/*
-  Libellé calculé par le backend (§ 1), pour l'aperçu :
-  <Shelf><Level> si l'étagère est faite de lettres et
-  l'étage commence par un chiffre (EC6), <Shelf> (<Level>)
-  sinon, <Shelf> sans étage.
-*/
-export function locationLabel(
-  shelf: string,
-  level: string | null
-): string {
-  if (!level) {
-    return shelf;
-  }
-
-  return /^\p{L}+$/u.test(shelf) && /^\d/.test(level)
-    ? `${shelf}${level}`
-    : `${shelf} (${level})`;
-}
-
-/*
-  Données de base (cellar.json version 2, section « Wine »
-  de Master data) : payload.kind désigne la table.
+  Données de base (section « Wine » de Master data) :
+  payload.kind désigne la table.
   - WINE_REFERENCE_SAVED { kind, id, name, … } ; id null :
     création. countryId (région), levelCount 1–99 ou null
     (emplacement), factor > 0 et sortOrder 0–999 (taille).
@@ -723,9 +566,3 @@ export function wineEventSuffix(
   return `W${wineId ?? "NEW"}`;
 }
 
-/* Suffixe du nom de fichier d'un événement d'emplacement (null : création). */
-export function locationEventSuffix(
-  locationId: number | null
-): string {
-  return `L${locationId ?? "NEW"}`;
-}

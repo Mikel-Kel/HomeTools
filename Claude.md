@@ -146,16 +146,15 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   (exports `indicators/indicators.json` et `values-<famille>.json`, événements `PWA-IND_…`).
 
 - Cave à vins (page « Wine cellar », capacité `wineCellar`) : contrat d'échange dans `../Backend/docs/wine-cellar-contract.md`
-  (export `wine/cellar.json`, lecteur `src/contracts/wineCellar.ts`, versions 1 et 2 lues tant que le backend n'a pas
-  basculé, § 8). Liste `WineCellarView.vue`, composants dans `src/components/wineCellar/` ; saisies par événements
-  `PWA-WIN_…_<W|L|C|G|P|B><id ou NEW>.json`, toutes émises par `useWineEvents` (`src/composables/wineCellar/`), « Pending »
+  (export `wine/cellar.json` en version 2 seulement, lecteur `src/contracts/wineCellar.ts`). Liste `WineCellarView.vue`, composants dans `src/components/wineCellar/` ; saisies par événements
+  `PWA-WIN_…_<W|C|G|P|L|B><id ou NEW>.json` (`WINE_SAVED` en version 2), toutes émises par `useWineEvents` (`src/composables/wineCellar/`), « Pending »
   déduit des événements en attente dans `events/`. Données de base (pays, régions, producteurs, emplacements, tailles) :
-  section « Wine » de Master data (`WineSection.vue`), « Waiting for backend update » en version 1. Photos des étiquettes
+  section « Wine » de Master data (`WineSection.vue`). Photos des étiquettes
   (§ 5, champ `photo` = clé dans le magasin `data`) : lues par `loadFileFromPath` (`driveAdapter.ts`, binaire, deux
   backends), cache mémoire de session `useWinePhoto` ; vignettes de la liste chargées à l'approche de l'écran.
   Gestion depuis la PWA (W7) : image préparée par `prepareWineImage` (`src/services/wineCellar/`, JPEG redessiné dans
   le bon sens, 1600 px et 1 Mo au plus), envoyée en base64 dans `WINE_PHOTO_SAVED` / `WINE_PHOTO_DELETED` (fiche) ou
-  dans `photo` de `WINE_SAVED` version 2 (création, héritage par `copyFrom`) ; nouvelle image = nouvelle clé.
+  dans `photo` de `WINE_SAVED` (création, héritage par `copyFrom`) ; nouvelle image = nouvelle clé.
 
 ## Points ouverts connus
 
