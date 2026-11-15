@@ -9,6 +9,7 @@ import {
 
 import PillButton from "@/components/ui/PillButton.vue";
 import SuggestInput from "@/components/ui/SuggestInput.vue";
+import WinePhoto from "@/components/wineCellar/WinePhoto.vue";
 
 import {
   WINE_COLORS,
@@ -20,12 +21,14 @@ import {
   WINE_YEAR_MIN,
   type Wine,
   type WineCellarData,
+  type WinePhotoSave,
   type WineReference,
   type WineSave,
   type WineSaveV2,
 } from "@/contracts/wineCellar";
 
 import type { WineEvents } from "@/composables/wineCellar/useWineEvents";
+import { useWinePhotoDraft } from "@/composables/wineCellar/useWinePhotoDraft";
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
@@ -62,7 +65,12 @@ import {
    comme références ({ id } si le nom existe, au sens de la
    collation ; { id: null, name } sinon) ; taille obligatoire
    (bouteille de 75 cl par défaut) ; étage parmi les
-   levelCount étages de l'emplacement (1 en haut). Version 1 :
+   levelCount étages de l'emplacement (1 en haut).
+   Photo à la création (W7, § 3) : par défaut, celle du
+   dernier millésime du même nom qui en a une (copyFrom),
+   remplaçable par une image choisie (préparée, envoyée dans
+   photo.image) ou retirée (« No photo »). La photo d'un vin
+   existant se gère dans sa fiche. Version 1 :
    fiche de W4, pays, région et producteur en texte.
 
    La fiche se ferme à l'envoi : suivi (« Pending », statut)
@@ -285,6 +293,80 @@ watch(
 );
 
 /* =========================
+   Création : photo (version 2)
+========================= */
+
+const photoDraft =
+  useWinePhotoDraft();
+
+const photoInput =
+  ref<HTMLInputElement | null>(null);
+
+/* Héritage : dernier millésime du même nom (vin bu ou non) qui a une photo. */
+const photoSource =
+  computed(() => {
+    const typed =
+      fold(name.value);
+
+    if (!isNew || !v2 || !typed) {
+      return null;
+    }
+
+    return props.cellar.wines
+      .filter(wine => wine.photo && fold(wine.name) === typed)
+      .sort(
+        (a, b) =>
+          (b.vintage ?? -Infinity) - (a.vintage ?? -Infinity) ||
+          b.id - a.id
+      )[0] ?? null;
+  });
+
+/* false : « No photo » choisi, l'héritage n'est pas repris. */
+const inheritPhoto =
+  ref(true);
+
+const inheritedFrom =
+  computed(() =>
+    !photoDraft.draft.value && inheritPhoto.value
+      ? photoSource.value
+      : null
+  );
+
+function wineLabel(
+  wine: Wine
+): string {
+  return wine.vintage ? `${wine.name} ${wine.vintage}` : wine.name;
+}
+
+function choosePhoto() {
+  photoInput.value?.click();
+}
+
+function noPhoto() {
+  photoDraft.clear();
+  inheritPhoto.value = false;
+}
+
+function useInheritedPhoto() {
+  photoDraft.clear();
+  inheritPhoto.value = true;
+}
+
+/* Champ photo de WINE_SAVED, ajouté à l'envoi (image trop lourde pour la détection des changements). */
+function photoPayload(): WinePhotoSave | undefined {
+  const draft =
+    photoDraft.draft.value;
+
+  if (draft) {
+    return { image: draft.image };
+  }
+
+  return inheritedFrom.value
+    ? { copyFrom: inheritedFrom.value.id }
+    : undefined;
+}
+
+/* =========================
    Contrôles
 ========================= */
 
@@ -503,7 +585,8 @@ const initialPayload =
 
 const changed =
   computed(() =>
-    JSON.stringify(payload.value) !== initialPayload
+    JSON.stringify(payload.value) !== initialPayload ||
+    photoDraft.draft.value !== null
   );
 
 /* Modification de ce vin encore en attente (ici ou sur un autre appareil). */
@@ -516,7 +599,8 @@ const canSave =
   computed(() =>
     changed.value &&
     !errors.value.length &&
-    !pending.value
+    !pending.value &&
+    !photoDraft.preparing.value
   );
 
 function save() {
@@ -525,7 +609,10 @@ function save() {
   }
 
   if (v2) {
-    props.events.saveWineV2(payloadV2.value);
+    props.events.saveWineV2({
+      ...payloadV2.value,
+      photo: isNew ? photoPayload() : undefined,
+    });
   } else {
     props.events.saveWine(payloadV1.value);
   }
@@ -844,6 +931,83 @@ onBeforeUnmount(() => {
         ★ Favorite
       </label>
 
+      <div
+        v-if="isNew && v2"
+        class="field full"
+      >
+        <span class="field-label">Photo</span>
+
+        <div class="photo-field">
+          <img
+            v-if="photoDraft.draft.value"
+            class="photo-preview"
+            :src="photoDraft.draft.value.previewUrl"
+            alt="New label"
+            draggable="false"
+          />
+
+          <WinePhoto
+            v-else
+            :photo-key="inheritedFrom?.photo ?? null"
+            size="thumb"
+            class="edit-photo"
+          />
+
+          <div class="photo-side">
+            <span class="photo-text">
+              {{
+                photoDraft.preparing.value
+                  ? "Preparing the image…"
+                  : photoDraft.draft.value
+                    ? "New photo"
+                    : inheritedFrom
+                      ? `Photo of ${wineLabel(inheritedFrom)}`
+                      : "No photo"
+              }}
+            </span>
+
+            <div class="photo-actions">
+              <PillButton
+                :disabled="photoDraft.preparing.value"
+                @click="choosePhoto"
+              >
+                {{ photoDraft.draft.value || inheritedFrom ? "Choose another…" : "Add photo…" }}
+              </PillButton>
+
+              <PillButton
+                v-if="photoDraft.draft.value || inheritedFrom"
+                @click="noPhoto"
+              >
+                No photo
+              </PillButton>
+
+              <PillButton
+                v-if="photoSource && !inheritedFrom"
+                :disabled="photoDraft.preparing.value"
+                @click="useInheritedPhoto"
+              >
+                Use photo of {{ wineLabel(photoSource) }}
+              </PillButton>
+            </div>
+
+            <span
+              v-if="photoDraft.error.value"
+              class="photo-error"
+            >
+              {{ photoDraft.error.value }}
+            </span>
+          </div>
+
+          <input
+            ref="photoInput"
+            class="photo-input"
+            type="file"
+            accept="image/*"
+            @change="photoDraft.onFileInput"
+          />
+        </div>
+      </div>
+
       <label class="field full">
         <span class="field-label">Comments</span>
 
@@ -905,6 +1069,64 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* =========================
+   Photo (création)
+========================= */
+
+.photo-field {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Préfixe .photo-field : l'emporte sur la taille de la vignette de WinePhoto. */
+.photo-field .photo-preview,
+.photo-field .edit-photo {
+  flex-shrink: 0;
+
+  width: 72px;
+  height: 72px;
+  box-sizing: border-box;
+
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  background: var(--bg-soft);
+
+  object-fit: contain;
+}
+
+.photo-field .edit-photo :deep(img) {
+  object-fit: contain;
+}
+
+.photo-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.photo-text {
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.photo-error {
+  color: var(--negative);
+  font-size: var(--font-size-sm);
+}
+
+.photo-input {
+  display: none;
+}
+
 .overlay {
   position: fixed;
   inset: 0;

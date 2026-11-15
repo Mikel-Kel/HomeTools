@@ -152,8 +152,10 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   déduit des événements en attente dans `events/`. Données de base (pays, régions, producteurs, emplacements, tailles) :
   section « Wine » de Master data (`WineSection.vue`), « Waiting for backend update » en version 1. Photos des étiquettes
   (§ 5, champ `photo` = clé dans le magasin `data`) : lues par `loadFileFromPath` (`driveAdapter.ts`, binaire, deux
-  backends), cache mémoire de session `useWinePhoto` ; vignettes de la liste chargées à l'approche de l'écran. Ajout
-  d'une photo depuis la PWA : pas encore défini.
+  backends), cache mémoire de session `useWinePhoto` ; vignettes de la liste chargées à l'approche de l'écran.
+  Gestion depuis la PWA (W7) : image préparée par `prepareWineImage` (`src/services/wineCellar/`, JPEG redessiné dans
+  le bon sens, 1600 px et 1 Mo au plus), envoyée en base64 dans `WINE_PHOTO_SAVED` / `WINE_PHOTO_DELETED` (fiche) ou
+  dans `photo` de `WINE_SAVED` version 2 (création, héritage par `copyFrom`) ; nouvelle image = nouvelle clé.
 
 ## Points ouverts connus
 
