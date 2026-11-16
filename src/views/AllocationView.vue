@@ -12,6 +12,7 @@ import PageHeader from "@/components/PageHeader.vue";
 import AppIcon from "@/components/AppIcon.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
 import DateChip from "@/components/DateChip.vue";
+import StatusPill from "@/components/ui/StatusPill.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 
@@ -29,6 +30,10 @@ import { formatAmount } from "@/utils/amountFormat";
 import type {
   SpendingRecord,
 } from "@/composables/spending/useSpending";
+
+import type {
+  AllocationSuggestion,
+} from "@/contracts/spending";
 
 /* =========================
    Router / Props
@@ -433,14 +438,21 @@ onMounted(async () => {
     allocation.value.allocations.value.length === 0 &&
     record.value
   ) {
-    allocation.value.categoryID.value =
-      record.value.categoryID;
+    const [principal] =
+      record.value.suggestions;
 
-    allocation.value.subCategoryID.value =
-      record.value.subCategoryID;
+    if (principal) {
+      applySuggestion(principal);
+    } else {
+      allocation.value.categoryID.value =
+        record.value.categoryID;
 
-    allocation.value.comment.value =
-      record.value.allocComment ?? "";
+      allocation.value.subCategoryID.value =
+        record.value.subCategoryID;
+
+      allocation.value.comment.value =
+        record.value.allocComment ?? "";
+    }
   }
 
   await resetAmountToRemaining();
@@ -628,6 +640,159 @@ function tagLabel(
       ?.tagName ??
     ""
   );
+}
+
+/* =========================
+   Suggestions
+
+   Candidats de spending.json (contrat des règles
+   d'allocation, § 12 et § 19), la suggestion principale
+   en premier, appliquée à l'ouverture d'un mouvement sans
+   draft. Source affichée discrètement sous le
+   commentaire, entre parenthèses ; « Other
+   suggestions » : les autres candidats, un appui remplit
+   partie, catégorie, sous-catégorie, commentaire, tag et
+   date d'allocation. Proposés tant qu'aucune allocation
+   n'est enregistrée (la partie vaut pour tout le draft).
+   Mouvement sans candidats : comportement d'avant
+   (catégorie, sous-catégorie et commentaire suggérés).
+========================= */
+
+const appliedSuggestion =
+  ref<AllocationSuggestion | null>(null);
+
+function applySuggestion(
+  suggestion: AllocationSuggestion
+) {
+  if (!allocation.value) {
+    return;
+  }
+
+  allocation.value.applySuggestion(
+    suggestion
+  );
+
+  appliedSuggestion.value =
+    suggestion;
+
+  showAllocationDate.value =
+    allocation.value
+      .allocationDate.value !==
+    null;
+}
+
+const showSuggestions =
+  computed(() =>
+    appliedSuggestion.value !== null &&
+    allocations.value.length === 0 &&
+    editingAllocationId.value === null
+  );
+
+const otherSuggestions =
+  computed(() =>
+    recordSafe.value.suggestions?.filter(
+      suggestion =>
+        suggestion !== appliedSuggestion.value
+    ) ?? []
+  );
+
+function sourceLabel(
+  suggestion: AllocationSuggestion
+): string {
+  switch (suggestion.source) {
+    case "rule":
+      return "Rule";
+
+    case "learn-party":
+    case "learn-text":
+      return suggestion.recent === null
+        ? "Learned"
+        : `Learned ${suggestion.recent}/10`;
+
+    case "party":
+      return "Party";
+
+    case "bank":
+      return "Bank";
+  }
+}
+
+function sourceTitle(
+  suggestion: AllocationSuggestion
+): string {
+  switch (suggestion.source) {
+    case "rule":
+      return suggestion.ruleId === null
+        ? "Allocation rule"
+        : `Allocation rule ${suggestion.ruleId}`;
+
+    case "learn-party":
+      return "Learned from the past allocations of this party";
+
+    case "learn-text":
+      return "Learned from the past allocations of similar bank texts";
+
+    case "party":
+      return "Party of the movement, no rule nor history";
+
+    case "bank":
+      return "Party of the bank, no rule nor history";
+  }
+}
+
+/* Source sous le commentaire : « Learned 3/10 · for <partie> ». */
+function sourceText(
+  suggestion: AllocationSuggestion
+): string {
+  return [
+    suggestion.contradicted
+      ? `${sourceLabel(suggestion)}, contradicted by history`
+      : sourceLabel(suggestion),
+    suggestion.allocPartyName
+      ? `for ${suggestion.allocPartyName}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/* Catégorie › sous-catégorie, ou « Party only » pour une règle sans sous-catégorie. */
+function suggestionCategory(
+  suggestion: AllocationSuggestion
+): string {
+  const category =
+    categoryLabel(suggestion.categoryID);
+
+  const subCategory =
+    subCategoryLabel(
+      suggestion.categoryID,
+      suggestion.subCategoryID
+    );
+
+  if (!category) {
+    return "Party only";
+  }
+
+  return subCategory
+    ? `${category} › ${subCategory}`
+    : category;
+}
+
+/* Partie, commentaire, tag et date d'allocation s'il diffère de la date de valeur. */
+function suggestionDetail(
+  suggestion: AllocationSuggestion
+): string {
+  return [
+    suggestion.allocPartyName,
+    suggestion.allocComment,
+    tagLabel(suggestion.tagID),
+    suggestion.allocDate &&
+    suggestion.allocDate !== recordSafe.value.date
+      ? formatDate(suggestion.allocDate, "short")
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 /* =========================
@@ -859,6 +1024,41 @@ function onEditAllocation(
     ========================== -->
 
     <section class="allocation-form">
+      <div
+        v-if="showSuggestions && otherSuggestions.length"
+        class="suggestions"
+      >
+        <div class="suggestion-others">
+          <span class="suggestion-label">Other suggestions</span>
+
+          <button
+            v-for="(suggestion, index) in otherSuggestions"
+            :key="index"
+            type="button"
+            class="suggestion-option"
+            :disabled="isLocked"
+            @click="applySuggestion(suggestion)"
+          >
+            <span class="option-text">
+              <span class="option-category">
+                {{ suggestionCategory(suggestion) }}
+              </span>
+
+              <span class="option-detail">
+                {{ suggestionDetail(suggestion) }}
+              </span>
+            </span>
+
+            <StatusPill
+              :tone="suggestion.contradicted ? 'warning' : 'neutral'"
+              :title="sourceTitle(suggestion)"
+            >
+              {{ sourceLabel(suggestion) }}
+            </StatusPill>
+          </button>
+        </div>
+      </div>
+
       <ChipSelector
         v-model="categoryID"
         label="Category"
@@ -939,6 +1139,8 @@ function onEditAllocation(
       <div class="comment-row">
         <input
           v-model="comment"
+          type="text"
+          autocomplete="off"
           class="field field-long"
           placeholder="(optional comment)"
           :disabled="
@@ -992,6 +1194,14 @@ function onEditAllocation(
           />
         </button>
       </div>
+
+      <p
+        v-if="showSuggestions && appliedSuggestion"
+        class="suggestion-source"
+        :title="sourceTitle(appliedSuggestion)"
+      >
+        ({{ sourceText(appliedSuggestion) }})
+      </p>
     </section>
 
     <div class="allocation-separator"></div>
@@ -1236,6 +1446,83 @@ function onEditAllocation(
 }
 
 /* =========================================================
+   Suggestions
+========================================================= */
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 640px;
+}
+
+.suggestion-label {
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.suggestion-source {
+  margin: -0.4rem 0 0;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+  font-style: italic;
+}
+
+.suggestion-others {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.suggestion-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+
+  padding: 6px 10px;
+
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  background: var(--surface);
+  color: var(--text);
+
+  font: inherit;
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.suggestion-option:hover:not(:disabled) {
+  background: var(--primary-soft);
+}
+
+.suggestion-option:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.option-category {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.option-detail {
+  color: var(--text-soft);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+/* =========================================================
    Allocation form
 ========================================================= */
 
@@ -1251,7 +1538,24 @@ function onEditAllocation(
 
 .field {
   box-sizing: border-box;
+
+  padding: 6px 10px;
+
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+
+  font: inherit;
   font-size: 0.9rem;
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+.field:disabled {
+  opacity: 0.6;
 }
 
 :deep(.allocation-form .chip-selector) {

@@ -11,6 +11,10 @@ import {
   useStorageBackend
 } from "@/composables/useStorageBackend";
 
+import type {
+  AllocationSuggestion
+} from "@/contracts/spending";
+
 import {
   publishS3StoragePullRequest
 } from "@/services/s3/s3StorageAdapter";
@@ -96,6 +100,13 @@ export function useAllocation(
   const amount = ref(Math.abs(spendingAmount));
   const allocationDate = ref<string | null>(null);
   const allocatedTagID = ref<number | null>(null);
+
+  /*
+    Partie de l'allocation (draft) : suggestion principale
+    au départ, celle du candidat choisi, ou celle du draft
+    relu.
+  */
+  const allocPartyID = ref<number | null>(partyID);
 
   /*
     Allocation dont les valeurs ont été reprises dans le
@@ -189,7 +200,7 @@ export function useAllocation(
         processed: false,
         toProcess: isBalanced.value,
         mode:draftMode.value,
-        partyID: partyID ?? null,
+        partyID: allocPartyID.value,
         savedAt: new Date().toISOString(),
         allocations: allocations.value
       }
@@ -283,7 +294,11 @@ export function useAllocation(
               filename
             );
 
-          draftMode.value = raw?.mode; // 🔥 ICI
+          draftMode.value = raw?.mode;
+
+          if (typeof raw?.partyID === "number") {
+            allocPartyID.value = raw.partyID;
+          }
 
           allocations.value =
             Array.isArray(raw?.allocations)
@@ -408,6 +423,25 @@ export function useAllocation(
     allocatedTagID.value = item.allocatedTagID;
   }
 
+  /*
+    Remplit le formulaire avec un candidat (spending.json,
+    suggestions) : partie, catégorie, sous-catégorie,
+    commentaire, tag et date d'allocation ; tout reste
+    modifiable. La partie vaut pour tout le draft.
+  */
+  function applySuggestion(suggestion: AllocationSuggestion) {
+    allocPartyID.value = suggestion.partyID;
+    categoryID.value = suggestion.categoryID;
+    subCategoryID.value = suggestion.subCategoryID;
+    comment.value = suggestion.allocComment;
+    allocatedTagID.value = suggestion.tagID || null;
+    allocationDate.value =
+      suggestion.allocDate &&
+      suggestion.allocDate !== spendingDate
+        ? suggestion.allocDate
+        : null;
+  }
+
   function cancelEdit() {
     editingAllocationId.value = null;
 
@@ -477,6 +511,7 @@ export function useAllocation(
     amount,
     allocationDate,
     allocatedTagID,
+    allocPartyID,
 
     editingAllocationId,
 
@@ -496,6 +531,7 @@ export function useAllocation(
     addAllocation,
     replaceAllocation,
     editAllocation,
+    applySuggestion,
     cancelEdit,
     removeAllocation
   };

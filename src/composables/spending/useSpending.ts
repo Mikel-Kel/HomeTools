@@ -1,5 +1,7 @@
 import { ref } from "vue";
 
+import type { AllocationSuggestion } from "@/contracts/spending";
+
 /* =========================
    Types
 ========================= */
@@ -33,6 +35,12 @@ export interface SpendingRecord {
   subCategoryID: number | null;
   allocComment: string;
   tagID: number | null;
+
+  /* Mois de référence proposé, null s'il est absent. */
+  allocDate: string | null;
+
+  /* Candidats, la suggestion principale en premier ; [] s'ils sont absents. */
+  suggestions: AllocationSuggestion[];
 }
 
 export type AllocationStatus = "none" | "partial" | "draft" | "released";
