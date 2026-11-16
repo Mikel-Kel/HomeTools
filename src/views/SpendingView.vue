@@ -43,6 +43,8 @@ import {
   useRemoteJson,
 } from "@/composables/useRemoteJson";
 
+import { useRememberRequest } from "@/composables/allocations/useRememberRequest";
+
 import {
   readSpending,
   SPENDING_FILE,
@@ -773,6 +775,14 @@ async function openAllocation(
 const CARD24_TIMEOUT_MS =
   5 * 60 * 1000;
 
+/*
+  « Remember » envoyé depuis la page Allocation : demande
+  reprise ici pour afficher le statut du Mac (règle créée,
+  modèle obtenu) ou son refus.
+*/
+const rememberRequest =
+  useRememberRequest();
+
 const card24 =
   useEventRequest({
     trigram: "BAT",
@@ -1329,6 +1339,14 @@ onBeforeUnmount(() => {
     v-else
     class="spending-scroll"
   >
+    <p
+      v-if="rememberRequest.message.value"
+      class="remember-message"
+      :class="rememberRequest.tone.value"
+    >
+      {{ rememberRequest.message.value }}
+    </p>
+
     <!-- Sticky filters -->
 
     <div
@@ -1757,6 +1775,21 @@ onBeforeUnmount(() => {
 }
 
 .loading-state.error {
+  color: var(--negative);
+}
+
+.remember-message {
+  margin: 0.5rem 1rem 0;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.remember-message.completed {
+  color: var(--positive);
+}
+
+.remember-message.error {
   color: var(--negative);
 }
 

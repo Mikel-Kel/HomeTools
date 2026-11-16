@@ -13,6 +13,7 @@ import AppIcon from "@/components/AppIcon.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
 import DateChip from "@/components/DateChip.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
+import PartySheet from "@/components/masterData/PartySheet.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 
@@ -23,6 +24,26 @@ import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
 import { useAmountInput } from "@/composables/useAmountInput";
+import { useRemoteJson } from "@/composables/useRemoteJson";
+import { useParties } from "@/composables/useParties";
+import { useTransferTypes } from "@/composables/useTransferTypes";
+import { useRememberRequest } from "@/composables/allocations/useRememberRequest";
+
+import {
+  ALLOCATION_RULES_FILE,
+  ALLOCATION_RULES_FOLDER,
+  type AllocationRuleKind,
+  type AllocationRuleSave,
+  MATCH_TEXT_MAX_LENGTH,
+  MATCH_TEXT_MIN_LENGTH,
+  readAllocationRules,
+} from "@/contracts/allocationRules";
+
+import {
+  PARTIES_FILE,
+  PARTIES_FOLDER,
+  readParties,
+} from "@/contracts/parties";
 
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount } from "@/utils/amountFormat";
@@ -79,6 +100,12 @@ const tagsStore =
 
 const movementLabel =
   useMovementLabel();
+
+const partiesStore =
+  useParties();
+
+const transferTypesStore =
+  useTransferTypes();
 
 /* =========================
    Record
@@ -455,6 +482,9 @@ onMounted(async () => {
     }
   }
 
+  matchText.value =
+    bankText.value.slice(0, MATCH_TEXT_MAX_LENGTH);
+
   await resetAmountToRemaining();
 });
 
@@ -797,6 +827,274 @@ function suggestionDetail(
 }
 
 /* =========================
+   Remember
+
+   Contrat des règles d'allocation, § 18.1 et § 20. Case
+   proposée pour une allocation sur une seule ligne (montant
+   entier, aucune ligne enregistrée) ; désactivée pour une
+   ventilation. À l'enregistrement de l'allocation, un
+   RULE_SAVED avec fromAllocation part en plus (événements
+   indépendants) : le Mac convertit le commentaire en modèle
+   et calcule le décalage du mois de référence ; son statut
+   s'affiche dans la liste Spending (useRememberRequest).
+
+   - Mouvement avec une partie (non générique) : règle sur
+     cette partie ; partie d'allocation envoyée seulement si
+     elle diffère.
+   - Sans partie, ou partie générique (une règle sur elle
+     viserait tous ses mouvements) : règle sur un texte de la
+     banque, prérempli, à raccourcir (3 à 50 caractères,
+     contenu dans le texte, casse et accents ignorés) ; partie
+     d'allocation obligatoire. En alternative : ajouter ce
+     texte comme alias de la partie d'allocation (PartySheet,
+     PARTY_SAVED existant).
+   - « More… » : seulement pour le type d'opération et / ou
+     le porteur de la carte de ce mouvement.
+   Une règle existante aux mêmes conditions est remplacée
+   (signalé).
+========================= */
+
+const rememberRequest =
+  useRememberRequest();
+
+/* Règles publiées : porteurs connus et règle remplacée. */
+const rulesFile =
+  useRemoteJson({
+    folder: ALLOCATION_RULES_FOLDER,
+    file: ALLOCATION_RULES_FILE,
+    read: readAllocationRules,
+    optional: true,
+  });
+
+const remember =
+  ref(false);
+
+const rememberMore =
+  ref(false);
+
+const onlyTransferType =
+  ref(false);
+
+const onlyHolder =
+  ref(false);
+
+/* Texte de la banque tel quel (accmovement.Description). */
+const bankText =
+  computed(() =>
+    recordSafe.value.bankDescription ?? ""
+  );
+
+const matchText =
+  ref("");
+
+const movementParty =
+  computed(() => {
+    const id =
+      record.value?.movementPartyID ?? null;
+
+    return id === null
+      ? null
+      : partiesStore.getParty(id) ?? null;
+  });
+
+const rememberKind =
+  computed<AllocationRuleKind>(() =>
+    movementParty.value && !movementParty.value.generic
+      ? "party"
+      : "text"
+  );
+
+const allocPartyID =
+  computed(() =>
+    allocation.value?.allocPartyID.value ?? null
+  );
+
+const allocPartyName =
+  computed(() =>
+    allocPartyID.value === null
+      ? ""
+      : partiesStore.getParty(allocPartyID.value)?.label ?? ""
+  );
+
+const transferTypeLabel =
+  computed(() => {
+    const id =
+      record.value?.transferTypeID ?? null;
+
+    return id === null
+      ? ""
+      : transferTypesStore.getTransferType(id)?.label ?? "";
+  });
+
+/* Porteur de la carte, s'il fait partie des porteurs connus des règles. */
+const movementHolder =
+  computed(() => {
+    const owner =
+      record.value?.owner ?? "";
+
+    return owner && owner !== "-" && rulesFile.data.value?.holders.includes(owner)
+      ? owner
+      : "";
+  });
+
+/* Une seule ligne : montant entier, aucune ligne enregistrée ni modifiée. */
+const isSingleLine =
+  computed(() =>
+    allocations.value.length === 0 &&
+    editingAllocationId.value === null &&
+    Number(amount.value.toFixed(2)) ===
+      Number(Math.abs(recordSafe.value.amount ?? 0).toFixed(2))
+  );
+
+function foldText(
+  value: string
+): string {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+}
+
+const matchTextError =
+  computed(() => {
+    if (rememberKind.value !== "text") {
+      return "";
+    }
+
+    const text =
+      matchText.value;
+
+    if (
+      text.length < MATCH_TEXT_MIN_LENGTH ||
+      text.length > MATCH_TEXT_MAX_LENGTH ||
+      !text.trim()
+    ) {
+      return `${MATCH_TEXT_MIN_LENGTH} to ${MATCH_TEXT_MAX_LENGTH} characters of the bank text.`;
+    }
+
+    return foldText(bankText.value).includes(foldText(text))
+      ? ""
+      : "Not found in the bank text.";
+  });
+
+/* Motif pour lequel la règle ne peut pas être retenue, vide sinon. */
+const rememberBlocker =
+  computed(() => {
+    if (!isSingleLine.value) {
+      return "Only for an allocation on a single line.";
+    }
+
+    if (rememberKind.value === "text" && allocPartyID.value === null) {
+      return "A bank text rule needs a party for the allocation.";
+    }
+
+    return "";
+  });
+
+const rememberRule =
+  computed<AllocationRuleSave>(() => {
+    const movementPartyID =
+      record.value?.movementPartyID ?? null;
+
+    const byParty =
+      rememberKind.value === "party";
+
+    return {
+      id: null,
+      kind: rememberKind.value,
+      partyId: byParty ? movementPartyID : null,
+      matchText: byParty ? null : matchText.value,
+      transferTypeId:
+        onlyTransferType.value
+          ? record.value?.transferTypeID ?? null
+          : null,
+      holder:
+        onlyHolder.value && movementHolder.value
+          ? movementHolder.value
+          : null,
+      allocPartyId:
+        byParty && allocPartyID.value === movementPartyID
+          ? null
+          : allocPartyID.value,
+      subCategoryId: subCategoryID.value,
+      tagId: allocatedTagID.value ?? 0,
+      commentTemplate: null,
+      refMonthOffset: null,
+      autoConfirm: false,
+    };
+  });
+
+/* Règle existante aux mêmes conditions : remplacée par le Mac. */
+const replacedRuleId =
+  computed(() => {
+    const rule =
+      rememberRule.value;
+
+    return rulesFile.data.value?.rules.find(
+      existing =>
+        existing.kind === rule.kind &&
+        (rule.kind === "party"
+          ? existing.partyId === rule.partyId
+          : foldText(existing.matchText ?? "") === foldText(rule.matchText ?? "")) &&
+        existing.transferTypeId === rule.transferTypeId &&
+        existing.holder === rule.holder
+    )?.id ?? null;
+  });
+
+const rememberLabel =
+  computed(() =>
+    rememberKind.value === "party" && movementParty.value
+      ? `Remember for ${movementParty.value.label}`
+      : "Remember for this text"
+  );
+
+/* Alternative à la règle par texte : alias de la partie d'allocation. */
+const aliasOpen =
+  ref(false);
+
+const partiesFile =
+  useRemoteJson({
+    folder: PARTIES_FOLDER,
+    file: () => (aliasOpen.value ? PARTIES_FILE : null),
+    read: readParties,
+  });
+
+const aliasParty =
+  computed(() =>
+    allocPartyID.value === null
+      ? null
+      : partiesFile.data.value?.parties.find(
+          party => party.id === allocPartyID.value
+        ) ?? null
+  );
+
+function openAlias() {
+  remember.value = false;
+  aliasOpen.value = true;
+}
+
+/* Demande à envoyer avec l'allocation, saisie lue avant que le formulaire ne se vide. */
+function rememberPayload() {
+  if (
+    !remember.value ||
+    rememberBlocker.value ||
+    matchTextError.value ||
+    !record.value
+  ) {
+    return null;
+  }
+
+  return {
+    rule: rememberRule.value,
+    fromAllocation: {
+      fitid: record.value.id,
+      comment: comment.value.trim(),
+      allocDate: allocationDate.value?.trim() || record.value.date,
+    },
+  };
+}
+
+/* =========================
    Actions
 ========================= */
 
@@ -815,6 +1113,11 @@ async function commitAllocation(
     return;
   }
 
+  const rememberRequestPayload =
+    replaceEdited
+      ? null
+      : rememberPayload();
+
   if (replaceEdited) {
     await allocation.value
       .replaceAllocation();
@@ -825,6 +1128,26 @@ async function commitAllocation(
 
   showAllocationDate.value =
     false;
+
+  /* Allocation enregistrée sur une seule ligne : la règle part aussi. */
+  if (
+    rememberRequestPayload &&
+    allocation.value.isBalanced.value &&
+    allocation.value.allocations.value.length === 1
+  ) {
+    await rememberRequest.send(
+      rememberRequestPayload.rule,
+      rememberRequestPayload.fromAllocation
+    );
+
+    remember.value =
+      false;
+
+    /* Écriture impossible : le message reste affiché ici. */
+    if (rememberRequest.tone.value === "error") {
+      return;
+    }
+  }
 
   if (
     allocation.value
@@ -1161,6 +1484,117 @@ function onEditAllocation(
         </button>
       </div>
 
+      <div
+        v-if="allocations.length === 0 || remember"
+        class="remember"
+      >
+        <div class="remember-line">
+          <label
+            class="remember-check"
+            :class="{ disabled: !!rememberBlocker }"
+            :title="rememberBlocker || 'Save this allocation as a priority rule'"
+          >
+            <input
+              v-model="remember"
+              type="checkbox"
+              :disabled="!!rememberBlocker || isLocked"
+            />
+            {{ rememberLabel }}
+          </label>
+
+          <button
+            v-if="remember && !rememberBlocker"
+            type="button"
+            class="link-button"
+            @click="rememberMore = !rememberMore"
+          >
+            {{ rememberMore ? "Less" : "More…" }}
+          </button>
+
+          <span
+            v-if="remember && !rememberBlocker && replacedRuleId !== null"
+            class="remember-note"
+          >
+            replaces rule {{ replacedRuleId }}
+          </span>
+        </div>
+
+        <template v-if="remember && !rememberBlocker">
+          <div
+            v-if="rememberKind === 'text'"
+            class="remember-text"
+          >
+            <input
+              v-model="matchText"
+              type="text"
+              class="field field-long"
+              :maxlength="MATCH_TEXT_MAX_LENGTH"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="Text of the bank text"
+            />
+
+            <span
+              class="remember-note"
+              :class="{ error: !!matchTextError }"
+            >
+              {{ matchTextError || "Shorten to the part that identifies it." }}
+            </span>
+
+            <button
+              v-if="allocPartyID !== null"
+              type="button"
+              class="link-button"
+              @click="openAlias"
+            >
+              Or add it as an alias of {{ allocPartyName || "the party" }}…
+            </button>
+          </div>
+
+          <div
+            v-if="rememberMore"
+            class="remember-more"
+          >
+            <label
+              v-if="transferTypeLabel"
+              class="remember-check"
+            >
+              <input
+                v-model="onlyTransferType"
+                type="checkbox"
+              />
+              Only for {{ transferTypeLabel }}
+            </label>
+
+            <label
+              v-if="movementHolder"
+              class="remember-check"
+            >
+              <input
+                v-model="onlyHolder"
+                type="checkbox"
+              />
+              Only for card holder {{ movementHolder }}
+            </label>
+
+            <span
+              v-if="!transferTypeLabel && !movementHolder"
+              class="remember-note"
+            >
+              No transfer type or card holder known for this movement.
+            </span>
+          </div>
+        </template>
+
+        <p
+          v-if="rememberRequest.message.value"
+          class="remember-note"
+          :class="rememberRequest.tone.value"
+        >
+          {{ rememberRequest.message.value }}
+        </p>
+      </div>
+
       <p
         v-if="showSuggestions && appliedSuggestion"
         class="suggestion-source"
@@ -1333,6 +1767,14 @@ function onEditAllocation(
       </table>
     </section>
 
+    <PartySheet
+      v-if="aliasOpen && aliasParty && partiesFile.data.value"
+      :party="aliasParty"
+      :data="partiesFile.data.value"
+      :initial-alias="matchText"
+      @close="aliasOpen = false"
+    />
+
     <!-- =========================
          Save error
     ========================== -->
@@ -1444,6 +1886,84 @@ function onEditAllocation(
 
 .amount-box.remaining.balanced {
   color: var(--positive);
+}
+
+/* =========================================================
+   Remember
+========================================================= */
+
+.remember {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+  max-width: 640px;
+}
+
+.remember-line,
+.remember-more {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+
+.remember-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  font-size: var(--font-size-sm);
+
+  cursor: pointer;
+}
+
+.remember-check.disabled {
+  color: var(--text-muted);
+
+  cursor: default;
+}
+
+.remember-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.remember-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.remember-note {
+  margin: 0;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-xs);
+}
+
+.remember-note.error {
+  color: var(--negative);
+}
+
+.remember-note.completed {
+  color: var(--positive);
+}
+
+.link-button {
+  padding: 0;
+
+  border: none;
+
+  background: none;
+  color: var(--primary);
+
+  font: inherit;
+  font-size: var(--font-size-sm);
+
+  cursor: pointer;
 }
 
 /* =========================================================

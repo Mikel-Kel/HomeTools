@@ -148,7 +148,12 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   Master data, « Spending › Rules » (`RulesSection.vue`, lecteur `src/contracts/allocationRules.ts`), saisie par
   `RuleSheet.vue` (`RULE_SAVED` / `RULE_DELETED`, suffixe `R<id>`, aucun à la création) ; jetons des modèles de
   commentaire (§ 3) contrôlés et rendus par `checkCommentTemplate` / `renderCommentTemplate`, alignés sur
-  `allocation_suggest.py` (le Mac reste juge).
+  `allocation_suggest.py` (le Mac reste juge). « Remember » dans `AllocationView.vue` (allocation sur une seule
+  ligne) : `RULE_SAVED` avec `fromAllocation` par `useRememberRequest` (persistKey), statut repris et affiché par
+  `SpendingView.vue` ; règle par texte quand le mouvement n'a pas de partie ou une partie générique.
+  Lot 4 : alias suggérés (`suggestedParty`) dans Master data › Parties › To identify ; règles à revoir (`review`,
+  filtre « To review », « Apply » de l'allocation de l'historique) et suppression groupée (`RULES_DELETED`,
+  `…_BATCH.json`) dans Rules. `allocRule` des types d'opération n'est plus lu ni envoyé (§ 27).
 
 - Indicateurs (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/indicators-contract.md`
   (exports `indicators/indicators.json` et `values-<famille>.json`, événements `PWA-IND_…`).

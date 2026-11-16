@@ -26,7 +26,16 @@ import {
            "autoConfirm": false, "origin": "migrated",
            "createdAt": "…", "updatedAt": "…",
            "usage": { "movements": 11, "first": 9,
-                      "contradicted": 0 } } ] }
+                      "contradicted": 0,
+                      "lastMovement": "2026-10-28" },
+           "review": { "reason": "contradicted",
+                       "movements": 12,
+                       "learn": { "allocPartyId": null,
+                                  "subCategoryId": 41,
+                                  "tagId": 0,
+                                  "commentTemplate": "… {M-1}",
+                                  "refMonthOffset": 0 } }
+         } ] }
 
    kind « party » : règle sur la partie du mouvement
    (partyId) ; « text » : texte cherché dans le libellé de
@@ -35,7 +44,15 @@ import {
    porteurs. allocPartyId null : partie du mouvement.
    subCategoryId null : la règle ne propose que la partie.
    tagId 0 : sans tag. usage : 12 derniers mois (mouvements
-   concernés, fois en tête, fois contredite par l'historique).
+   concernés, fois en tête, fois contredite par l'historique ;
+   lastMovement : dernier mouvement concerné sur 72 mois,
+   null sinon).
+   review (lot 4, § 25), absent sans rien à revoir :
+   « contradicted » (12 mois : au moins 3 mouvements et la
+   moitié contredits par l'historique, règles pwa
+   comprises ; learn = l'allocation que l'historique propose
+   à sa place, allocPartyId null = partie du mouvement) ou
+   « unused » (aucun mouvement depuis 24 mois ; learn null).
    Ordre du fichier : règles par texte, puis par nom de
    partie, la générale avant ses exceptions.
 
@@ -58,6 +75,26 @@ export interface AllocationRuleUsage {
   movements: number;
   first: number;
   contradicted: number;
+  lastMovement: string | null;
+}
+
+export type AllocationRuleReviewReason =
+  | "contradicted"
+  | "unused";
+
+/* Allocation proposée par l'historique à la place d'une règle contredite. */
+export interface AllocationRuleLearn {
+  allocPartyId: number | null;
+  subCategoryId: number | null;
+  tagId: number;
+  commentTemplate: string | null;
+  refMonthOffset: number;
+}
+
+export interface AllocationRuleReview {
+  reason: AllocationRuleReviewReason;
+  movements: number;
+  learn: AllocationRuleLearn | null;
 }
 
 export interface AllocationRule {
@@ -77,6 +114,7 @@ export interface AllocationRule {
   createdAt: string | null;
   updatedAt: string | null;
   usage: AllocationRuleUsage;
+  review: AllocationRuleReview | null;
 }
 
 export interface AllocationRulesData {
@@ -100,6 +138,35 @@ function asNullableText(
   return typeof value === "string" && value !== ""
     ? value
     : null;
+}
+
+function readReview(
+  value: unknown
+): AllocationRuleReview | null {
+  const review =
+    asObject(value);
+
+  if (
+    !review ||
+    (review.reason !== "contradicted" && review.reason !== "unused")
+  ) {
+    return null;
+  }
+
+  const learn =
+    asObject(review.learn);
+
+  return {
+    reason: review.reason,
+    movements: asNumber(review.movements),
+    learn: learn && {
+      allocPartyId: asOptionalId(learn.allocPartyId),
+      subCategoryId: asOptionalId(learn.subCategoryId),
+      tagId: asOptionalId(learn.tagId) ?? 0,
+      commentTemplate: asNullableText(learn.commentTemplate),
+      refMonthOffset: asNumber(learn.refMonthOffset),
+    },
+  };
 }
 
 function readRule(
@@ -142,7 +209,9 @@ function readRule(
       movements: asNumber(usage?.movements),
       first: asNumber(usage?.first),
       contradicted: asNumber(usage?.contradicted),
+      lastMovement: asNullableText(usage?.lastMovement),
     },
+    review: readReview(rule.review),
   };
 }
 
@@ -186,7 +255,10 @@ export function readAllocationRules(
      règle existante la remplace) ; toute règle enregistrée
      depuis la PWA prend origin « pwa » ;
    - RULE_DELETED { id, source } (règle absente : pas une
-     erreur).
+     erreur) ;
+   - RULES_DELETED { ids, source } (lot 4, § 26.4) :
+     suppression groupée, fichier …_BATCH.json, au plus
+     RULES_DELETED_MAX règles, règles absentes ignorées.
    Contrôles du § 2.2 ; le Mac reste juge, son message est
    affiché tel quel. Après traitement, allocationRules.json
    et spending.json sont republiés.
@@ -195,6 +267,10 @@ export function readAllocationRules(
 export const RULE_EVENT_TRIGRAM = "RUL";
 
 export const RULE_EVENT_VERSION = 1;
+
+export const RULES_DELETED_MAX = 500;
+
+export const RULES_DELETED_SUFFIX = "BATCH";
 
 export const MATCH_TEXT_MIN_LENGTH = 3;
 export const MATCH_TEXT_MAX_LENGTH = 50;

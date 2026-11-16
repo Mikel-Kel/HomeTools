@@ -33,9 +33,8 @@ import { waitingElsewhereMessage } from "@/services/events/requestMessages";
        { "eventType": "TRANSFER_TYPE_SAVED",
          "payload": { "transferTypeId", "create", "label",
                       "operation", "usesCard", "displaySeq",
-                      "reversal", "allocRule": { "withDescription",
-                      "withParty", "withCard" }, "keyword",
-                      "descriptionPattern", "source" } }
+                      "reversal", "keyword", "descriptionPattern",
+                      "source" } }
      events/PWA-TRF_<AAAAMMJJHHMMSS>_T<TransferTypeID>_DEL.json
        { "eventType": "TRANSFER_TYPE_DELETED",
          "payload": { "transferTypeId", "source" } }
@@ -43,7 +42,9 @@ import { waitingElsewhereMessage } from "@/services/events/requestMessages";
    (transferTypes.json republié).
 
    Fiche complète envoyée à chaque fois ; textes rognés,
-   textes vides envoyés comme null.
+   textes vides envoyés comme null. allocRule n'est plus
+   envoyé (contrat des règles d'allocation, § 27) : le Mac
+   garde les indicateurs tels quels.
 
    Identifiant saisi à la création, proposé dans la plage
    choisie (premier libre après le plus grand identifiant de
@@ -203,9 +204,6 @@ const original = {
   usesCard: props.transferType?.usesCard ?? false,
   displaySeq: props.transferType?.displaySeq ?? 0,
   reversal: props.transferType?.reversal ?? false,
-  withDescription: props.transferType?.allocRule.withDescription ?? false,
-  withParty: props.transferType?.allocRule.withParty ?? false,
-  withCard: props.transferType?.allocRule.withCard ?? false,
   keyword: props.transferType?.keyword ?? "",
   descriptionPattern: props.transferType?.descriptionPattern ?? "",
 };
@@ -215,9 +213,6 @@ const operation = ref(original.operation);
 const usesCard = ref(original.usesCard);
 const displaySeq = ref<number | null>(original.displaySeq);
 const reversal = ref(original.reversal);
-const withDescription = ref(original.withDescription);
-const withParty = ref(original.withParty);
-const withCard = ref(original.withCard);
 const keyword = ref(original.keyword);
 const descriptionPattern = ref(original.descriptionPattern);
 
@@ -237,9 +232,6 @@ const changed =
     usesCard.value !== original.usesCard ||
     displaySeq.value !== original.displaySeq ||
     reversal.value !== original.reversal ||
-    withDescription.value !== original.withDescription ||
-    withParty.value !== original.withParty ||
-    withCard.value !== original.withCard ||
     keyword.value.trim() !== original.keyword ||
     descriptionPattern.value.trim() !== original.descriptionPattern
   );
@@ -407,11 +399,6 @@ async function save() {
         usesCard: usesCard.value,
         displaySeq: displaySeq.value,
         reversal: reversal.value,
-        allocRule: {
-          withDescription: withDescription.value,
-          withParty: withParty.value,
-          withCard: withCard.value,
-        },
         keyword: keyword.value.trim() || null,
         descriptionPattern: descriptionPattern.value.trim() || null,
         source: deviceName(),
@@ -651,39 +638,6 @@ const subtitle =
         />
         Reversal
       </label>
-    </div>
-
-    <div class="field">
-      <h3>Allocation rules</h3>
-
-      <div class="checks">
-        <label class="check">
-          <input
-            v-model="withDescription"
-            type="checkbox"
-            :disabled="saveRequest.inProgress.value"
-          />
-          By description
-        </label>
-
-        <label class="check">
-          <input
-            v-model="withParty"
-            type="checkbox"
-            :disabled="saveRequest.inProgress.value"
-          />
-          By party and alias
-        </label>
-
-        <label class="check">
-          <input
-            v-model="withCard"
-            type="checkbox"
-            :disabled="saveRequest.inProgress.value"
-          />
-          Card filter
-        </label>
-      </div>
     </div>
   </EditSheet>
 </template>

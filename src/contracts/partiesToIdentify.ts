@@ -23,7 +23,10 @@ import {
                      "bank": "CB", "count": 15,
                      "firstDate": "2026-07-12",
                      "lastDate": "2026-09-25",
-                     "amount": -729.00 } ] }
+                     "amount": -729.00,
+                     "suggestedParty": { "partyId": 474,
+                       "allocations": 12, "share": 0.92,
+                       "generic": false } } ] }
 
    Libellés bancaires des mouvements des derniers mois dont
    la contrepartie n'est pas identifiée (accmovement.PartyID
@@ -31,11 +34,27 @@ import {
    fichier (count décroissant, puis lastDate décroissante).
    counterparty : texte avant « | », alias proposé.
    movements : somme des count.
+
+   suggestedParty (lot 4 des règles d'allocation,
+   ../Backend/docs/allocation-rules-contract.md, § 24) :
+   partie d'allocation dominante des mouvements de même
+   libellé (au moins 3 allocations et 80 %), absente sans
+   suggestion ; share de 0 à 1 ; generic : partie générique
+   (l'alias doit rester propre au tiers). Une indication,
+   jamais une identification : la confirmation reste un
+   PARTY_SAVED.
 ========================= */
 
 export const PARTIES_TO_IDENTIFY_FOLDER = "settings";
 
 export const PARTIES_TO_IDENTIFY_FILE = "movementPartyIDToIdentify.json";
+
+export interface SuggestedParty {
+  partyId: number;
+  allocations: number;
+  share: number;
+  generic: boolean;
+}
 
 export interface LabelToIdentify {
   label: string;
@@ -45,6 +64,7 @@ export interface LabelToIdentify {
   firstDate: string;
   lastDate: string;
   amount: number;
+  suggestedParty: SuggestedParty | null;
 }
 
 export interface PartiesToIdentifyData {
@@ -52,6 +72,30 @@ export interface PartiesToIdentifyData {
   since: string;
   movements: number;
   labels: LabelToIdentify[];
+}
+
+function readSuggestedParty(
+  value: unknown
+): SuggestedParty | null {
+  const suggestion =
+    asObject(value);
+
+  const partyId =
+    asNumber(suggestion?.partyId);
+
+  const share =
+    asNumber(suggestion?.share);
+
+  if (!suggestion || partyId <= 0 || share <= 0) {
+    return null;
+  }
+
+  return {
+    partyId,
+    allocations: asNumber(suggestion.allocations),
+    share,
+    generic: suggestion.generic === true,
+  };
 }
 
 function objects(
@@ -101,6 +145,7 @@ export function readPartiesToIdentify(
             firstDate: asString(entry.firstDate),
             lastDate: asString(entry.lastDate),
             amount: asNumber(entry.amount),
+            suggestedParty: readSuggestedParty(entry.suggestedParty),
           };
         }
       )

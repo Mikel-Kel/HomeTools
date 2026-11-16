@@ -9,9 +9,13 @@ import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 
-import type {
-  AllocationRule,
-  AllocationRulesData,
+import {
+  type AllocationRule,
+  type AllocationRulesData,
+  RULE_EVENT_TRIGRAM,
+  RULE_EVENT_VERSION,
+  RULES_DELETED_MAX,
+  RULES_DELETED_SUFFIX,
 } from "@/contracts/allocationRules";
 
 import type { AllocationTag } from "@/contracts/allocationTags";
@@ -19,9 +23,20 @@ import type { Category } from "@/contracts/categories";
 import type { PartiesData } from "@/contracts/parties";
 import type { TransferTypesData } from "@/contracts/transferTypes";
 
+import { useEventRequest } from "@/composables/useEventRequest";
 import { usePersistentRef } from "@/composables/usePersistentRef";
 
+import { confirmDialog } from "@/services/dialog/appDialog";
+import { deviceName } from "@/services/environment/environmentState";
+
+import {
+  pendingMessage,
+  processingMessage,
+  REJECTED_BY_SERVER,
+} from "@/services/events/requestMessages";
+
 import { formatInteger } from "@/utils/amountFormat";
+import { formatDate } from "@/utils/dateFormat";
 
 /* =========================
    Section « Rules » de la page Master data
@@ -37,13 +52,20 @@ import { formatInteger } from "@/utils/amountFormat";
    d'allocation si elle diffère, tag, modèle de commentaire
    et décalage du mois de référence), son usage sur 12 mois
    (mouvements concernés / fois en tête, fois contredite par
-   l'historique) ; règle prioritaire (origin « pwa » : créée
-   ou modifiée dans la PWA, toujours en tête, § 11) marquée
-   « * » après son identifiant, légende sous la liste ;
-   règle sans mouvement en 12 mois « Unused ».
+   l'historique) et la date de son dernier mouvement ; règle
+   prioritaire (origin « pwa » : créée ou modifiée dans la
+   PWA, toujours en tête, § 11) marquée « * » après son
+   identifiant, légende sous la liste ; règle à revoir
+   (review, § 25) : « Contradicted by history » ou « Unused
+   for 24 months ».
 
    Filtres : recherche (partie, texte, partie d'allocation,
-   commentaire), sous-catégorie, « Unused only ».
+   commentaire), sous-catégorie, « To review ».
+
+   Suppression groupée (RULES_DELETED, § 26.4) : une case
+   par ligne, « Select all unused » (règles inutilisées
+   affichées), confirmation avec le nombre de règles,
+   RULES_DELETED_MAX au plus ; statut du Mac affiché.
    Création (« + Rule »), modification et suppression par
    la fiche d'une règle (RuleSheet), ouverte par un clic sur
    la ligne. Le titre du panneau (slot « title ») est fourni
@@ -72,8 +94,8 @@ const query =
 const subCategoryFilter =
   usePersistentRef("masterData.rules.subCategory", 0);
 
-const unusedOnly =
-  usePersistentRef("masterData.rules.unusedOnly", false);
+const reviewOnly =
+  usePersistentRef("masterData.rules.reviewOnly", false);
 
 const sortKey =
   usePersistentRef<SortKey>("masterData.rules.sort", "file");
@@ -227,7 +249,7 @@ const filteredRules =
     const rules =
       (props.rules?.rules ?? []).filter(
         rule =>
-          (!unusedOnly.value || rule.usage.movements === 0) &&
+          (!reviewOnly.value || rule.review !== null) &&
           (subCategoryFilter.value === 0 ||
             (subCategoryFilter.value === NO_SUB_CATEGORY
               ? rule.subCategoryId === null
@@ -258,6 +280,133 @@ const filteredRules =
 
 const sheetRule =
   ref<AllocationRule | null | undefined>(undefined);
+
+/* =========================
+   À revoir et suppression groupée
+========================= */
+
+const reviewCount =
+  computed(() =>
+    (props.rules?.rules ?? []).filter(rule => rule.review !== null).length
+  );
+
+function reviewLabel(
+  rule: AllocationRule
+): string {
+  return rule.review?.reason === "contradicted"
+    ? "Contradicted by history"
+    : "Unused for 24 months";
+}
+
+function reviewTitle(
+  rule: AllocationRule
+): string {
+  return rule.review?.reason === "contradicted"
+    ? `The history proposed another allocation for ${rule.review.movements} movements in 12 months`
+    : "No movement concerned for 24 months";
+}
+
+/* Règles cochées (identifiants). */
+const selected =
+  ref(new Set<number>());
+
+function toggleSelected(
+  id: number
+) {
+  const next =
+    new Set(selected.value);
+
+  if (!next.delete(id)) {
+    next.add(id);
+  }
+
+  selected.value = next;
+}
+
+/* Règles inutilisées affichées (filtres appliqués). */
+const shownUnused =
+  computed(() =>
+    filteredRules.value.filter(rule => rule.review?.reason === "unused")
+  );
+
+function selectAllUnused() {
+  selected.value =
+    new Set([...selected.value, ...shownUnused.value.map(rule => rule.id)]);
+}
+
+function clearSelection() {
+  selected.value = new Set();
+}
+
+const deleteRequest =
+  useEventRequest({
+    trigram: RULE_EVENT_TRIGRAM,
+    noAnswerDelayMs: 2 * 60 * 1000,
+  });
+
+const canDeleteSelected =
+  computed(() =>
+    selected.value.size > 0 &&
+    selected.value.size <= RULES_DELETED_MAX &&
+    !deleteRequest.inProgress.value
+  );
+
+async function deleteSelected() {
+  const ids =
+    [...selected.value];
+
+  if (
+    !canDeleteSelected.value ||
+    !(await confirmDialog({
+      title: `Delete ${formatInteger(ids.length)} rule${ids.length === 1 ? "" : "s"}?`,
+      message: "They are deleted for good; the suggestions are recomputed.",
+      confirmLabel: "Delete",
+      destructive: true,
+    }))
+  ) {
+    return;
+  }
+
+  await deleteRequest.send(
+    {
+      eventType: "RULES_DELETED",
+      version: RULE_EVENT_VERSION,
+      timestamp: new Date().toISOString(),
+      payload: {
+        ids,
+        source: deviceName(),
+      },
+    },
+    RULES_DELETED_SUFFIX
+  );
+
+  if (deleteRequest.request.value?.phase !== "error") {
+    clearSelection();
+  }
+}
+
+const deleteMessage =
+  computed(() => {
+    const current =
+      deleteRequest.request.value;
+
+    switch (current?.phase) {
+      case "requested":
+        return pendingMessage("Delete", deleteRequest.noAnswerYet.value);
+
+      case "started":
+        return processingMessage("Deleting");
+
+      case "completed":
+        return current.message || "Rules deleted.";
+
+      case "error":
+        return current.message || REJECTED_BY_SERVER;
+
+      default:
+        return "";
+    }
+  });
 </script>
 
 <template>
@@ -321,10 +470,11 @@ const sheetRule =
         </select>
 
         <PillButton
-          :active="unusedOnly"
-          @click="unusedOnly = !unusedOnly"
+          :active="reviewOnly"
+          :disabled="!reviewCount && !reviewOnly"
+          @click="reviewOnly = !reviewOnly"
         >
-          Unused only
+          To review ({{ formatInteger(reviewCount) }})
         </PillButton>
 
         <span class="sort">
@@ -334,6 +484,49 @@ const sheetRule =
             v-model="sortKey"
             :options="sortOptions"
           />
+        </span>
+      </div>
+
+      <div
+        v-if="selected.size || shownUnused.length || deleteMessage"
+        class="selection-line"
+      >
+        <PillButton
+          v-if="shownUnused.length"
+          :disabled="deleteRequest.inProgress.value"
+          @click="selectAllUnused"
+        >
+          Select all unused ({{ formatInteger(shownUnused.length) }})
+        </PillButton>
+
+        <template v-if="selected.size">
+          <span class="count">
+            {{ formatInteger(selected.size) }} selected
+          </span>
+
+          <PillButton
+            :disabled="deleteRequest.inProgress.value"
+            @click="clearSelection"
+          >
+            Clear
+          </PillButton>
+
+          <PillButton
+            variant="danger"
+            :disabled="!canDeleteSelected"
+            :title="selected.size > RULES_DELETED_MAX ? `${RULES_DELETED_MAX} rules at most at once` : undefined"
+            @click="deleteSelected"
+          >
+            Delete selected
+          </PillButton>
+        </template>
+
+        <span
+          v-if="deleteMessage"
+          class="delete-message"
+          :class="deleteRequest.request.value?.phase"
+        >
+          {{ deleteMessage }}
         </span>
       </div>
 
@@ -351,13 +544,14 @@ const sheetRule =
         <table class="rules-table">
           <thead>
             <tr>
+              <th class="col-check"></th>
               <th class="col-id">ID</th>
               <th>When</th>
               <th>Allocation</th>
               <th>Comment</th>
               <th
                 class="col-usage"
-                title="Last 12 months: movements concerned / suggested first"
+                title="Last 12 months: movements concerned / suggested first; last movement"
               >
                 Usage
               </th>
@@ -372,6 +566,18 @@ const sheetRule =
               class="clickable-row"
               @click="sheetRule = rule"
             >
+              <td
+                class="col-check"
+                @click.stop
+              >
+                <input
+                  type="checkbox"
+                  :checked="selected.has(rule.id)"
+                  :aria-label="`Select rule ${rule.id}`"
+                  @change="toggleSelected(rule.id)"
+                />
+              </td>
+
               <td class="col-id">
                 {{ rule.id }}<span
                   class="priority"
@@ -438,15 +644,20 @@ const sheetRule =
                 >
                   contradicted {{ formatInteger(rule.usage.contradicted) }}
                 </div>
+
+                <div class="soft">
+                  {{ rule.usage.lastMovement ? `last ${formatDate(rule.usage.lastMovement, "compact")}` : "no movement" }}
+                </div>
               </td>
 
               <td class="col-status">
                 <StatusPill
-                  v-if="rule.usage.movements === 0"
-                  dashed
-                  title="No movement in the last 12 months"
+                  v-if="rule.review"
+                  :tone="rule.review.reason === 'contradicted' ? 'warning' : 'neutral'"
+                  :dashed="rule.review.reason === 'unused'"
+                  :title="reviewTitle(rule)"
                 >
-                  Unused
+                  {{ reviewLabel(rule) }}
                 </StatusPill>
               </td>
             </tr>
@@ -493,6 +704,38 @@ const sheetRule =
 
   min-height: 32px;
   margin-bottom: 0.5rem;
+}
+
+.col-check {
+  width: 1%;
+}
+
+.col-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.selection-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+
+  margin-bottom: 0.75rem;
+}
+
+.delete-message {
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.delete-message.completed {
+  color: var(--positive);
+}
+
+.delete-message.error {
+  color: var(--negative);
 }
 
 /* Toujours la place de l'astérisque : identifiants alignés. */

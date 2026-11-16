@@ -39,9 +39,14 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
    ordinaire). Le message du statut est affiché ; la liste se
    relit quand le Mac la republie avec parties.json.
 
-   Aucune partie n'est suggérée d'après les allocations :
-   identification de la contrepartie et allocation sont
-   distinctes.
+   Partie suggérée d'après les allocations passées
+   (suggestedParty, contrat des règles d'allocation, § 24) :
+   « Suggested: <partie> (12 of 13 allocations) » sous le
+   libellé, « Use » ouvre la fiche de cette partie avec
+   l'alias prérempli ; pour une partie générique, rappel que
+   l'alias doit rester propre au tiers. Une indication
+   seulement : rien n'est enregistré sans la fiche. Filtre
+   « With suggestion ».
 ========================= */
 
 const props = defineProps<{
@@ -79,6 +84,45 @@ function entryKey(
 const query =
   usePersistentRef("masterData.toIdentify.query", "");
 
+const withSuggestion =
+  usePersistentRef("masterData.toIdentify.withSuggestion", false);
+
+const partiesById =
+  computed(() =>
+    new Map(props.parties.parties.map(party => [party.id, party]))
+  );
+
+/* Partie suggérée, si elle existe encore dans parties.json. */
+function suggestedParty(
+  entry: LabelToIdentify
+): Party | null {
+  return entry.suggestedParty
+    ? partiesById.value.get(entry.suggestedParty.partyId) ?? null
+    : null;
+}
+
+/* « 12 of 13 allocations » : allocations à cette partie sur le total. */
+function suggestionCount(
+  entry: LabelToIdentify
+): string {
+  const suggestion =
+    entry.suggestedParty;
+
+  if (!suggestion) {
+    return "";
+  }
+
+  const total =
+    Math.round(suggestion.allocations / suggestion.share);
+
+  return `${formatInteger(suggestion.allocations)} of ${formatInteger(total)} allocations`;
+}
+
+const suggestionCountTotal =
+  computed(() =>
+    (props.data?.labels ?? []).filter(entry => suggestedParty(entry)).length
+  );
+
 const filteredLabels =
   computed(() => {
     const text =
@@ -86,9 +130,10 @@ const filteredLabels =
 
     return (props.data?.labels ?? []).filter(
       entry =>
-        !text ||
+        (!withSuggestion.value || suggestedParty(entry)) &&
+        (!text ||
         fold(entry.label).includes(text) ||
-        fold(entry.bank).includes(text)
+        fold(entry.bank).includes(text))
     );
   });
 
@@ -212,6 +257,14 @@ function onSaved(
           autocomplete="off"
           spellcheck="false"
         />
+
+        <PillButton
+          :active="withSuggestion"
+          :disabled="!suggestionCountTotal && !withSuggestion"
+          @click="withSuggestion = !withSuggestion"
+        >
+          With suggestion ({{ formatInteger(suggestionCountTotal) }})
+        </PillButton>
       </div>
 
       <p
@@ -243,7 +296,34 @@ function onSaved(
               :key="entryKey(entry)"
             >
               <tr>
-                <td class="col-label">{{ entry.label }}</td>
+                <td class="col-label">
+                  {{ entry.label }}
+
+                  <div
+                    v-if="suggestedParty(entry)"
+                    class="suggestion"
+                  >
+                    <span>
+                      Suggested: <strong>{{ suggestedParty(entry)?.label }}</strong>
+                      ({{ suggestionCount(entry) }})
+                    </span>
+
+                    <PillButton
+                      variant="primary"
+                      :title="`Add the alias to ${suggestedParty(entry)?.label}`"
+                      @click="openSheet(entry, suggestedParty(entry))"
+                    >
+                      Use
+                    </PillButton>
+
+                    <span
+                      v-if="entry.suggestedParty?.generic"
+                      class="generic-note"
+                    >
+                      Generic party: keep the alias specific to this merchant (no terminal number).
+                    </span>
+                  </div>
+                </td>
                 <td class="soft">{{ entry.bank }}</td>
                 <td class="col-number">{{ formatInteger(entry.count) }}</td>
 
@@ -330,6 +410,29 @@ function onSaved(
 </template>
 
 <style scoped>
+.suggestion {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+
+  margin-top: 4px;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+}
+
+.suggestion strong {
+  color: var(--text);
+}
+
+.generic-note {
+  flex-basis: 100%;
+
+  color: var(--warning);
+}
+
 .panel {
   min-width: 0;
   padding: 12px 14px;
@@ -377,6 +480,10 @@ function onSaved(
 
 .search-line {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+
   margin-bottom: 0.75rem;
 }
 

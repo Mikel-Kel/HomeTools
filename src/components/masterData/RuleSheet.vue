@@ -6,6 +6,7 @@ import {
 } from "vue";
 
 import EditSheet from "@/components/masterData/EditSheet.vue";
+import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import SuggestInput from "@/components/ui/SuggestInput.vue";
 
@@ -36,6 +37,8 @@ import { confirmDialog } from "@/services/dialog/appDialog";
 import { deviceName } from "@/services/environment/environmentState";
 import { waitingElsewhereMessage } from "@/services/events/requestMessages";
 
+import { formatDate } from "@/utils/dateFormat";
+
 /* =========================
    Fiche d'une règle d'allocation
 
@@ -60,6 +63,12 @@ import { waitingElsewhereMessage } from "@/services/events/requestMessages";
    remplace (signalé) ; une modification aux conditions d'une
    autre règle est bloquée. Toute règle enregistrée ici
    devient prioritaire (origin « pwa »). Le Mac reste juge.
+
+   Règle à revoir (review, lot 4, § 25) : contredite,
+   « History suggests … » avec l'allocation de l'historique ;
+   « Apply » la reprend dans la saisie, modifiable, puis
+   « Save » l'envoie ; inutilisée depuis 24 mois : rappel,
+   « Delete » pour la retirer.
 ========================= */
 
 const props = defineProps<{
@@ -444,6 +453,73 @@ const title =
     ? "New allocation rule"
     : `Rule ${props.rule!.id}`;
 
+/* =========================
+   À revoir
+========================= */
+
+const review =
+  props.rule?.review ?? null;
+
+/* « Catégorie › Sous-catégorie » d'une sous-catégorie, ou « Party only ». */
+function subCategoryText(
+  id: number | null
+): string {
+  if (id === null) {
+    return "Party only";
+  }
+
+  for (const category of props.categories) {
+    const sub =
+      category.subcategories.find(item => item.id === id);
+
+    if (sub) {
+      return `${category.label} › ${sub.label}`;
+    }
+  }
+
+  return `#${id}`;
+}
+
+/* Allocation proposée par l'historique : sous-catégorie, tag, commentaire, partie. */
+const learnedText =
+  computed(() => {
+    const learn =
+      review?.learn;
+
+    if (!learn) {
+      return "";
+    }
+
+    return [
+      subCategoryText(learn.subCategoryId),
+      learn.tagId
+        ? props.allocationTags?.find(tag => tag.id === learn.tagId)?.tagName ?? `Tag ${learn.tagId}`
+        : "",
+      learn.commentTemplate ?? "",
+      learn.allocPartyId === null
+        ? "party of the movement"
+        : `→ ${partyLabel(learn.allocPartyId) || `#${learn.allocPartyId}`}`,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  });
+
+/* Reprend l'allocation de l'historique dans la saisie (envoyée par « Save »). */
+function applyLearned() {
+  const learn =
+    review?.learn;
+
+  if (!learn) {
+    return;
+  }
+
+  allocPartyText.value = partyLabel(learn.allocPartyId);
+  subCategoryId.value = learn.subCategoryId;
+  tagId.value = learn.tagId;
+  commentTemplate.value = learn.commentTemplate ?? "";
+  refMonthOffset.value = learn.refMonthOffset;
+}
+
 const subtitle =
   computed(() => {
     if (isNew) {
@@ -457,6 +533,9 @@ const subtitle =
       `${rule.usage.movements} movements in 12 months`,
       `first for ${rule.usage.first}`,
       ...(rule.usage.contradicted ? [`contradicted ${rule.usage.contradicted}`] : []),
+      rule.usage.lastMovement
+        ? `last ${formatDate(rule.usage.lastMovement, "compact")}`
+        : "no movement",
       rule.origin === "pwa" ? "Priority" : "May yield to history",
     ].join(" · ");
   });
@@ -477,6 +556,46 @@ const subtitle =
     @delete="remove"
     @close="emit('close')"
   >
+    <!-- À revoir -->
+
+    <div
+      v-if="review?.reason === 'contradicted'"
+      class="review contradicted"
+    >
+      <p class="review-title">
+        Contradicted by history ({{ review.movements }} movements in 12 months)
+      </p>
+
+      <p
+        v-if="learnedText"
+        class="review-text"
+      >
+        History suggests: <strong>{{ learnedText }}</strong>
+      </p>
+
+      <div class="review-actions">
+        <PillButton
+          v-if="review.learn"
+          variant="primary"
+          :disabled="saveRequest.inProgress.value"
+          @click="applyLearned"
+        >
+          Apply
+        </PillButton>
+
+        <span class="note">
+          Apply fills the form; Save sends it (the rule becomes a priority rule). Or delete the rule.
+        </span>
+      </div>
+    </div>
+
+    <p
+      v-else-if="review?.reason === 'unused'"
+      class="review"
+    >
+      Unused for 24 months: no movement concerned. Delete it if it is no longer needed.
+    </p>
+
     <!-- Conditions -->
 
     <div class="field">
@@ -673,6 +792,46 @@ const subtitle =
   border-radius: 8px;
 
   font-size: var(--font-size-md);
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+
+  margin: 0;
+  padding: 10px 12px;
+
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.review.contradicted {
+  border-style: solid;
+  border-color: var(--warning);
+}
+
+.review p {
+  margin: 0;
+}
+
+.review-title {
+  color: var(--warning);
+  font-weight: 700;
+}
+
+.review-text strong {
+  color: var(--text);
+}
+
+.review-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
 }
 
 .preview {

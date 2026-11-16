@@ -21,9 +21,6 @@ import {
                             "operation": "Paiement TWINT" | null,
                             "usesCard": false, "displaySeq": 1,
                             "reversal": false,
-                            "allocRule": { "withDescription": false,
-                                           "withParty": true,
-                                           "withCard": false },
                             "keyword": "TWINT" | null,
                             "descriptionPattern": "Twint à *" | null,
                             "reserved": false,
@@ -35,6 +32,11 @@ import {
    type (« UBS-K70 », « PMNT-ICDT-PNET ») : le renommer sans
    garder ce code fait échouer l'import suivant.
    Réservés (0, 998, 999) : modifiables, jamais supprimables.
+
+   allocRule (indicateurs des anciennes règles d'allocation)
+   n'est plus lu : le moteur des règles ne s'en sert plus
+   (contrat des règles d'allocation, § 27) et le Mac le
+   retire de l'export.
 ========================= */
 
 export const TRANSFER_TYPES_FOLDER = "settings";
@@ -44,12 +46,6 @@ export const TRANSFER_TYPES_FILE = "transferTypes.json";
 /* Identifiant saisi à la création. */
 export const TRANSFER_TYPE_ID_MIN = 1;
 export const TRANSFER_TYPE_ID_MAX = 99999;
-
-export interface TransferTypeAllocRule {
-  withDescription: boolean;
-  withParty: boolean;
-  withCard: boolean;
-}
 
 export interface TransferTypeUsage {
   movements: number;
@@ -63,7 +59,6 @@ export interface TransferType {
   usesCard: boolean;
   displaySeq: number;
   reversal: boolean;
-  allocRule: TransferTypeAllocRule;
   keyword: string | null;
   descriptionPattern: string | null;
   reserved: boolean;
@@ -140,9 +135,6 @@ export function readTransferTypes(
     transferTypes: objects(file.transferTypes)
       .map(
         type => {
-          const allocRule =
-            asObject(type.allocRule);
-
           const usage =
             asObject(type.usage);
 
@@ -153,12 +145,6 @@ export function readTransferTypes(
             usesCard: asBoolean(type.usesCard),
             displaySeq: asNumber(type.displaySeq),
             reversal: asBoolean(type.reversal),
-
-            allocRule: {
-              withDescription: asBoolean(allocRule?.withDescription),
-              withParty: asBoolean(allocRule?.withParty),
-              withCard: asBoolean(allocRule?.withCard),
-            },
 
             keyword: asNullableText(type.keyword),
             descriptionPattern: asNullableText(type.descriptionPattern),
