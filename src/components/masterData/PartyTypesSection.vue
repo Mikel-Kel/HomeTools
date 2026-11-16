@@ -63,7 +63,7 @@ const sheetType =
 <template>
   <section class="panel">
     <header class="panel-header">
-      <h2>Party types</h2>
+      <slot name="title" />
 
       <PillButton @click="sheetType = null">
         + Type
@@ -131,12 +131,6 @@ const sheetType =
 
   min-height: 32px;
   margin-bottom: 0.5rem;
-}
-
-.panel-header h2 {
-  margin: 0;
-
-  font-size: var(--font-size-lg);
 }
 
 .item-list {

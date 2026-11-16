@@ -142,6 +142,11 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   événements `PWA-CAT_…`, `PWA-PTY_…`, `PWA-TAG_…`). Tags de documents
   (§ 6, `TagType = 'Doc'`, identifiants inchangés car écrits dans les noms des PDF, suffixe d'événement `D<id>`).
 
+- Règles d'allocation (lot 3) : contrat `../Backend/docs/allocation-rules-contract.md` (§ 12 candidats de
+  `spending.json`, § 17 export `settings/allocationRules.json`, § 18 événements `PWA-RUL_…`). Candidats dans
+  `AllocationView.vue` (« Other suggestions », la partie du draft suit le candidat choisi) ; liste des règles dans
+  Master data, « Spending › Rules » (`RulesSection.vue`, lecteur `src/contracts/allocationRules.ts`).
+
 - Indicateurs (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/indicators-contract.md`
   (exports `indicators/indicators.json` et `values-<famille>.json`, événements `PWA-IND_…`).
 
@@ -149,7 +154,7 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   (export `wine/cellar.json` en version 2 seulement, lecteur `src/contracts/wineCellar.ts`). Liste `WineCellarView.vue`, composants dans `src/components/wineCellar/` ; saisies par événements
   `PWA-WIN_…_<W|C|G|P|L|B><id ou NEW>.json` (`WINE_SAVED` en version 2), toutes émises par `useWineEvents` (`src/composables/wineCellar/`), « Pending »
   déduit des événements en attente dans `events/`. Données de base (pays, régions, producteurs, emplacements, tailles) :
-  section « Wine » de Master data (`WineSection.vue`). Photos des étiquettes
+  section « Wine cellar » de Master data (`WineSection.vue`). Photos des étiquettes
   (§ 5, champ `photo` = clé dans le magasin `data`) : lues par `loadFileFromPath` (`driveAdapter.ts`, binaire, deux
   backends), cache mémoire de session `useWinePhoto` ; vignettes de la liste chargées à l'approche de l'écran.
   Gestion depuis la PWA (W7) : image préparée par `prepareWineImage` (`src/services/wineCellar/`, JPEG redessiné dans

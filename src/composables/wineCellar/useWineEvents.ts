@@ -107,7 +107,7 @@ export function useWineEvents() {
     return isPending(referenceEventSuffix(kind, id));
   }
 
-  /* La dernière demande porte sur des données de base (section « Wine » de Master data). */
+  /* La dernière demande porte sur des données de base (section « Wine cellar » de Master data). */
   const concernsReferences =
     computed(() =>
       tracker.request.value !== null &&

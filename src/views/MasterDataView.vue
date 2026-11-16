@@ -7,9 +7,7 @@ import {
 
 import PageHeader from "@/components/PageHeader.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
-import PartiesSection from "@/components/masterData/PartiesSection.vue";
-import PartiesToIdentifySection from "@/components/masterData/PartiesToIdentifySection.vue";
-import PartyTypesSection from "@/components/masterData/PartyTypesSection.vue";
+import PartyDataSection from "@/components/masterData/PartyDataSection.vue";
 import SpendingSection from "@/components/masterData/SpendingSection.vue";
 import DocumentsSection from "@/components/masterData/DocumentsSection.vue";
 import WineSection from "@/components/masterData/WineSection.vue";
@@ -20,6 +18,12 @@ import { useParties } from "@/composables/useParties";
 import { useTransferTypes } from "@/composables/useTransferTypes";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
 import { useDocumentTags } from "@/composables/archives/useDocumentTags";
+
+import {
+  ALLOCATION_RULES_FILE,
+  ALLOCATION_RULES_FOLDER,
+  readAllocationRules,
+} from "@/contracts/allocationRules";
 
 import {
   ALLOCATION_TAGS_FILE,
@@ -70,17 +74,19 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
 /* =========================
    Données de base (Master data)
 
-   Une section par type de données de base ; modifications
-   envoyées au Mac par événements, données relues dès que
-   le backend republie leur export. Section « Wine »
-   (données de base de la cave) avec la capacité
-   wineCellar seulement.
+   Une section par domaine, chacune avec ses sous-menus ;
+   modifications envoyées au Mac par événements, données
+   relues dès que le backend republie leur export.
+   - Parties : existantes, à identifier, types de partie ;
+   - Spending : catégories, tags, types d'opération et
+     règles d'allocation (libellés des parties) ;
+   - Documents : dossiers Tourism et Various, tags ;
+   - Wine cellar : données de base de la cave, avec la
+     capacité wineCellar seulement.
 ========================= */
 
 type MasterDataSection =
   | "parties"
-  | "toIdentify"
-  | "partyTypes"
   | "spending"
   | "documents"
   | "wine";
@@ -90,12 +96,10 @@ const sectionOptions: {
   label: string;
 }[] = [
   { value: "parties", label: "Parties" },
-  { value: "toIdentify", label: "To identify" },
-  { value: "partyTypes", label: "Party types" },
   { value: "spending", label: "Spending" },
   { value: "documents", label: "Documents" },
   ...(hasCapability("wineCellar")
-    ? [{ value: "wine" as const, label: "Wine" }]
+    ? [{ value: "wine" as const, label: "Wine cellar" }]
     : []),
 ];
 
@@ -139,8 +143,7 @@ watch(
   value => {
     if (
       value === "parties" ||
-      value === "toIdentify" ||
-      value === "partyTypes" ||
+      value === "spending" ||
       value === "documents"
     ) {
       partiesWanted.value = true;
@@ -171,7 +174,7 @@ watch(
   section,
 
   value => {
-    if (value === "toIdentify") {
+    if (value === "parties") {
       toIdentifyWanted.value = true;
     }
   },
@@ -189,7 +192,7 @@ const toIdentifyFile =
     optional: true,
   });
 
-/* Types d'opération (famille de « Spending ») : chargés à la première ouverture de la section. */
+/* Types d'opération (famille de « Spending », libellés des règles) : chargés à la première ouverture de la section. */
 const transferTypesWanted =
   ref(false);
 
@@ -239,7 +242,37 @@ watch(
   }
 );
 
-/* Cave à vins (section « Wine ») : chargée à la première ouverture de la section. */
+/*
+  Règles d'allocation (famille de « Spending ») : chargées à
+  la première ouverture de la section. Fichier absent (pas encore publié) : section
+  vide, sans erreur.
+*/
+const rulesWanted =
+  ref(false);
+
+watch(
+  section,
+
+  value => {
+    if (value === "spending") {
+      rulesWanted.value = true;
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
+const rulesFile =
+  useRemoteJson({
+    folder: ALLOCATION_RULES_FOLDER,
+    file: () => (rulesWanted.value ? ALLOCATION_RULES_FILE : null),
+    read: readAllocationRules,
+    optional: true,
+  });
+
+/* Cave à vins (section « Wine cellar ») : chargée à la première ouverture de la section. */
 const cellarWanted =
   ref(false);
 
@@ -335,14 +368,11 @@ watch(
 const current =
   computed(() =>
     section.value === "spending"
-      ? (tagsFile.error.value
-          ? tagsFile
-          : transferTypesFile.error.value
-            ? transferTypesFile
-            : categoriesFile)
+      ? [tagsFile, transferTypesFile, rulesFile, partiesFile]
+          .find(file => file.error.value) ?? categoriesFile
       : section.value === "documents" && documentTagsFile.error.value
         ? documentTagsFile
-        : section.value === "toIdentify" && toIdentifyFile.error.value
+        : section.value === "parties" && toIdentifyFile.error.value
           ? toIdentifyFile
           : section.value === "wine"
             ? cellarFile
@@ -379,21 +409,11 @@ const current =
     </div>
 
     <template v-else>
-      <PartiesSection
+      <PartyDataSection
         v-if="section === 'parties' && partiesFile.data.value"
         :data="partiesFile.data.value"
-      />
-
-      <PartiesToIdentifySection
-        v-else-if="section === 'toIdentify' && partiesFile.data.value"
-        :data="toIdentifyFile.data.value"
-        :loading="toIdentifyFile.loading.value"
-        :parties="partiesFile.data.value"
-      />
-
-      <PartyTypesSection
-        v-else-if="section === 'partyTypes' && partiesFile.data.value"
-        :data="partiesFile.data.value"
+        :to-identify="toIdentifyFile.data.value"
+        :to-identify-loading="toIdentifyFile.loading.value"
       />
 
       <SpendingSection
@@ -401,6 +421,9 @@ const current =
         :categories="categoriesFile.data.value"
         :allocation-tags="tagsFile.data.value"
         :transfer-types="transferTypesFile.data.value"
+        :rules="rulesFile.data.value"
+        :rules-loading="rulesFile.loading.value"
+        :parties="partiesFile.data.value"
       />
 
       <DocumentsSection

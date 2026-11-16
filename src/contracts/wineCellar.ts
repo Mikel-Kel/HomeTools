@@ -492,7 +492,7 @@ export interface WineTastingSave {
 }
 
 /*
-  Données de base (section « Wine » de Master data) :
+  Données de base (section « Wine cellar » de Master data) :
   payload.kind désigne la table.
   - WINE_REFERENCE_SAVED { kind, id, name, … } ; id null :
     création. countryId (région), levelCount 1–99 ou null

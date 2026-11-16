@@ -5,8 +5,11 @@ import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import CategoriesSection from "@/components/masterData/CategoriesSection.vue";
 import TagsPanel from "@/components/masterData/TagsPanel.vue";
 import TransferTypesSection from "@/components/masterData/TransferTypesSection.vue";
+import RulesSection from "@/components/masterData/RulesSection.vue";
 
+import type { AllocationRulesData } from "@/contracts/allocationRules";
 import type { Category } from "@/contracts/categories";
+import type { PartiesData } from "@/contracts/parties";
 import { ACC_TAG_TYPE, type AllocationTag } from "@/contracts/allocationTags";
 import type { TransferTypesData } from "@/contracts/transferTypes";
 
@@ -18,8 +21,8 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
    Section « Spending » de la page Master data
 
    Données de base des mouvements : les catégories et
-   sous-catégories, les tags (Acc) et les types d'opération
-   bancaire.
+   sous-catégories, les tags (Acc), les types d'opération
+   bancaire et les règles d'allocation.
 ========================= */
 
 const props = defineProps<{
@@ -30,12 +33,20 @@ const props = defineProps<{
 
   /* null : fichier pas encore chargé. */
   transferTypes: TransferTypesData | null;
+
+  /* null : pas encore publié ou en chargement. */
+  rules: AllocationRulesData | null;
+  rulesLoading: boolean;
+
+  /* null : fichier pas encore chargé (libellés des règles). */
+  parties: PartiesData | null;
 }>();
 
 type SpendingFamily =
   | "categories"
   | "tags"
-  | "transferTypes";
+  | "transferTypes"
+  | "rules";
 
 const familyOptions: {
   value: SpendingFamily;
@@ -44,6 +55,7 @@ const familyOptions: {
   { value: "categories", label: "Categories" },
   { value: "tags", label: "Tags" },
   { value: "transferTypes", label: "Transfer types" },
+  { value: "rules", label: "Rules" },
 ];
 
 const family =
@@ -85,6 +97,23 @@ const tags =
       />
     </template>
   </TransferTypesSection>
+
+  <RulesSection
+    v-else-if="family === 'rules'"
+    :rules="rules"
+    :loading="rulesLoading"
+    :parties="parties"
+    :categories="categories"
+    :allocation-tags="allocationTags"
+    :transfer-types="transferTypes"
+  >
+    <template #title>
+      <SegmentedControl
+        v-model="family"
+        :options="familyOptions"
+      />
+    </template>
+  </RulesSection>
 
   <CategoriesSection
     v-else

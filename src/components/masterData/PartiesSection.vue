@@ -327,7 +327,7 @@ const usageText =
 
     <section class="panel">
       <header class="panel-header">
-        <h2>Parties</h2>
+        <slot name="title" />
 
         <span class="panel-actions">
           <span class="count">

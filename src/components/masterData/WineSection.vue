@@ -27,7 +27,7 @@ import { confirmDialog } from "@/services/dialog/appDialog";
 import { formatInteger } from "@/utils/amountFormat";
 
 /* =========================
-   Section « Wine » de la page Master data
+   Section « Wine cellar » de la page Master data
 
    Données de base de la cave (cellar.json,
    ../Backend/docs/wine-cellar-contract.md, § 1 et § 3) :

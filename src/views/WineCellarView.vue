@@ -58,7 +58,7 @@ import { formatInteger } from "@/utils/amountFormat";
    la fiche du vin est masquée pendant la saisie.
    Taille affichée quand elle n'est pas la bouteille de 75 cl
    (facteur 1). Emplacements et autres données de base :
-   section « Wine » de Master data.
+   section « Wine cellar » de Master data.
 ========================= */
 
 type StockScope = "inStock" | "history" | "all";
