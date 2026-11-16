@@ -648,9 +648,10 @@ function tagLabel(
    Candidats de spending.json (contrat des règles
    d'allocation, § 12 et § 19), la suggestion principale
    en premier, appliquée à l'ouverture d'un mouvement sans
-   draft. Source affichée discrètement sous le
-   commentaire, entre parenthèses ; « Other
-   suggestions » : les autres candidats, un appui remplit
+   draft. Sous le commentaire, pour ne pas déplacer le
+   formulaire : la source, discrète et entre parenthèses,
+   puis « Other suggestions », les autres candidats ; un
+   appui remplit
    partie, catégorie, sous-catégorie, commentaire, tag et
    date d'allocation. Proposés tant qu'aucune allocation
    n'est enregistrée (la partie vaut pour tout le draft).
@@ -1024,41 +1025,6 @@ function onEditAllocation(
     ========================== -->
 
     <section class="allocation-form">
-      <div
-        v-if="showSuggestions && otherSuggestions.length"
-        class="suggestions"
-      >
-        <div class="suggestion-others">
-          <span class="suggestion-label">Other suggestions</span>
-
-          <button
-            v-for="(suggestion, index) in otherSuggestions"
-            :key="index"
-            type="button"
-            class="suggestion-option"
-            :disabled="isLocked"
-            @click="applySuggestion(suggestion)"
-          >
-            <span class="option-text">
-              <span class="option-category">
-                {{ suggestionCategory(suggestion) }}
-              </span>
-
-              <span class="option-detail">
-                {{ suggestionDetail(suggestion) }}
-              </span>
-            </span>
-
-            <StatusPill
-              :tone="suggestion.contradicted ? 'warning' : 'neutral'"
-              :title="sourceTitle(suggestion)"
-            >
-              {{ sourceLabel(suggestion) }}
-            </StatusPill>
-          </button>
-        </div>
-      </div>
-
       <ChipSelector
         v-model="categoryID"
         label="Category"
@@ -1202,6 +1168,41 @@ function onEditAllocation(
       >
         ({{ sourceText(appliedSuggestion) }})
       </p>
+
+      <div
+        v-if="showSuggestions && otherSuggestions.length"
+        class="suggestions"
+      >
+        <div class="suggestion-others">
+          <span class="suggestion-label">Other suggestions</span>
+
+          <button
+            v-for="(suggestion, index) in otherSuggestions"
+            :key="index"
+            type="button"
+            class="suggestion-option"
+            :disabled="isLocked"
+            @click="applySuggestion(suggestion)"
+          >
+            <span class="option-text">
+              <span class="option-category">
+                {{ suggestionCategory(suggestion) }}
+              </span>
+
+              <span class="option-detail">
+                {{ suggestionDetail(suggestion) }}
+              </span>
+            </span>
+
+            <StatusPill
+              :tone="suggestion.contradicted ? 'warning' : 'neutral'"
+              :title="sourceTitle(suggestion)"
+            >
+              {{ sourceLabel(suggestion) }}
+            </StatusPill>
+          </button>
+        </div>
+      </div>
     </section>
 
     <div class="allocation-separator"></div>
