@@ -92,6 +92,21 @@ const unusedOnly =
 const genericOnly =
   usePersistentRef("masterData.parties.genericOnly", false);
 
+const hasFilters =
+  computed(() =>
+    query.value.trim() !== "" ||
+    typeFilter.value !== null ||
+    unusedOnly.value ||
+    genericOnly.value
+  );
+
+function resetFilters() {
+  query.value = "";
+  typeFilter.value = null;
+  unusedOnly.value = false;
+  genericOnly.value = false;
+}
+
 const selectedId =
   ref<number | null>(null);
 
@@ -349,6 +364,13 @@ const usageText =
           autocomplete="off"
           spellcheck="false"
         />
+
+        <PillButton
+          v-if="hasFilters"
+          @click="resetFilters"
+        >
+          Reset
+        </PillButton>
       </div>
 
       <div class="filter-line">
@@ -614,13 +636,14 @@ h3 {
 
 .search-line {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
 
   margin-bottom: 0.5rem;
 }
 
 .search-input {
-  flex: 1;
+  flex: 0 1 20rem;
   min-width: 0;
   box-sizing: border-box;
 

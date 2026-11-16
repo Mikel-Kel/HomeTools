@@ -118,6 +118,17 @@ function suggestionCount(
   return `${formatInteger(suggestion.allocations)} of ${formatInteger(total)} allocations`;
 }
 
+const hasFilters =
+  computed(() =>
+    query.value.trim() !== "" ||
+    withSuggestion.value
+  );
+
+function resetFilters() {
+  query.value = "";
+  withSuggestion.value = false;
+}
+
 const suggestionCountTotal =
   computed(() =>
     (props.data?.labels ?? []).filter(entry => suggestedParty(entry)).length
@@ -257,6 +268,13 @@ function onSaved(
           autocomplete="off"
           spellcheck="false"
         />
+
+        <PillButton
+          v-if="hasFilters"
+          @click="resetFilters"
+        >
+          Reset
+        </PillButton>
 
         <PillButton
           :active="withSuggestion"
@@ -498,6 +516,11 @@ function onSaved(
   border-radius: 8px;
 
   font-size: var(--font-size-sm);
+}
+
+/* Recherche principale raccourcie, Reset juste à sa droite. */
+.search-line .search-input {
+  flex: 0 1 20rem;
 }
 
 /* =========================
