@@ -176,3 +176,262 @@ export function readAllocationRules(
       ),
   };
 }
+
+/* =========================
+   Événements émis par la PWA (§ 18)
+
+   events/PWA-RUL_<AAAAMMJJHHMMSS>[_R<id>].json, version 1 :
+   - RULE_SAVED { rule, fromAllocation, source } ; rule.id
+     null : création (une création aux conditions d'une
+     règle existante la remplace) ; toute règle enregistrée
+     depuis la PWA prend origin « pwa » ;
+   - RULE_DELETED { id, source } (règle absente : pas une
+     erreur).
+   Contrôles du § 2.2 ; le Mac reste juge, son message est
+   affiché tel quel. Après traitement, allocationRules.json
+   et spending.json sont republiés.
+========================= */
+
+export const RULE_EVENT_TRIGRAM = "RUL";
+
+export const RULE_EVENT_VERSION = 1;
+
+export const MATCH_TEXT_MIN_LENGTH = 3;
+export const MATCH_TEXT_MAX_LENGTH = 50;
+export const COMMENT_MAX_LENGTH = 50;
+export const REF_MONTH_OFFSET_MAX = 12;
+
+export interface AllocationRuleSave {
+  id: number | null;
+  kind: AllocationRuleKind;
+  partyId: number | null;
+  matchText: string | null;
+  transferTypeId: number | null;
+  holder: string | null;
+  allocPartyId: number | null;
+  subCategoryId: number | null;
+  tagId: number;
+  commentTemplate: string | null;
+  refMonthOffset: number | null;
+  autoConfirm: boolean;
+}
+
+/* Remember : allocation saisie, convertie en modèle par le Mac. */
+export interface RuleFromAllocation {
+  fitid: string;
+  comment: string;
+  allocDate: string;
+}
+
+/* Suffixe du fichier : la règle modifiée ou supprimée ; aucun pour une création. */
+export function ruleEventSuffix(
+  id: number | null
+): string | undefined {
+  return id === null
+    ? undefined
+    : `R${id}`;
+}
+
+/* =========================
+   Modèle de commentaire (§ 3)
+
+   Jetons entre accolades, rendus à partir de la date de
+   valeur du mouvement :
+   - {M}, {M±n}  mois (n 1–24)        2026-11
+   - {Y}, {Y±n}  année (n 1–9)        2026
+   - {YY}, {YY±n} année sur 2 chiffres 26
+   - {Q}, {Q±n}  trimestre (n 1–8)    2026 Q4
+   - {R}, {R±n}  3 mois depuis le mois décalé (n 1–12),
+                 format legacy        Sep - Nov 26,
+                                      Nov 26 - Jan 27
+   Une accolade hors d'un jeton valide rend le modèle
+   invalide ; le résultat est rogné. Le rendu le plus long
+   tient en COMMENT_MAX_LENGTH caractères. Même règles que le
+   Mac, qui reste juge.
+========================= */
+
+type TokenKind = "M" | "Y" | "YY" | "Q" | "R";
+
+const TOKEN_MAX_OFFSET: Record<TokenKind, number> = {
+  M: 24,
+  Y: 9,
+  YY: 9,
+  Q: 8,
+  R: 12,
+};
+
+/* Longueur maximale du rendu de chaque jeton. */
+const TOKEN_MAX_LENGTH: Record<TokenKind, number> = {
+  M: 7,
+  Y: 4,
+  YY: 2,
+  Q: 7,
+  R: 15,
+};
+
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const TOKEN_PATTERN =
+  /\{(YY|M|Y|Q|R)(?:([+-])(\d{1,2}))?\}/g;
+
+interface TemplateToken {
+  kind: TokenKind;
+  offset: number;
+}
+
+export type TemplateCheck =
+  | { ok: true; maxLength: number }
+  | { ok: false; error: string };
+
+/* Jetons du modèle, ou l'erreur qui le rend invalide. */
+function parseTemplate(
+  template: string
+): { tokens: TemplateToken[]; literal: string } | { error: string } {
+  const tokens: TemplateToken[] = [];
+
+  for (const match of template.matchAll(TOKEN_PATTERN)) {
+    const kind =
+      match[1] as TokenKind;
+
+    const offset =
+      match[3] === undefined
+        ? 0
+        : Number(match[3]) * (match[2] === "-" ? -1 : 1);
+
+    if (
+      match[3] !== undefined &&
+      (Math.abs(offset) < 1 || Math.abs(offset) > TOKEN_MAX_OFFSET[kind])
+    ) {
+      return {
+        error: `offset of ${match[0]} out of range`,
+      };
+    }
+
+    tokens.push({ kind, offset });
+  }
+
+  const literal =
+    template.replace(TOKEN_PATTERN, "");
+
+  if (/[{}]/.test(literal)) {
+    return { error: "brace outside a token" };
+  }
+
+  return { tokens, literal };
+}
+
+/* Modèle rogné, comme le Mac à l'enregistrement. */
+export function checkCommentTemplate(
+  template: string
+): TemplateCheck {
+  const parsed =
+    parseTemplate(template.trim());
+
+  if ("error" in parsed) {
+    return { ok: false, error: parsed.error };
+  }
+
+  const maxLength =
+    parsed.literal.length +
+    parsed.tokens.reduce((total, token) => total + TOKEN_MAX_LENGTH[token.kind], 0);
+
+  return maxLength > COMMENT_MAX_LENGTH
+    ? {
+        ok: false,
+        error: `rendered comment up to ${maxLength} characters, ${COMMENT_MAX_LENGTH} at most`,
+      }
+    : { ok: true, maxLength };
+}
+
+/* Année et mois (1–12) décalés de months mois. */
+function shiftMonth(
+  year: number,
+  month: number,
+  months: number
+): { year: number; month: number } {
+  const index =
+    year * 12 + (month - 1) + months;
+
+  return {
+    year: Math.floor(index / 12),
+    month: (index % 12) + 1,
+  };
+}
+
+function renderToken(
+  token: TemplateToken,
+  year: number,
+  month: number
+): string {
+  switch (token.kind) {
+    case "M": {
+      const shifted =
+        shiftMonth(year, month, token.offset);
+
+      return `${shifted.year}-${String(shifted.month).padStart(2, "0")}`;
+    }
+
+    case "Y":
+      return String(year + token.offset);
+
+    case "YY":
+      return String((year + token.offset) % 100).padStart(2, "0");
+
+    case "Q": {
+      const shifted =
+        shiftMonth(year, Math.floor((month - 1) / 3) * 3 + 1, token.offset * 3);
+
+      return `${shifted.year} Q${Math.floor((shifted.month - 1) / 3) + 1}`;
+    }
+
+    case "R": {
+      const start =
+        shiftMonth(year, month, token.offset);
+
+      const end =
+        shiftMonth(start.year, start.month, 2);
+
+      const yy = (value: number) =>
+        String(value % 100).padStart(2, "0");
+
+      return start.year === end.year
+        ? `${MONTH_NAMES[start.month - 1]} - ${MONTH_NAMES[end.month - 1]} ${yy(end.year)}`
+        : `${MONTH_NAMES[start.month - 1]} ${yy(start.year)} - ${MONTH_NAMES[end.month - 1]} ${yy(end.year)}`;
+    }
+  }
+}
+
+/* Rendu pour une date de valeur AAAA-MM-JJ ; null si le modèle ou la date est invalide. */
+export function renderCommentTemplate(
+  template: string,
+  valueDate: string
+): string | null {
+  const date =
+    /^(\d{4})-(\d{2})-\d{2}$/.exec(valueDate);
+
+  if (!date || "error" in parseTemplate(template)) {
+    return null;
+  }
+
+  const year =
+    Number(date[1]);
+
+  const month =
+    Number(date[2]);
+
+  return template
+    .replace(TOKEN_PATTERN, (_match, kind: TokenKind, sign?: string, digits?: string) =>
+      renderToken(
+        {
+          kind,
+          offset: digits === undefined ? 0 : Number(digits) * (sign === "-" ? -1 : 1),
+        },
+        year,
+        month
+      )
+    )
+    .trim();
+}

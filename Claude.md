@@ -145,7 +145,10 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 - Règles d'allocation (lot 3) : contrat `../Backend/docs/allocation-rules-contract.md` (§ 12 candidats de
   `spending.json`, § 17 export `settings/allocationRules.json`, § 18 événements `PWA-RUL_…`). Candidats dans
   `AllocationView.vue` (« Other suggestions », la partie du draft suit le candidat choisi) ; liste des règles dans
-  Master data, « Spending › Rules » (`RulesSection.vue`, lecteur `src/contracts/allocationRules.ts`).
+  Master data, « Spending › Rules » (`RulesSection.vue`, lecteur `src/contracts/allocationRules.ts`), saisie par
+  `RuleSheet.vue` (`RULE_SAVED` / `RULE_DELETED`, suffixe `R<id>`, aucun à la création) ; jetons des modèles de
+  commentaire (§ 3) contrôlés et rendus par `checkCommentTemplate` / `renderCommentTemplate`, alignés sur
+  `allocation_suggest.py` (le Mac reste juge).
 
 - Indicateurs (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/indicators-contract.md`
   (exports `indicators/indicators.json` et `values-<famille>.json`, événements `PWA-IND_…`).

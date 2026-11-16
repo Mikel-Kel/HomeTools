@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import {
   computed,
+  ref,
 } from "vue";
 
+import RuleSheet from "@/components/masterData/RuleSheet.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
@@ -35,14 +37,17 @@ import { formatInteger } from "@/utils/amountFormat";
    d'allocation si elle diffère, tag, modèle de commentaire
    et décalage du mois de référence), son usage sur 12 mois
    (mouvements concernés / fois en tête, fois contredite par
-   l'historique) ; règle créée ou modifiée dans la PWA
-   marquée « PWA » (les migrées, la plupart, ne le sont
-   pas), règle sans mouvement en 12 mois « Unused ».
+   l'historique) ; règle prioritaire (origin « pwa » : créée
+   ou modifiée dans la PWA, toujours en tête, § 11) marquée
+   « * » après son identifiant, légende sous la liste ;
+   règle sans mouvement en 12 mois « Unused ».
 
    Filtres : recherche (partie, texte, partie d'allocation,
    commentaire), sous-catégorie, « Unused only ».
-   Lecture seule pour l'instant. Le titre du panneau (slot
-   « title ») est fourni par la section « Spending ».
+   Création (« + Rule »), modification et suppression par
+   la fiche d'une règle (RuleSheet), ouverte par un clic sur
+   la ligne. Le titre du panneau (slot « title ») est fourni
+   par la section « Spending ».
 ========================= */
 
 const props = defineProps<{
@@ -244,6 +249,15 @@ const filteredRules =
         )
       : rules;
   });
+
+/* =========================
+   Fiche
+
+   undefined : fermée ; null : nouvelle règle.
+========================= */
+
+const sheetRule =
+  ref<AllocationRule | null | undefined>(undefined);
 </script>
 
 <template>
@@ -253,9 +267,15 @@ const filteredRules =
 
       <span
         v-if="rules && parties"
-        class="count"
+        class="panel-actions"
       >
-        {{ formatInteger(filteredRules.length) }} / {{ formatInteger(rules.rules.length) }}
+        <span class="count">
+          {{ formatInteger(filteredRules.length) }} / {{ formatInteger(rules.rules.length) }}
+        </span>
+
+        <PillButton @click="sheetRule = null">
+          + Rule
+        </PillButton>
       </span>
     </header>
 
@@ -349,8 +369,16 @@ const filteredRules =
             <tr
               v-for="rule in filteredRules"
               :key="rule.id"
+              class="clickable-row"
+              @click="sheetRule = rule"
             >
-              <td class="col-id">{{ rule.id }}</td>
+              <td class="col-id">
+                {{ rule.id }}<span
+                  class="priority"
+                  :class="{ shown: rule.origin === 'pwa' }"
+                  :title="rule.origin === 'pwa' ? 'Priority rule: always suggested first' : undefined"
+                >*</span>
+              </td>
 
               <td>
                 <div
@@ -414,14 +442,6 @@ const filteredRules =
 
               <td class="col-status">
                 <StatusPill
-                  v-if="rule.origin === 'pwa'"
-                  tone="primary"
-                  title="Created or changed in the app"
-                >
-                  PWA
-                </StatusPill>
-
-                <StatusPill
                   v-if="rule.usage.movements === 0"
                   dashed
                   title="No movement in the last 12 months"
@@ -433,7 +453,23 @@ const filteredRules =
           </tbody>
         </table>
       </div>
+
+      <p class="legend">
+        * Priority rule (created or changed in the app): always suggested first.
+        Other rules may yield to the recent history.
+      </p>
     </template>
+
+    <RuleSheet
+      v-if="rules && parties && sheetRule !== undefined"
+      :rule="sheetRule"
+      :data="rules"
+      :parties="parties"
+      :categories="categories"
+      :allocation-tags="allocationTags"
+      :transfer-types="transferTypes"
+      @close="sheetRule = undefined"
+    />
   </section>
 </template>
 
@@ -457,6 +493,42 @@ const filteredRules =
 
   min-height: 32px;
   margin-bottom: 0.5rem;
+}
+
+/* Toujours la place de l'astérisque : identifiants alignés. */
+.priority {
+  visibility: hidden;
+
+  margin-left: 2px;
+
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.priority.shown {
+  visibility: visible;
+}
+
+.legend {
+  margin: 0.5rem 0 0;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-xs);
+}
+
+.panel-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  background: var(--bg-soft);
 }
 
 .count {
