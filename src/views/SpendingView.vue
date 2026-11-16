@@ -2048,8 +2048,9 @@ onBeforeUnmount(() => {
   width: 110px;
 }
 
+/* Assez large pour « RELEASED » en majuscules, sans points de suspension. */
 .spending-table col.col-status {
-  width: 100px;
+  width: 116px;
 }
 
 .spending-table col.col-currency {
