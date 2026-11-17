@@ -14,6 +14,7 @@ import AppIcon from "@/components/AppIcon.vue";
 import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
+import AccountSection from "@/components/spending/AccountSection.vue";
 import type { StatusTone } from "@/components/ui/StatusPill.vue";
 import DateChip from "@/components/DateChip.vue";
 
@@ -1518,58 +1519,34 @@ onBeforeUnmount(() => {
         No unallocated expenses
       </p>
 
-      <section
+      <AccountSection
         v-for="
           account
           in accounts
         "
         :key="account.id"
-        class="account"
+        :label="account.label"
+        :count="recordsFor(account.id).length"
+        :total="totalFor(account.id)"
+        :collapsed="isCollapsed(account.id)"
+        @toggle="toggleAccount(account.id)"
       >
-        <div class="account-separator"></div>
-
-    <header
-      class="account-header clickable"
-      @click="toggleAccount(account.id)"
-    >
-      <div class="account-title">
-        <span class="arrow">
-          {{ isCollapsed(account.id) ? "►" : "▼" }}
-        </span>
-
-        <h2>{{ account.label }}</h2>
-
-        <span class="ops-count">
-          {{ recordsFor(account.id).length }} ops
-        </span>
         <!-- Bouton download Card24 — uniquement pour Global Card, avec la capacité card24 -->
-        <button
+        <template
           v-if="card24Enabled && account.label.toLowerCase().includes('card')"
-          class="btn-download-card24"
-          :disabled="card24Downloading"
-          title="Télécharger les transactions Card24"
-          @click.stop="onDownloadCard24()"
+          #actions
         >
-          {{ card24Downloading ? "⏳" : "⬇" }}
-        </button>
+          <button
+            class="btn-download-card24"
+            :disabled="card24Downloading"
+            title="Télécharger les transactions Card24"
+            @click="onDownloadCard24()"
+          >
+            {{ card24Downloading ? "⏳" : "⬇" }}
+          </button>
+        </template>
 
-      </div>
-
-      <div
-        class="total right"
-        :class="totalFor(account.id) >= 0 ? 'positive' : 'negative'"
-      >
-        {{ formatAmount(totalFor(account.id), { showPlus: true }) }}
-      </div>
-    </header>
-        <table
-          v-if="
-            !isCollapsed(
-              account.id
-            )
-          "
-          class="spending-table"
-        >
+        <table class="spending-table">
           <colgroup>
             <col class="col-date">
             <col class="col-party">
@@ -1714,7 +1691,7 @@ onBeforeUnmount(() => {
             </tr>
           </tbody>
         </table>
-      </section>
+      </AccountSection>
     </div>
   </div>
 
@@ -1958,80 +1935,6 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-.account {
-  margin-bottom: 0.75rem;
-}
-
-.account-separator {
-  height: 1px;
-  background: var(--border);
-  margin: 0.25rem 0 0.5rem;
-}
-
-.account-header {
-  position: sticky;
-  top: var(--sticky-height);
-  z-index: 120;
-
-  background:
-    color-mix(
-      in srgb,
-      var(--surface-soft) 90%,
-      transparent
-    );
-
-  border-top:
-    1px solid
-    var(--border);
-
-  border-bottom:
-    1px solid
-    var(--border);
-
-  display: grid;
-  grid-template-columns:
-    110px
-    minmax(0, 1fr)
-    110px
-    100px
-    50px
-    120px;
-
-  column-gap: 0.5rem;
-
-  padding: 0.25rem 0;
-  align-items: center;
-}
-
-.account-title {
-  grid-column: 1 / 6;
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  padding-left: 0.5rem;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.account-title h2 {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  margin: 0;
-}
-
-.ops-count {
-  font-size: var(--font-size-sm);
-  opacity: 0.6;
-  white-space: nowrap;
-}
-
-.total {
-  grid-column: 6 / 7;
-  font-weight: 600;
-  text-align: right;
-  padding-right: 0.5rem;
-}
-
 .btn-download-card24 {
   background: transparent;
   border: none;
@@ -2171,13 +2074,11 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.amount-cell.positive,
-.total.positive {
+.amount-cell.positive {
   color: var(--positive);
 }
 
-.amount-cell.negative,
-.total.negative {
+.amount-cell.negative {
   color: var(--negative);
 }
 
