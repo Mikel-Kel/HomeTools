@@ -50,6 +50,17 @@ export interface SpendingWithStatus extends SpendingRecord {
   draftToProcess: boolean;
 }
 
+/* Mouvement en devise étrangère : montant d'origine connu, devise autre que CHF. */
+export function isForeignMovement(
+  record: SpendingRecord
+): boolean {
+  return Boolean(
+    record.foreignAmount != null &&
+    record.currency &&
+    record.currency !== "CHF"
+  );
+}
+
 /* =========================
    State (singleton)
 ========================= */

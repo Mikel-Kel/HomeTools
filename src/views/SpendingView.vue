@@ -15,6 +15,7 @@ import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import AccountSection from "@/components/spending/AccountSection.vue";
+import MovementRow from "@/components/spending/MovementRow.vue";
 import type { StatusTone } from "@/components/ui/StatusPill.vue";
 import DateChip from "@/components/DateChip.vue";
 
@@ -27,6 +28,7 @@ import { useMovementLabel } from "@/composables/spending/useMovementLabel";
 
 import {
   useSpending,
+  isForeignMovement,
   type SpendingWithStatus,
   type AllocationStatus,
 } from "@/composables/spending/useSpending";
@@ -53,13 +55,6 @@ import {
   SPENDING_FOLDER,
 } from "@/contracts/spending";
 
-import {
-  formatDate,
-} from "@/utils/dateFormat";
-
-import {
-  formatAmount,
-} from "@/utils/amountFormat";
 import { confirmDialog } from "@/services/dialog/appDialog";
 import { hasCapability } from "@/services/environment/environmentState";
 import {
@@ -524,16 +519,6 @@ function resetFilters() {
   );
 }
 
-function isForeign(
-  record: SpendingWithStatus
-): boolean {
-  return Boolean(
-    record.foreignAmount != null &&
-    record.currency &&
-    record.currency !== "CHF"
-  );
-}
-
 function applyFilters(
   records: SpendingWithStatus[]
 ): SpendingWithStatus[] {
@@ -561,7 +546,7 @@ function applyFilters(
         currencyFilter.value.size
       ) {
         const recordCurrency =
-          isForeign(record)
+          isForeignMovement(record)
             ? record.currency!
             : "CHF";
 
@@ -841,79 +826,6 @@ async function onDownloadCard24() {
     },
     "Card24Download"
   );
-}
-
-/* =========================
-   FX popover
-========================= */
-
-const fxPopover =
-  ref<{
-    record: SpendingWithStatus;
-    x: number;
-    y: number;
-  } | null>(null);
-
-let fxTimer:
-  number | null = null;
-
-function showFxPopover(
-  event: MouseEvent,
-  record: SpendingWithStatus
-) {
-  if (
-    !isForeign(record)
-  ) {
-    return;
-  }
-
-  const target =
-    event.currentTarget as
-      HTMLElement;
-
-  const rect =
-    target.getBoundingClientRect();
-
-  fxPopover.value = {
-    record,
-    x:
-      rect.right - 10,
-    y:
-      rect.top - 8,
-  };
-
-  if (fxTimer !== null) {
-    window.clearTimeout(
-      fxTimer
-    );
-  }
-
-  fxTimer =
-    window.setTimeout(
-      () => {
-        fxPopover.value =
-          null;
-
-        fxTimer =
-          null;
-      },
-
-      2000
-    );
-}
-
-function closeFxPopover() {
-  fxPopover.value =
-    null;
-
-  if (fxTimer !== null) {
-    window.clearTimeout(
-      fxTimer
-    );
-
-    fxTimer =
-      null;
-  }
 }
 
 /* =========================
@@ -1260,8 +1172,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  closeFxPopover();
-
   if (
     resizeObserver &&
     stickyRef.value
@@ -1570,7 +1480,7 @@ onBeforeUnmount(() => {
           </thead>
 
           <tbody>
-            <tr
+            <MovementRow
               v-for="
                 record
                 in recordsFor(
@@ -1578,149 +1488,25 @@ onBeforeUnmount(() => {
                 )
               "
               :key="record.id"
-              class="row"
-              @click="
-                openAllocation(
-                  record
-                )
-              "
+              :record="record"
+              :show-bank-text="showBankText"
+              @open="openAllocation(record)"
             >
-              <td>
-                {{
-                  formatDate(
-                    record.date,
-                    "compact"
-                  )
-                }}
-              </td>
-
-              <td>
-                <div class="movement-label">
-                  {{ movementLabel.label(record) }}
-                </div>
-
-                <div
-                  v-if="showBankText && movementLabel.secondLine(record)"
-                  class="bank-text"
-                >
-                  {{ movementLabel.secondLine(record) }}
-                </div>
-              </td>
-
-              <td>
-                {{ record.owner }}
-              </td>
-
-              <td>
+              <template #status>
                 <StatusPill
                   class="allocation-status"
-                  :tone="
-                    STATUS_TONES[
-                      record
-                        .allocationStatus
-                    ]
-                  "
+                  :tone="STATUS_TONES[record.allocationStatus]"
                 >
-                  {{
-                    record
-                      .allocationStatus
-                  }}
+                  {{ record.allocationStatus }}
                 </StatusPill>
-              </td>
-
-              <td class="currency-cell">
-                <span
-                  v-if="
-                    isForeign(
-                      record
-                    )
-                  "
-                  class="fx-code"
-                >
-                  {{ record.currency }}
-                </span>
-              </td>
-
-              <td
-                class="right amount-cell"
-                :class="[
-                  record.amount >= 0
-                    ? 'positive'
-                    : 'negative',
-
-                  {
-                    foreign:
-                      isForeign(
-                        record
-                      )
-                  }
-                ]"
-                @click.stop="
-                  showFxPopover(
-                    $event,
-                    record
-                  )
-                "
-              >
-                {{
-                  isForeign(
-                    record
-                  )
-                    ? formatAmount(
-                        record.amount >= 0
-                          ? Math.abs(
-                              record.foreignAmount ??
-                              0
-                            )
-                          : -Math.abs(
-                              record.foreignAmount ??
-                              0
-                            ),
-                        {
-                          showPlus: true
-                        }
-                      )
-                    : formatAmount(
-                        record.amount,
-                        {
-                          showPlus: true
-                        }
-                      )
-                }}
-              </td>
-            </tr>
+              </template>
+            </MovementRow>
           </tbody>
         </table>
       </AccountSection>
     </div>
   </div>
 
-  <div
-    v-if="fxPopover"
-    class="fx-popover"
-    :style="{
-      top:
-        fxPopover.y +
-        'px',
-
-      left:
-        fxPopover.x +
-        'px'
-    }"
-    @click.stop="
-      closeFxPopover
-    "
-  >
-    {{
-      formatAmount(
-        fxPopover.record.amount,
-        {
-          showPlus: true
-        }
-      )
-    }}
-    CHF
-  </div>
 </template>
 
 <style scoped>
@@ -1988,54 +1774,21 @@ onBeforeUnmount(() => {
   width: 100px;
 }
 
-.spending-table th,
-.spending-table td {
+.spending-table th {
   padding: 8px;
   border-bottom: 1px solid var(--border);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.movement-label,
-.bank-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.bank-text {
-  color: var(--text-soft);
-  font-size: var(--font-size-xs);
-}
-
-.spending-table tbody tr:nth-child(even) {
-  background: var(--surface-soft);
-}
-
-.spending-table th:nth-child(1),
-.spending-table td:nth-child(1) {
   text-align: center;
 }
 
 .spending-table th:nth-child(2),
-.spending-table td:nth-child(2) {
+.spending-table th:nth-child(5) {
   text-align: left;
 }
 
-.spending-table th:nth-child(3),
-.spending-table td:nth-child(3),
-.spending-table th:nth-child(4),
-.spending-table td:nth-child(4) {
-  text-align: center;
-}
-
-.spending-table th:nth-child(5),
-.spending-table td:nth-child(5) {
-  text-align: left;
-}
-
-.spending-table th:nth-child(6),
-.spending-table td:nth-child(6) {
+.spending-table th:nth-child(6) {
   text-align: right;
 }
 
@@ -2046,76 +1799,5 @@ onBeforeUnmount(() => {
 .allocation-status {
   margin: 0 auto;
   text-transform: uppercase;
-}
-
-/* =========================================================
-   FX
-========================================================= */
-
-.currency-cell {
-  text-align: left;
-  padding-left: 0;
-  padding-right: 0;
-}
-
-.amount-cell {
-  text-align: right;
-  padding-left: 0;
-  padding-right: 8px;
-}
-
-.fx-code {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--primary);
-}
-
-.amount-cell.foreign {
-  cursor: pointer;
-}
-
-.amount-cell.positive {
-  color: var(--positive);
-}
-
-.amount-cell.negative {
-  color: var(--negative);
-}
-
-.fx-popover {
-  position: fixed;
-  transform: translate(-100%, -100%);
-  background: var(--surface);
-  color: var(--text);
-  padding: 6px 10px;
-  border-radius: 10px;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  white-space: nowrap;
-  box-shadow: var(--shadow-md);
-  animation: fxFade 0.15s ease-out;
-  z-index: 1000;
-}
-
-@keyframes fxFade {
-  from {
-    opacity: 0;
-    transform:
-      translate(
-        -100%,
-        -90%
-      )
-      scale(0.95);
-  }
-
-  to {
-    opacity: 1;
-    transform:
-      translate(
-        -100%,
-        -100%
-      )
-      scale(1);
-  }
 }
 </style>
