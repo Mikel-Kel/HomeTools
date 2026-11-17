@@ -17,7 +17,7 @@ import StatusPill from "@/components/ui/StatusPill.vue";
 import AccountSection from "@/components/spending/AccountSection.vue";
 import MovementRow from "@/components/spending/MovementRow.vue";
 import type { StatusTone } from "@/components/ui/StatusPill.vue";
-import DateChip from "@/components/DateChip.vue";
+import MovementFilters from "@/components/spending/MovementFilters.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useDriveWatcher } from "@/composables/useDriveWatcher";
@@ -182,61 +182,52 @@ const statusFilter =
     new Set()
   );
 
+const movementFilters =
+  useMovementFilters<SpendingWithStatus>({
+    records:
+      () => spending.records.value,
+
+    loaded:
+      () => spendingFile.data.value !== null,
+
+    sessionKey:
+      SPENDING_FILTERS_KEY,
+
+    extension: {
+      matches:
+        record =>
+          !statusFilter.value.size ||
+          statusFilter.value.has(
+            record.allocationStatus
+          ),
+
+      reset: () => {
+        statusFilter.value =
+          new Set();
+      },
+
+      snapshot: () => ({
+        status:
+          Array.from(
+            statusFilter.value
+          ),
+      }),
+
+      restore: saved => {
+        statusFilter.value =
+          new Set(
+            Array.isArray(saved.status)
+              ? saved.status as AllocationStatus[]
+              : []
+          );
+      },
+    },
+  });
+
 const {
-  filtersOpen,
-  yearFilter,
-  dateFrom,
-  dateTo,
-  minAmount,
-  maxAmount,
-  ownerItems,
-  ownerModel,
-  currencyItems,
-  currencyModel,
-  yearItems,
-  selectedYearEmpty,
   applyFilters,
-  resetFilters,
-} = useMovementFilters<SpendingWithStatus>({
-  records:
-    () => spending.records.value,
-
-  loaded:
-    () => spendingFile.data.value !== null,
-
-  sessionKey:
-    SPENDING_FILTERS_KEY,
-
-  extension: {
-    matches:
-      record =>
-        !statusFilter.value.size ||
-        statusFilter.value.has(
-          record.allocationStatus
-        ),
-
-    reset: () => {
-      statusFilter.value =
-        new Set();
-    },
-
-    snapshot: () => ({
-      status:
-        Array.from(
-          statusFilter.value
-        ),
-    }),
-
-    restore: saved => {
-      statusFilter.value =
-        new Set(
-          Array.isArray(saved.status)
-            ? saved.status as AllocationStatus[]
-            : []
-        );
-    },
-  },
-});
+  selectedYearEmpty,
+} = movementFilters;
 
 /* =========================
    Collapse accounts
@@ -876,142 +867,28 @@ onBeforeUnmount(() => {
       ref="stickyRef"
       class="sticky-zone"
     >
-      <section class="filters">
-        <header
-          class="filters-header clickable"
-          @click="
-            filtersOpen =
-              !filtersOpen
-          "
-        >
-          <span class="arrow">
-            {{
-              filtersOpen
-                ? "▼"
-                : "►"
-            }}
-          </span>
-
-          <h2>Filters</h2>
-
+      <MovementFilters :filters="movementFilters">
+        <template #header>
           <PillButton
-            v-if="filtersOpen"
-            @click.stop="
-              resetFilters
-            "
-          >
-            Reset
-          </PillButton>
-
-          <PillButton
-            class="bank-text-toggle"
             :active="showBankText"
             title="Second line of each movement: the bank text"
-            @click.stop="showBankText = !showBankText"
+            @click="showBankText = !showBankText"
           >
             Bank text
           </PillButton>
-        </header>
+        </template>
 
-        <div
-          v-if="filtersOpen"
-          class="filters-body"
-        >
+        <template #selectors>
           <ChipSelector
-            v-model="ownerModel"
-            label="Owner"
-            :items="ownerItems"
-            :multiple="true"
-            :show-all="true"
-            :align-with-content="
-              true
-            "
-          />
-
-          <ChipSelector
-            v-model="
-              statusFilterArray
-            "
+            v-model="statusFilterArray"
             label="Status"
             :items="statusItems"
             :multiple="true"
             :show-all="true"
-            :align-with-content="
-              true
-            "
+            :align-with-content="true"
           />
-
-          <ChipSelector
-            v-if="currencyItems.length > 0"
-            v-model="currencyModel"
-            label="Currency"
-            :items="currencyItems"
-            :multiple="true"
-            :show-all="true"
-            :align-with-content="
-              true
-            "
-          />
-
-          <ChipSelector
-            v-model="yearFilter"
-            label="Period"
-            :items="yearItems"
-            :show-all="true"
-            :align-with-content="
-              true
-            "
-          />
-
-          <div class="filter-row with-label">
-            <span class="label"></span>
-
-            <div class="filter-content">
-              <div class="dates-row">
-                <DateChip
-                  v-model="dateFrom"
-                  placeholder="From"
-                />
-
-                <DateChip
-                  v-model="dateTo"
-                  placeholder="To"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div class="filter-row with-label">
-            <span class="label">
-              Amount
-            </span>
-
-            <div class="filter-content">
-              <div class="amount-inputs">
-                <input
-                  v-model.number="
-                    minAmount
-                  "
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Min"
-                />
-
-                <input
-                  v-model.number="
-                    maxAmount
-                  "
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Max"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+        </template>
+      </MovementFilters>
     </div>
 
     <!-- Accounts -->
@@ -1202,102 +1079,6 @@ onBeforeUnmount(() => {
     var(--border);
 
   --sticky-height: 48px;
-}
-
-.filters {
-  font-size: var(--font-size-sm);
-  background: var(--bg);
-}
-
-.filters-header {
-  padding: 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-/* Option d'affichage, calée à droite de l'en-tête. */
-.bank-text-toggle {
-  margin-left: auto;
-}
-
-.filters-header h2 {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-soft);
-}
-
-.dates-row {
-  display: flex;
-  gap: 10px;
-}
-
-.filters-body {
-  padding: 0.5rem 0.5rem 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.filter-row.with-label {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.filter-content {
-  min-width: 0;
-}
-
-.amount-inputs {
-  display: flex;
-  gap: 10px;
-}
-
-.label {
-  font-size: 0.9rem;
-  color: var(--text-soft);
-}
-
-/* =========================================================
-   INPUTS
-========================================================= */
-
-.filter-row input:not(.hidden-date-input) {
-  height: 30px;
-  padding: 0 8px;
-
-  border-radius: 18px;
-  border: 1px solid var(--border);
-
-  background: var(--surface);
-  color: var(--text);
-
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  font-family: inherit;
-}
-
-.filter-row.with-label .filter-content {
-  min-width: 0;
-  margin-left: -14px;
-}
-
-.filter-row input[type="date"] {
-  width: 120px;
-  letter-spacing: 0.04rem;
-}
-
-.filter-row input[type="number"] {
-  width: 80px;
-}
-
-.filter-row input:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary-soft);
 }
 
 /* =========================================================

@@ -51,6 +51,13 @@ export interface MovementFiltersOptions<T> {
   extension?: MovementFilterExtension<T>;
 }
 
+/* État des filtres affiché par MovementFilters.vue. */
+export type MovementFilterState =
+  Omit<
+    ReturnType<typeof useMovementFilters>,
+    "applyFilters"
+  >;
+
 export interface ChipItem {
   id: string;
   label: string;
