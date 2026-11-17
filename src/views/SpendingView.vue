@@ -44,6 +44,7 @@ import {
 } from "@/composables/useRemoteJson";
 
 import { useRememberRequest } from "@/composables/allocations/useRememberRequest";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 
 import {
   readSpending,
@@ -174,6 +175,15 @@ const card24Enabled =
 
 const filtersOpen =
   ref(false);
+
+/*
+  Seconde ligne des écritures (texte de la banque) :
+  préférence d'affichage de l'appareil, gardée hors des
+  filtres (Reset n'y touche pas). Masquée : lignes plus
+  basses.
+*/
+const showBankText =
+  usePersistentRef("spending.showBankText", true);
 
 const ownerFilter =
   ref<Set<string>>(
@@ -1379,6 +1389,15 @@ onBeforeUnmount(() => {
           >
             Reset
           </PillButton>
+
+          <PillButton
+            class="bank-text-toggle"
+            :active="showBankText"
+            title="Second line of each movement: the bank text"
+            @click.stop="showBankText = !showBankText"
+          >
+            Bank text
+          </PillButton>
         </header>
 
         <div
@@ -1604,7 +1623,7 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div
-                  v-if="movementLabel.secondLine(record)"
+                  v-if="showBankText && movementLabel.secondLine(record)"
                   class="bank-text"
                 >
                   {{ movementLabel.secondLine(record) }}
@@ -1837,6 +1856,11 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* Option d'affichage, calée à droite de l'en-tête. */
+.bank-text-toggle {
+  margin-left: auto;
 }
 
 .filters-header h2 {
