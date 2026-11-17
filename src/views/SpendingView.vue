@@ -28,7 +28,6 @@ import { useMovementLabel } from "@/composables/spending/useMovementLabel";
 
 import {
   useSpending,
-  isForeignMovement,
   type SpendingWithStatus,
   type AllocationStatus,
 } from "@/composables/spending/useSpending";
@@ -48,6 +47,7 @@ import {
 
 import { useRememberRequest } from "@/composables/allocations/useRememberRequest";
 import { usePersistentRef } from "@/composables/usePersistentRef";
+import { useMovementFilters } from "@/composables/spending/useMovementFilters";
 
 import {
   readSpending,
@@ -57,11 +57,6 @@ import {
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 import { hasCapability } from "@/services/environment/environmentState";
-import {
-  getSessionItem,
-  removeSessionItem,
-  setSessionItem,
-} from "@/services/environment/browserStorage";
 
 /* =========================
    Router / storage
@@ -169,9 +164,6 @@ const SPENDING_FILTERS_KEY =
 const card24Enabled =
   hasCapability("card24");
 
-const filtersOpen =
-  ref(false);
-
 /*
   Seconde ligne des écritures (texte de la banque) :
   préférence d'affichage de l'appareil, gardée hors des
@@ -181,48 +173,70 @@ const filtersOpen =
 const showBankText =
   usePersistentRef("spending.showBankText", true);
 
-const ownerFilter =
-  ref<Set<string>>(
-    new Set()
-  );
-
+/*
+  Statut d'allocation : filtre propre à Spending, ajouté aux
+  filtres communs des mouvements.
+*/
 const statusFilter =
   ref<Set<AllocationStatus>>(
     new Set()
   );
 
-const currencyFilter =
-  ref<Set<string>>(
-    new Set()
-  );
+const {
+  filtersOpen,
+  yearFilter,
+  dateFrom,
+  dateTo,
+  minAmount,
+  maxAmount,
+  ownerItems,
+  ownerModel,
+  currencyItems,
+  currencyModel,
+  yearItems,
+  selectedYearEmpty,
+  applyFilters,
+  resetFilters,
+} = useMovementFilters<SpendingWithStatus>({
+  records:
+    () => spending.records.value,
 
-/*
-  Année des mouvements (chips de « Period ») ; null : toutes.
-  Par défaut l'année courante, même sans mouvement.
-*/
-const CURRENT_YEAR =
-  String(new Date().getFullYear());
+  loaded:
+    () => spendingFile.data.value !== null,
 
-const yearFilter =
-  ref<string | null>(
-    CURRENT_YEAR
-  );
+  sessionKey:
+    SPENDING_FILTERS_KEY,
 
-const dateFrom =
-  ref("");
+  extension: {
+    matches:
+      record =>
+        !statusFilter.value.size ||
+        statusFilter.value.has(
+          record.allocationStatus
+        ),
 
-const dateTo =
-  ref("");
+    reset: () => {
+      statusFilter.value =
+        new Set();
+    },
 
-const minAmount =
-  ref<number | null>(
-    null
-  );
+    snapshot: () => ({
+      status:
+        Array.from(
+          statusFilter.value
+        ),
+    }),
 
-const maxAmount =
-  ref<number | null>(
-    null
-  );
+    restore: saved => {
+      statusFilter.value =
+        new Set(
+          Array.isArray(saved.status)
+            ? saved.status as AllocationStatus[]
+            : []
+        );
+    },
+  },
+});
 
 /* =========================
    Collapse accounts
@@ -262,58 +276,13 @@ function isCollapsed(
 }
 
 /* =========================
-   Accounts / owners
+   Accounts
 ========================= */
 
 const accounts =
   computed(() =>
     spending.accounts.value
   );
-
-const availableOwners =
-  computed(() => {
-    const owners =
-      new Set<string>();
-
-    for (
-      const record
-      of spending.records.value
-    ) {
-      if (record.owner) {
-        owners.add(
-          record.owner
-        );
-      }
-    }
-
-    return Array
-      .from(owners)
-      .sort();
-  });
-
-const ownerItems =
-  computed(() =>
-    availableOwners.value.map(
-      owner => ({
-        id: owner,
-        label:
-          owner || "-",
-      })
-    )
-  );
-
-const ownerFilterArray =
-  computed<string[]>({
-    get: () =>
-      Array.from(
-        ownerFilter.value
-      ),
-
-    set: value => {
-      ownerFilter.value =
-        new Set(value);
-    },
-  });
 
 /* =========================
    Status filters
@@ -358,352 +327,6 @@ const statusFilterArray =
     },
   });
 
-/* =========================
-   Currency filters
-========================= */
-
-const availableCurrencies =
-  computed(() => {
-    const currencies =
-      new Set<string>();
-
-    for (
-      const record
-      of spending.records.value
-    ) {
-      if (
-        record.currency &&
-        record.currency !== "CHF" &&
-        record.foreignAmount != null
-      ) {
-        currencies.add(
-          record.currency
-        );
-      }
-    }
-
-    if (
-      currencies.size === 0
-    ) {
-      return [];
-    }
-
-    return [
-      "CHF",
-      ...Array
-        .from(currencies)
-        .sort(),
-    ];
-  });
-
-const currencyItems =
-  computed(() =>
-    availableCurrencies.value.map(
-      currency => ({
-        id: currency,
-        label: currency,
-      })
-    )
-  );
-
-const currencyFilterArray =
-  computed<string[]>({
-    get: () =>
-      Array.from(
-        currencyFilter.value
-      ),
-
-    set: value => {
-      currencyFilter.value =
-        new Set(value);
-    },
-  });
-
-/* =========================
-   Year filter
-========================= */
-
-/* Années des mouvements encore à allouer, la plus récente d'abord. */
-const recordYears =
-  computed(() =>
-    new Set(
-      spending.records.value.map(
-        record =>
-          record.date.slice(0, 4)
-      )
-    )
-  );
-
-/* L'année courante est toujours proposée. */
-const availableYears =
-  computed(() =>
-    Array
-      .from(
-        new Set([
-          CURRENT_YEAR,
-          ...recordYears.value,
-        ])
-      )
-      .sort()
-      .reverse()
-  );
-
-/* Année choisie sans aucun mouvement à allouer. */
-const selectedYearEmpty =
-  computed(() =>
-    spendingFile.data.value !== null &&
-    yearFilter.value !== null &&
-    !recordYears.value.has(
-      yearFilter.value
-    )
-  );
-
-const yearItems =
-  computed(() =>
-    availableYears.value.map(
-      year => ({
-        id: year,
-        label: year,
-      })
-    )
-  );
-
-/*
-  Année passée choisie dont tout est alloué : retour à
-  l'année courante.
-*/
-watch(
-  availableYears,
-  years => {
-    if (
-      spendingFile.data.value &&
-      yearFilter.value !== null &&
-      !years.includes(
-        yearFilter.value
-      )
-    ) {
-      yearFilter.value =
-        CURRENT_YEAR;
-    }
-  }
-);
-
-/* =========================
-   Filter helpers
-========================= */
-
-function resetFilters() {
-  ownerFilter.value =
-    new Set();
-
-  statusFilter.value =
-    new Set();
-
-  currencyFilter.value =
-    new Set();
-
-  yearFilter.value =
-    CURRENT_YEAR;
-
-  dateFrom.value = "";
-  dateTo.value = "";
-
-  minAmount.value =
-    null;
-
-  maxAmount.value =
-    null;
-
-  removeSessionItem(
-    SPENDING_FILTERS_KEY
-  );
-}
-
-function applyFilters(
-  records: SpendingWithStatus[]
-): SpendingWithStatus[] {
-  return records.filter(
-    record => {
-      if (
-        statusFilter.value.size &&
-        !statusFilter.value.has(
-          record.allocationStatus
-        )
-      ) {
-        return false;
-      }
-
-      if (
-        ownerFilter.value.size &&
-        !ownerFilter.value.has(
-          record.owner
-        )
-      ) {
-        return false;
-      }
-
-      if (
-        currencyFilter.value.size
-      ) {
-        const recordCurrency =
-          isForeignMovement(record)
-            ? record.currency!
-            : "CHF";
-
-        if (
-          !currencyFilter.value.has(
-            recordCurrency
-          )
-        ) {
-          return false;
-        }
-      }
-
-      if (
-        yearFilter.value &&
-        !record.date.startsWith(
-          yearFilter.value
-        )
-      ) {
-        return false;
-      }
-
-      if (
-        dateFrom.value &&
-        record.date <
-          dateFrom.value
-      ) {
-        return false;
-      }
-
-      if (
-        dateTo.value &&
-        record.date >
-          dateTo.value
-      ) {
-        return false;
-      }
-
-      const absoluteAmount =
-        Math.abs(
-          record.amount
-        );
-
-      if (
-        minAmount.value !== null &&
-        absoluteAmount <
-          minAmount.value
-      ) {
-        return false;
-      }
-
-      if (
-        maxAmount.value !== null &&
-        absoluteAmount >
-          maxAmount.value
-      ) {
-        return false;
-      }
-
-      return true;
-    }
-  );
-}
-
-function saveFiltersToSession() {
-  setSessionItem(
-    SPENDING_FILTERS_KEY,
-
-    JSON.stringify({
-      owner:
-        Array.from(
-          ownerFilter.value
-        ),
-
-      status:
-        Array.from(
-          statusFilter.value
-        ),
-
-      currency:
-        Array.from(
-          currencyFilter.value
-        ),
-
-      year:
-        yearFilter.value,
-
-      dateFrom:
-        dateFrom.value,
-
-      dateTo:
-        dateTo.value,
-
-      minAmount:
-        minAmount.value,
-
-      maxAmount:
-        maxAmount.value,
-
-      filtersOpen:
-        filtersOpen.value,
-    })
-  );
-}
-
-function restoreFiltersFromSession() {
-  const raw =
-    getSessionItem(
-      SPENDING_FILTERS_KEY
-    );
-
-  if (!raw) {
-    return;
-  }
-
-  try {
-    const saved =
-      JSON.parse(raw);
-
-    ownerFilter.value =
-      new Set(
-        saved.owner ?? []
-      );
-
-    statusFilter.value =
-      new Set(
-        saved.status ?? []
-      );
-
-    currencyFilter.value =
-      new Set(
-        saved.currency ?? []
-      );
-
-    if ("year" in saved) {
-      yearFilter.value =
-        saved.year ?? null;
-    }
-
-    dateFrom.value =
-      saved.dateFrom ?? "";
-
-    dateTo.value =
-      saved.dateTo ?? "";
-
-    minAmount.value =
-      saved.minAmount ?? null;
-
-    maxAmount.value =
-      saved.maxAmount ?? null;
-
-    filtersOpen.value =
-      saved.filtersOpen ?? false;
-
-  } catch {
-    // Ignore corrupted session storage.
-  }
-}
 
 /* =========================
    Records / totals
@@ -1046,25 +669,6 @@ watch(
   }
 );
 
-watch(
-  [
-    ownerFilter,
-    statusFilter,
-    currencyFilter,
-    yearFilter,
-    dateFrom,
-    dateTo,
-    minAmount,
-    maxAmount,
-    filtersOpen,
-  ],
-
-  saveFiltersToSession,
-
-  {
-    deep: true,
-  }
-);
 
 /* =========================
    Initialization
@@ -1121,8 +725,6 @@ async function initializeView() {
 }
 
 onMounted(async () => {
-  restoreFiltersFromSession();
-
   await initializeView();
 });
 
@@ -1316,9 +918,7 @@ onBeforeUnmount(() => {
           class="filters-body"
         >
           <ChipSelector
-            v-model="
-              ownerFilterArray
-            "
+            v-model="ownerModel"
             label="Owner"
             :items="ownerItems"
             :multiple="true"
@@ -1342,13 +942,8 @@ onBeforeUnmount(() => {
           />
 
           <ChipSelector
-            v-if="
-              availableCurrencies.length >
-              0
-            "
-            v-model="
-              currencyFilterArray
-            "
+            v-if="currencyItems.length > 0"
+            v-model="currencyModel"
             label="Currency"
             :items="currencyItems"
             :multiple="true"
