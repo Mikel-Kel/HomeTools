@@ -4,9 +4,10 @@ import {
   nextTick,
   onMounted,
   ref,
+  watch,
 } from "vue";
 
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
 import AppIcon from "@/components/AppIcon.vue";
@@ -57,16 +58,39 @@ import type {
   AllocationSuggestion,
 } from "@/contracts/spending";
 
+import {
+  readSpending,
+  SPENDING_FILE,
+  SPENDING_FOLDER,
+} from "@/contracts/spending";
+
 /* =========================
    Router / Props
 ========================= */
 
 const router = useRouter();
 
+const route = useRoute();
+
 const props =
   defineProps<{
     id: string;
   }>();
+
+/*
+  Page à retrouver après l'allocation : nom de route passé
+  par ?from= (vue d'origine), Spending par défaut.
+*/
+const returnRouteName =
+  computed(() => {
+    const from =
+      route.query.from;
+
+    return typeof from === "string" &&
+      router.hasRoute(from)
+      ? from
+      : "spending";
+  });
 
 /* =========================
    Storage access
@@ -112,14 +136,67 @@ const transferTypesStore =
    Record
 ========================= */
 
+/*
+  Mouvement pris dans le store de Spending ; absent (URL
+  rechargée, ouverture depuis une autre vue), il est cherché
+  dans spending.json, chargé ici à la demande.
+*/
+const spendingNeeded =
+  ref(false);
+
+const spendingFile =
+  useRemoteJson({
+    folder:
+      SPENDING_FOLDER,
+
+    file:
+      () =>
+        spendingNeeded.value
+          ? SPENDING_FILE
+          : null,
+
+    read:
+      readSpending,
+
+    watchRemote:
+      false,
+  });
+
 const record =
   computed<SpendingRecord | null>(() => {
     return (
       spendingStore.records.value.find(
         item => item.id === props.id
-      ) ?? null
+      ) ??
+      spendingFile.data.value?.records.find(
+        item => item.id === props.id
+      ) ??
+      null
     );
   });
+
+/* Attend la fin du chargement de spending.json. */
+function spendingFileSettled(): Promise<void> {
+  return new Promise(resolve => {
+    const stop =
+      watch(
+        () =>
+          spendingFile.data.value !== null ||
+          spendingFile.error.value !== null,
+
+        settled => {
+          if (settled) {
+            stop();
+            resolve();
+          }
+        },
+
+        {
+          immediate: true,
+        }
+      );
+  });
+}
 
 const recordReady =
   computed(() =>
@@ -438,15 +515,19 @@ onMounted(async () => {
   }
 
   /*
-    SpendingView alimente normalement le store avant
-    l'ouverture d'une allocation.
-
-    En cas de rechargement direct de l'URL, on revient
-    vers SpendingView afin qu'il recharge spending.json.
+    Mouvement absent du store : spending.json est relu. S'il
+    n'y figure pas (déjà alloué, fichier illisible), retour
+    à la vue d'origine.
   */
   if (!record.value) {
+    spendingNeeded.value = true;
+
+    await spendingFileSettled();
+  }
+
+  if (!record.value) {
     await router.replace({
-      name: "spending",
+      name: returnRouteName.value,
     });
 
     return;
@@ -1155,7 +1236,7 @@ async function commitAllocation(
       .isBalanced.value
   ) {
     await router.push({
-      name: "spending",
+      name: returnRouteName.value,
     });
 
     return;
