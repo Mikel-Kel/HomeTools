@@ -14,6 +14,7 @@ import ChipSelector from "@/components/ChipSelector.vue";
 import DateChip from "@/components/DateChip.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import PartySheet from "@/components/masterData/PartySheet.vue";
+import AllocationLines from "@/components/allocation/AllocationLines.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 
@@ -1646,125 +1647,15 @@ function onEditAllocation(
     ========================== -->
 
     <section class="allocation-list">
-      <table>
-        <tbody>
-          <tr
-            v-for="(
-              allocationItem,
-              index
-            ) in allocations"
-            :key="allocationItem.id"
-            :class="{
-              editing:
-                allocationItem.id ===
-                editingAllocationId
-            }"
-          >
-            <td class="alloc-text">
-              <div class="alloc-comment-row">
-                <span class="alloc-comment">
-                  {{
-                    allocationItem.comment ||
-                    "(no comment)"
-                  }}
-                </span>
-
-                <span
-                  v-if="
-                    allocationItem.allocationDate &&
-                    allocationItem.allocationDate !==
-                      recordSafe.date
-                  "
-                  class="alloc-date-badge"
-                  :title="
-                    allocationItem.allocationDate
-                  "
-                >
-                  {{
-                    formatDate(
-                      allocationItem.allocationDate,
-                      "short"
-                    )
-                  }}
-                </span>
-
-                <span
-                  v-if="
-                    allocationItem.allocatedTagID
-                  "
-                  class="alloc-tag-chip"
-                >
-                  {{
-                    tagLabel(
-                      allocationItem.allocatedTagID
-                    )
-                  }}
-                </span>
-              </div>
-
-              <div class="alloc-category">
-                {{
-                  categoryLabel(
-                    allocationItem.categoryID
-                  )
-                }}
-
-                <span
-                  v-if="
-                    allocationItem.subCategoryID
-                  "
-                >
-                  ›
-                  {{
-                    subCategoryLabel(
-                      allocationItem.categoryID,
-                      allocationItem.subCategoryID
-                    )
-                  }}
-                </span>
-              </div>
-            </td>
-
-            <td class="right alloc-amount">
-              {{
-                formatAmount(
-                  allocationItem.amount
-                )
-              }}
-            </td>
-
-            <td class="alloc-action">
-              <button
-                type="button"
-                class="alloc-edit"
-                :disabled="isLocked"
-                :title="
-                  allocationItem.id ===
-                    editingAllocationId
-                    ? 'Cancel edit'
-                    : 'Edit allocation'
-                "
-                @click="
-                  onEditAllocation(index)
-                "
-              >
-                ✎
-              </button>
-
-              <button
-                type="button"
-                :disabled="isLocked"
-                title="Remove allocation"
-                @click="
-                  onRemoveAllocation(index)
-                "
-              >
-                ✕
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <AllocationLines
+        :lines="allocations"
+        :value-date="recordSafe.date"
+        editable
+        :editing-id="editingAllocationId"
+        :disabled="isLocked"
+        @edit="onEditAllocation"
+        @remove="onRemoveAllocation"
+      />
     </section>
 
     <PartySheet
@@ -2093,23 +1984,6 @@ function onEditAllocation(
   max-width: var(--long-w) !important;
 }
 
-/* =========================
-   Rows
-========================= */
-
-.allocation-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.allocation-label {
-  width: 60px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-soft);
-}
-
 /* =========================================================
    Comment row
 ========================================================= */
@@ -2127,90 +2001,6 @@ function onEditAllocation(
 
 .comment-row .field-long {
   flex: 1;
-}
-
-/* =========================================================
-   Allocation list
-========================================================= */
-
-.allocation-list table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.allocation-list td {
-  padding: 6px 4px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.9rem;
-}
-
-.allocation-list td.right {
-  text-align: right;
-}
-
-.allocation-list button {
-  background: none;
-  border: none;
-  color: var(--negative);
-}
-
-.allocation-list button.alloc-edit {
-  color: var(--primary);
-}
-
-.allocation-list tr.editing {
-  background: var(--primary-soft);
-}
-
-.alloc-action {
-  white-space: nowrap;
-}
-
-.allocation-row:hover {
-  background: var(--surface-3);
-}
-
-/* =========================================================
-   Text hierarchy
-========================================================= */
-
-.alloc-comment-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.alloc-comment {
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-.alloc-date-badge,
-.alloc-tag-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-soft);
-  color: var(--text-soft);
-  font-size: 0.68rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.alloc-tag-chip {
-  font-weight: 700;
-}
-
-.alloc-category {
-  font-size: 0.75rem;
-  color: var(--text-soft);
-}
-
-.alloc-amount {
-  font-weight: 500;
 }
 
 /* =========================
