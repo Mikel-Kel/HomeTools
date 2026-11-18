@@ -13,7 +13,7 @@ import {
 
 import {
   isForeignMovement,
-  type SpendingRecord,
+  type Movement,
 } from "@/composables/spending/useSpending";
 import { useMovementLabel } from "@/composables/spending/useMovementLabel";
 
@@ -37,7 +37,7 @@ import { formatDate } from "@/utils/dateFormat";
 
 const props =
   defineProps<{
-    record: SpendingRecord;
+    record: Movement;
     showBankText: boolean;
   }>();
 

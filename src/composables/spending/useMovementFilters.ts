@@ -8,7 +8,7 @@ import {
 
 import {
   isForeignMovement,
-  type SpendingRecord,
+  type Movement,
 } from "@/composables/spending/useSpending";
 
 import {
@@ -78,7 +78,7 @@ function setModel(
   });
 }
 
-export function useMovementFilters<T extends SpendingRecord>(
+export function useMovementFilters<T extends Movement>(
   options: MovementFiltersOptions<T>
 ) {
   const {

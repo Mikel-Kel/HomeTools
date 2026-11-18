@@ -55,6 +55,26 @@ export function asNumber(
     : fallback;
 }
 
+/* Nombre ou null : absent, vide ou non numérique. */
+export function asNullableNumber(
+  value: unknown
+): number | null {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  const number =
+    asNumber(value, Number.NaN);
+
+  return Number.isNaN(number)
+    ? null
+    : number;
+}
+
 export function asBoolean(
   value: unknown
 ): boolean {

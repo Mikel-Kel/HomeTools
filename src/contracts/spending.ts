@@ -5,7 +5,7 @@ import type {
 
 import {
   asArray,
-  asNumber,
+  asNullableNumber,
   asObject,
   asString,
   ContractError,
@@ -103,25 +103,6 @@ export interface AllocationSuggestion {
 export interface SpendingFile {
   accounts: Account[];
   records: SpendingRecord[];
-}
-
-function asNullableNumber(
-  value: unknown
-): number | null {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return null;
-  }
-
-  const number =
-    asNumber(value, Number.NaN);
-
-  return Number.isNaN(number)
-    ? null
-    : number;
 }
 
 function readSuggestion(

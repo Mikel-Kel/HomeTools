@@ -10,25 +10,36 @@ export interface Account {
   label: string;
 }
 
-export interface SpendingRecord {
+/*
+  Mouvement bancaire, tel que l'affichent les listes
+  (Spending, Ledger) : MovementRow, useMovementFilters,
+  useMovementLabel.
+*/
+export interface Movement {
+  /* FITID. */
   id: string;
   accountId: string;
+  /* Date de valeur. */
   date: string;
-  /* Texte de la banque (partyName, « - » s'il est vide). */
+  /* Texte de la banque (« - » s'il est vide). */
   party: string;
   /* Texte de la banque tel quel, éventuellement vide. */
   bankDescription: string;
   /* Contrepartie identifiée (accmovement.PartyID), distincte de la partie d'allocation. */
   movementPartyID: number | null;
   transferTypeID: number | null;
-  /* Partie proposée pour l'allocation. */
-  partyID: number | null;
   amount: number;
+  /* Porteur de la carte (expenseOwner). */
   owner: string;
 
-  // 🔵 NOUVEAU — multi-devise
-  currency?: string;            // "CHF", "EUR", "USD", etc.
-  foreignAmount?: number | null; // Montant original si != CHF
+  /* Devise du mouvement (« CHF », « EUR »…) et montant d'origine s'il n'est pas en CHF. */
+  currency?: string;
+  foreignAmount?: number | null;
+}
+
+export interface SpendingRecord extends Movement {
+  /* Partie proposée pour l'allocation. */
+  partyID: number | null;
 
   // 🔽 additional fields to ease allocation process
   categoryID: number | null;
@@ -52,7 +63,7 @@ export interface SpendingWithStatus extends SpendingRecord {
 
 /* Mouvement en devise étrangère : montant d'origine connu, devise autre que CHF. */
 export function isForeignMovement(
-  record: SpendingRecord
+  record: Movement
 ): boolean {
   return Boolean(
     record.foreignAmount != null &&

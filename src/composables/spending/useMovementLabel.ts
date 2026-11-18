@@ -3,7 +3,7 @@ import { isVisibleParty } from "@/contracts/parties";
 import { useParties } from "@/composables/useParties";
 import { useTransferTypes } from "@/composables/useTransferTypes";
 
-import type { SpendingRecord } from "@/composables/spending/useSpending";
+import type { Movement } from "@/composables/spending/useSpending";
 
 /* =========================
    Libellé affiché d'un mouvement
@@ -45,13 +45,13 @@ export function useMovementLabel() {
 
   /* Texte de la banque, tel que reçu (partyName s'il est vide). */
   function bankText(
-    record: SpendingRecord
+    record: Movement
   ): string {
     return record.bankDescription || record.party;
   }
 
   function label(
-    record: SpendingRecord
+    record: Movement
   ): string {
     const bank =
       bankText(record);
@@ -94,7 +94,7 @@ export function useMovementLabel() {
 
   /* Seconde ligne : texte de la banque, s'il diffère du libellé. */
   function secondLine(
-    record: SpendingRecord
+    record: Movement
   ): string | null {
     const bank =
       bankText(record);
