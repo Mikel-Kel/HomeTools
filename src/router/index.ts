@@ -16,6 +16,7 @@ import HomeView from "../views/HomeView.vue";
 import AuthenticationView from "../views/AuthenticationView.vue";
 import SpendingView from "../views/SpendingView.vue";
 import AllocationView from "../views/AllocationView.vue";
+import LedgerView from "../views/LedgerView.vue";
 import FollowUpView from "../views/FollowUpView.vue";
 import DocumentsArchiveView from "../views/DocumentsArchiveView.vue";
 import HousekeepingView from "../views/HousekeepingView.vue";
@@ -63,6 +64,16 @@ const router = createRouter({
       meta: {
         level: 1,
         title: "Spending",
+        requiresDrive: true,
+      },
+    },
+    {
+      path: "/ledger",
+      name: "ledger",
+      component: LedgerView,
+      meta: {
+        level: 1,
+        title: "Ledger",
         requiresDrive: true,
       },
     },

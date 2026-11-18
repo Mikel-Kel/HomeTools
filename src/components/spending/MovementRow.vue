@@ -25,7 +25,8 @@ import { formatDate } from "@/utils/dateFormat";
 
    Cellules : date, libellé (et texte de la banque si
    showBankText), porteur, slot status (statut, marqueur…),
-   devise et montant. Un appui sur la ligne signale open.
+   devise et montant, puis slot after (cellules en plus,
+   ex. solde du Ledger). Un appui sur la ligne signale open.
 
    Mouvement en devise étrangère : montant d'origine affiché
    avec son code ; un appui sur le montant montre 2 s le
@@ -170,6 +171,8 @@ onBeforeUnmount(closePopover);
     >
       {{ formatAmount(displayedAmount, { showPlus: true }) }}
     </td>
+
+    <slot name="after" />
   </tr>
 
   <Teleport to="body">

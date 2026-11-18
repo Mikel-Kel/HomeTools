@@ -22,7 +22,8 @@ import {
 
    Porteur, devise, année (Period), dates et montant absolu,
    plus l'état ouvert du panneau. Choix des porteurs, devises
-   et années tirés des mouvements reçus. Filtres gardés en
+   et années tirés des mouvements reçus (années : ou de
+   l'option years). Filtres gardés en
    session sous sessionKey, relus à la création ; Reset les
    efface.
 
@@ -47,6 +48,13 @@ export interface MovementFiltersOptions<T> {
   loaded: MaybeRefOrGetter<boolean>;
 
   sessionKey: string;
+
+  /*
+    Années proposées, quand les mouvements reçus ne couvrent
+    pas toutes les années (Ledger : seules les années choisies
+    sont chargées).
+  */
+  years?: MaybeRefOrGetter<readonly string[]>;
 
   extension?: MovementFilterExtension<T>;
 }
@@ -196,7 +204,9 @@ export function useMovementFilters<T extends Movement>(
         .from(
           new Set([
             CURRENT_YEAR,
-            ...recordYears.value,
+            ...(options.years
+              ? toValue(options.years)
+              : recordYears.value),
           ])
         )
         .sort()
