@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Allocation } from "@/composables/allocations/useAllocation";
 import { useAllocationLabels } from "@/composables/allocations/useAllocationLabels";
+import { useParties } from "@/composables/useParties";
 
 import { formatAmount } from "@/utils/amountFormat";
 import { formatDate } from "@/utils/dateFormat";
@@ -11,6 +12,8 @@ import { formatDate } from "@/utils/dateFormat";
    Une ligne par allocation : commentaire, date d'allocation
    (si elle diffère de la date de valeur), tag, catégorie ›
    sous-catégorie et montant. Libellés : useAllocationLabels.
+   Partie de la ligne (partyID), si elle est donnée, après la
+   catégorie.
 
    editable : boutons « ✎ » (reprendre la ligne dans le
    formulaire, un second appui annule) et « ✕ » (retirer),
@@ -19,9 +22,13 @@ import { formatDate } from "@/utils/dateFormat";
    lecture seule.
 ========================= */
 
+/* Ligne affichée : allocation, avec sa partie si elle est connue. */
+export type AllocationLine =
+  Allocation & { partyID?: number | null };
+
 withDefaults(
   defineProps<{
-    lines: Allocation[];
+    lines: AllocationLine[];
 
     /* Date de valeur du mouvement : date d'allocation affichée seulement si elle diffère. */
     valueDate: string;
@@ -47,6 +54,17 @@ const {
   subCategoryLabel,
   tagLabel,
 } = useAllocationLabels();
+
+const partiesStore =
+  useParties();
+
+function partyLabel(
+  id: number | null | undefined
+): string {
+  return id
+    ? partiesStore.getParty(id)?.label ?? ""
+    : "";
+}
 </script>
 
 <template>
@@ -84,6 +102,10 @@ const {
 
             <span v-if="line.subCategoryID">
               › {{ subCategoryLabel(line.categoryID, line.subCategoryID) }}
+            </span>
+
+            <span v-if="partyLabel(line.partyID)">
+              · {{ partyLabel(line.partyID) }}
             </span>
           </div>
         </td>

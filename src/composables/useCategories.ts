@@ -62,6 +62,15 @@ export function useCategories() {
     categories.value.flatMap(c => c.subcategories)
   );
 
+  /* Catégorie d'une sous-catégorie, null si elle est inconnue. */
+  function getCategoryIdOfSubcategory(subCategoryId: number): number | null {
+    return (
+      categories.value.find(c =>
+        c.subcategories.some(s => s.id === subCategoryId)
+      )?.id ?? null
+    );
+  }
+
   return {
     categories,
     load,
@@ -70,6 +79,7 @@ export function useCategories() {
     getSubcategories,
     getActiveSubcategories,
     allSubcategories,
+    getCategoryIdOfSubcategory,
   };
 
 }

@@ -26,7 +26,8 @@ import { formatDate } from "@/utils/dateFormat";
    Cellules : date, libellé (et texte de la banque si
    showBankText), porteur, slot status (statut, marqueur…),
    devise et montant, puis slot after (cellules en plus,
-   ex. solde du Ledger). Un appui sur la ligne signale open.
+   ex. solde du Ledger). Un appui sur la ligne signale open
+   (sauf openable false).
 
    Mouvement en devise étrangère : montant d'origine affiché
    avec son code ; un appui sur le montant montre 2 s le
@@ -37,10 +38,18 @@ import { formatDate } from "@/utils/dateFormat";
 ========================= */
 
 const props =
-  defineProps<{
-    record: Movement;
-    showBankText: boolean;
-  }>();
+  withDefaults(
+    defineProps<{
+      record: Movement;
+      showBankText: boolean;
+
+      /* Ligne qui s'ouvre (open) : curseur main ; false : aucun appui. */
+      openable?: boolean;
+    }>(),
+    {
+      openable: true,
+    }
+  );
 
 const emit = defineEmits<{
   open: [];
@@ -125,7 +134,8 @@ onBeforeUnmount(closePopover);
 <template>
   <tr
     class="movement-row"
-    @click="emit('open')"
+    :class="{ openable }"
+    @click="openable && emit('open')"
   >
     <td class="cell-date">
       {{ formatDate(record.date, "compact") }}
@@ -192,7 +202,12 @@ onBeforeUnmount(closePopover);
 </template>
 
 <style scoped>
-.movement-row:nth-child(even) {
+.movement-row.openable {
+  cursor: pointer;
+}
+
+/* Rayures entre mouvements seulement (le parent peut insérer d'autres lignes). */
+.movement-row:nth-child(even of .movement-row) {
   background: var(--surface-soft);
 }
 

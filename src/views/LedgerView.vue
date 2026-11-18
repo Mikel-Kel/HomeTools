@@ -13,8 +13,10 @@ import StatusPill from "@/components/ui/StatusPill.vue";
 import AccountSection from "@/components/spending/AccountSection.vue";
 import MovementRow from "@/components/spending/MovementRow.vue";
 import MovementFilters from "@/components/spending/MovementFilters.vue";
+import AllocationLines, { type AllocationLine } from "@/components/allocation/AllocationLines.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
+import { useCategories } from "@/composables/useCategories";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { usePersistentRef } from "@/composables/usePersistentRef";
@@ -49,6 +51,11 @@ import { formatDate } from "@/utils/dateFormat";
    le statut d'allocation ; années proposées : celles de
    l'index. Seuls les fichiers des années choisies sont
    chargés (« All » : toutes).
+
+   « Allocations » : lignes d'allocation sous chaque
+   mouvement, en lecture. Un mouvement à allouer ouvre la
+   page Allocation (suggestions lues dans spending.json),
+   avec retour au Ledger.
 ========================= */
 
 const router =
@@ -66,6 +73,9 @@ const {
 
 const movementLabel =
   useMovementLabel();
+
+const categoriesStore =
+  useCategories();
 
 /* =========================
    View state
@@ -107,6 +117,10 @@ const LEDGER_FILTERS_KEY =
 */
 const showBankText =
   usePersistentRef("ledger.showBankText", true);
+
+/* Lignes d'allocation sous les mouvements : préférence de l'appareil. */
+const showAllocations =
+  usePersistentRef("ledger.showAllocations", false);
 
 const movementFilters =
   useMovementFilters<LedgerMovement>({
@@ -271,6 +285,10 @@ function openingsFor(
    Rows
 ========================= */
 
+/*
+  Marqueur de la colonne Status. Un mouvement exclu des
+  dépenses n'est jamais à allouer (absent de spending.json).
+*/
 function markerOf(
   movement: LedgerMovement
 ): { label: string; tone: "warning" | "primary" | "neutral"; title: string } | null {
@@ -282,14 +300,6 @@ function markerOf(
     };
   }
 
-  if (!movement.allocated) {
-    return {
-      label: "Unallocated",
-      tone: "warning",
-      title: "Not yet allocated",
-    };
-  }
-
   if (movement.excluded) {
     return {
       label: "Excluded",
@@ -298,7 +308,59 @@ function markerOf(
     };
   }
 
+  if (!movement.allocated) {
+    return {
+      label: "Unallocated",
+      tone: "warning",
+      title: "Not yet allocated: click to allocate",
+    };
+  }
+
   return null;
+}
+
+/* À allouer depuis le Ledger : non alloué, ni exclu ni en ré-allocation. */
+function canAllocate(
+  movement: LedgerMovement
+): boolean {
+  return (
+    !movement.allocated &&
+    !movement.pending &&
+    !movement.excluded
+  );
+}
+
+async function openAllocation(
+  movement: LedgerMovement
+) {
+  await router.push({
+    name: "allocation",
+    params: {
+      id: movement.id,
+    },
+    query: {
+      from: "ledger",
+    },
+  });
+}
+
+/* Lignes d'allocation affichées, catégorie déduite de la sous-catégorie. */
+function allocationLinesOf(
+  movement: LedgerMovement
+): AllocationLine[] {
+  return movement.allocations.map(allocation => ({
+    id: `${movement.id}-${allocation.nb}`,
+    categoryID:
+      allocation.subCategoryID === null
+        ? null
+        : categoriesStore.getCategoryIdOfSubcategory(allocation.subCategoryID),
+    subCategoryID: allocation.subCategoryID,
+    comment: allocation.comment,
+    amount: allocation.amount,
+    allocationDate: allocation.allocationDate,
+    allocatedTagID: allocation.tagID || null,
+    partyID: allocation.partyID,
+  }));
 }
 
 const INDICATIVE_BALANCE_TITLE =
@@ -383,6 +445,14 @@ onMounted(initializeView);
     <div class="sticky-zone">
       <MovementFilters :filters="movementFilters">
         <template #header>
+          <PillButton
+            :active="showAllocations"
+            title="Allocation lines under each movement"
+            @click="showAllocations = !showAllocations"
+          >
+            Allocations
+          </PillButton>
+
           <PillButton
             :active="showBankText"
             title="Second line of each movement: the bank text"
@@ -478,33 +548,52 @@ onMounted(initializeView);
           </thead>
 
           <tbody>
-            <MovementRow
+            <template
               v-for="movement in movementsFor(account.id)"
               :key="movement.id"
-              :record="movement"
-              :show-bank-text="showBankText"
             >
-              <template #status>
-                <StatusPill
-                  v-if="markerOf(movement)"
-                  class="movement-marker"
-                  :tone="markerOf(movement)!.tone"
-                  :title="markerOf(movement)!.title"
-                >
-                  {{ markerOf(movement)!.label }}
-                </StatusPill>
-              </template>
+              <MovementRow
+                :record="movement"
+                :show-bank-text="showBankText"
+                :openable="canAllocate(movement)"
+                @open="openAllocation(movement)"
+              >
+                <template #status>
+                  <StatusPill
+                    v-if="markerOf(movement)"
+                    class="movement-marker"
+                    :tone="markerOf(movement)!.tone"
+                    :title="markerOf(movement)!.title"
+                  >
+                    {{ markerOf(movement)!.label }}
+                  </StatusPill>
+                </template>
 
-              <template #after>
-                <td
-                  class="balance-cell"
-                  :class="{ indicative: !movement.endOfDay }"
-                  :title="movement.endOfDay ? 'End-of-day balance' : INDICATIVE_BALANCE_TITLE"
-                >
-                  {{ formatAmount(movement.balance) }}
+                <template #after>
+                  <td
+                    class="balance-cell"
+                    :class="{ indicative: !movement.endOfDay }"
+                    :title="movement.endOfDay ? 'End-of-day balance' : INDICATIVE_BALANCE_TITLE"
+                  >
+                    {{ formatAmount(movement.balance) }}
+                  </td>
+                </template>
+              </MovementRow>
+
+              <tr
+                v-if="showAllocations && movement.allocations.length"
+                class="allocation-row"
+              >
+                <td></td>
+
+                <td colspan="6">
+                  <AllocationLines
+                    :lines="allocationLinesOf(movement)"
+                    :value-date="movement.date"
+                  />
                 </td>
-              </template>
-            </MovementRow>
+              </tr>
+            </template>
           </tbody>
         </table>
       </AccountSection>
@@ -636,6 +725,17 @@ onMounted(initializeView);
   overflow: hidden;
   white-space: nowrap;
   text-align: right;
+}
+
+.allocation-row td {
+  padding: 0 8px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.allocation-row :deep(.allocation-lines td) {
+  padding: 3px 4px;
+  border-bottom: none;
+  font-size: var(--font-size-sm);
 }
 
 .balance-cell.indicative {
