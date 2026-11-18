@@ -155,6 +155,7 @@ const emit = defineEmits<{
 .account-actions {
   display: inline-flex;
   align-items: baseline;
+  gap: 0.4rem;
 }
 
 .total {

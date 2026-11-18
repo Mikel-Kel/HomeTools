@@ -26,6 +26,7 @@ import { useMovementLabel } from "@/composables/spending/useMovementLabel";
 import { useMovementFilters } from "@/composables/spending/useMovementFilters";
 import { useLedgerMovements } from "@/composables/ledger/useLedgerMovements";
 import { useImportDeleteRequest } from "@/composables/ledger/useImportDeleteRequest";
+import { useLedgerRefreshRequest } from "@/composables/ledger/useLedgerRefreshRequest";
 
 import {
   LEDGER_FOLDER,
@@ -526,6 +527,37 @@ const NO_STATEMENT_TITLE =
 
 
 /* =========================
+   Refresh
+========================= */
+
+/*
+  Rafraîchissement d'un compte, toujours proposé. Après une
+  release ou une ré-allocation, le backend ne republie que
+  l'index (allocationsChangedAt) : le bouton le signale.
+*/
+const ledgerRefresh =
+  useLedgerRefreshRequest();
+
+function refreshTitle(
+  account: LedgerAccount
+): string {
+  return account.allocationsChangedAt
+    ? `Allocations changed since ${formatDate(account.allocationsChangedAt.slice(0, 10), "compact")}: ` +
+      "ask the Mac to export this account again"
+    : "Ask the Mac to export this account again";
+}
+
+async function refreshAccount(
+  account: LedgerAccount
+) {
+  if (ledgerRefresh.inProgress.value) {
+    return;
+  }
+
+  await ledgerRefresh.send(account.accountId);
+}
+
+/* =========================
    Delete last import
 ========================= */
 
@@ -769,6 +801,14 @@ onMounted(initializeView);
       {{ importDelete.message.value }}
     </p>
 
+    <p
+      v-if="ledgerRefresh.message.value"
+      class="request-message"
+      :class="ledgerRefresh.tone.value"
+    >
+      {{ ledgerRefresh.message.value }}
+    </p>
+
     <div class="sticky-zone">
       <MovementFilters :filters="movementFilters">
         <template #header>
@@ -824,11 +864,18 @@ onMounted(initializeView);
         :collapsed="collapsedAccounts.has(account.id)"
         @toggle="toggleAccount(account.id)"
       >
-        <template
-          v-if="deletableImport(account)"
-          #actions
-        >
+        <template #actions>
           <PillButton
+            :variant="account.allocationsChangedAt ? 'primary' : 'secondary'"
+            :disabled="ledgerRefresh.inProgress.value"
+            :title="refreshTitle(account)"
+            @click="refreshAccount(account)"
+          >
+            {{ account.allocationsChangedAt ? "Allocations changed — Refresh" : "Refresh" }}
+          </PillButton>
+
+          <PillButton
+            v-if="deletableImport(account)"
             variant="danger"
             :disabled="importDelete.inProgress.value"
             title="Delete the movements of this import that have no allocation"
