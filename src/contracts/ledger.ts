@@ -12,64 +12,85 @@ import {
 } from "@/contracts/read";
 
 /* =========================
-   ledger/ : vue comptable des mouvements
+   ledger/ : vue comptable des mouvements (version 2)
 
    Contrat complet : ../Backend/docs/ledger-contract.md.
 
-   Exporté par ledger_export.py (exportLedger, aussi lancé
-   par exportSpending) : tous les mouvements par compte, avec
-   leur solde et leurs allocations, sur les années du
-   Follow-up (année en cours comprise).
+   Exporté par ledger_export.py : tous les mouvements par
+   compte, avec leur solde et leurs allocations, sur les
+   années du Follow-up (année en cours comprise). Un fichier
+   par compte et par année, republié après un import, un
+   effacement d'import, un rafraîchissement demandé et la
+   nuit (§ 6) ; pas après les allocations, seulement
+   signalées dans l'index (allocationsChangedAt).
 
-   ledger-index.json (§ 3.1) :
-     { "version": 1, "updatedAt": "…", "years": [2025, 2026],
+   ledger-index.json (§ 5.2) :
+     { "version": 2, "updatedAt": "…", "years": [2025, 2026],
        "accounts": [
          { "accountId": 15, "label": "…", "bank": "…",
            "currency": "CHF", "active": true,
-           "balanceSource": "statement" | "initial" | "computed",
+           "balanceSource": "statement" | "carried" | "none",
            "statementBalance": 0 | null, "statementDate": "…" | null,
+           "carriedBalance": 0 | null, "carriedDate": "…" | null,
            "balance": 0, "balanceDate": "…",
            "openings": { "2026": 0 },
            "imports": [
              { "importDate": "2026-11-17", "movements": 4,
-               "last": true } ] } ] }
+               "last": true } ],
+           "files": [
+             { "year": 2026, "file": "ledger-15-2026.json",
+               "movements": 470, "updatedAt": "…" } ],
+           "exportedAt": "…",
+           "allocationsChangedAt": "…" | null } ] }
 
-   ledger-<année>.json (§ 3.2) :
-     { "version": 1, "year": 2026, "updatedAt": "…",
+   ledger-<accountId>-<année>.json (§ 5.3) :
+     { "version": 2, "accountId": 15, "year": 2026,
+       "updatedAt": "…",
        "movements": [
-         { "fitid": "…", "accountId": 15,
-           "valueDate": "…", "operationDate": "…",
-           "importDate": "…", "bankDescription": "…",
+         { "fitid": "…", "valueDate": "…",
+           "operationDate": "…", "importDate": "…",
+           "bankDescription": "…",
            "movementPartyID": 0 | null, "transferTypeID": 0,
            "cardHolderID": 0, "expenseOwner": "-",
            "amount": -1, "currency": "CHF",
            "foreignAmount": null, "balance": 0,
-           "endOfDay": true, "allocated": true,
-           "pending": false, "excluded": false,
+           "endOfDay": true, "carried": false,
+           "allocated": true, "pending": false,
+           "excluded": false,
            "allocations": [
              { "nb": 0, "subCategoryID": 0, "amount": -1,
                "comment": "…", "tagID": 0,
                "allocationDate": "…", "partyID": 0 } ] } ] }
 
-   Solde (§ 2) : seul le solde de fin de journée (endOfDay)
-   est exact ; les autres soldes d'une journée sont
-   indicatifs. Un mouvement excluded (exclu des dépenses)
-   compte dans le solde. pending : ré-allocation en cours.
-   imports : le plus récent en premier ; last = l'import
-   effaçable (§ 5, événement PWA-IMP_…).
+   Solde (§ 4) : seul le solde de fin de journée (endOfDay)
+   est exact. Source statement : ancré sur le dernier relevé ;
+   carried : sur le dernier report (type 998) ; none : 0 au
+   1er janvier de chaque année. Un report (carried) donne le
+   solde à la fin de sa date : son montant n'est pas un flux.
+   Un mouvement excluded (exclu des dépenses) compte dans le
+   solde. pending : ré-allocation en cours. imports : le plus
+   récent en premier ; last = l'import effaçable (§ 8).
 
-   Un compte sans accountId, ou un mouvement sans fitid,
-   compte, date de valeur ou montant, rend le fichier
-   invalide.
+   Une version autre que 2, un compte sans accountId, ou un
+   mouvement sans fitid, date de valeur ou montant, rend le
+   fichier invalide.
 ========================= */
 
 export const LEDGER_FOLDER = "ledger";
 export const LEDGER_INDEX_FILE = "ledger-index.json";
 
-export function ledgerYearFile(
-  year: number
-): string {
-  return `ledger-${year}.json`;
+const LEDGER_VERSION = 2;
+
+function checkVersion(
+  root: JsonObject,
+  fileName: string
+) {
+  if (root.version !== LEDGER_VERSION) {
+    throw new ContractError(
+      fileName,
+      `version ${String(root.version)} not supported (expected ${LEDGER_VERSION})`
+    );
+  }
 }
 
 /* =========================
@@ -78,13 +99,13 @@ export function ledgerYearFile(
 
 export type BalanceSource =
   | "statement"
-  | "initial"
-  | "computed";
+  | "carried"
+  | "none";
 
 const BALANCE_SOURCES: readonly string[] = [
   "statement",
-  "initial",
-  "computed",
+  "carried",
+  "none",
 ];
 
 export interface LedgerImport {
@@ -94,8 +115,16 @@ export interface LedgerImport {
   last: boolean;
 }
 
+export interface LedgerFile {
+  year: number;
+  file: string;
+  movements: number;
+  /* Dernier changement du contenu : un autre updatedAt = fichier à relire. */
+  updatedAt: string;
+}
+
 export interface LedgerAccount {
-  /* Identifiant de la base (account.IDAccount). */
+  /* Identifiant de la base (account.AccountID). */
   accountId: number;
   /* Même identifiant, clé des mouvements (Movement.accountId). */
   id: string;
@@ -104,8 +133,12 @@ export interface LedgerAccount {
   currency: string;
   active: boolean;
   balanceSource: BalanceSource;
+  /* Source statement : dernier solde de relevé. */
   statementBalance: number | null;
   statementDate: string | null;
+  /* Source carried : dernier report (type 998). */
+  carriedBalance: number | null;
+  carriedDate: string | null;
   /* Solde après le dernier mouvement du compte. */
   balance: number | null;
   balanceDate: string | null;
@@ -113,6 +146,11 @@ export interface LedgerAccount {
   openings: Record<string, number>;
   /* Le plus récent en premier. */
   imports: LedgerImport[];
+  /* Années exportées qui ont des mouvements. */
+  files: LedgerFile[];
+  exportedAt: string | null;
+  /* Premier changement d'allocation depuis le dernier export du compte, null sinon. */
+  allocationsChangedAt: string | null;
 }
 
 export interface LedgerIndex {
@@ -139,6 +177,30 @@ function readImport(
     importDate,
     movements: asNumber(row.movements),
     last: asBoolean(row.last),
+  };
+}
+
+function readFile(
+  value: unknown
+): LedgerFile | null {
+  const row =
+    asObject(value);
+
+  const year =
+    asNullableNumber(row?.year);
+
+  const file =
+    asString(row?.file);
+
+  if (!row || year === null || !file) {
+    return null;
+  }
+
+  return {
+    year,
+    file,
+    movements: asNumber(row.movements),
+    updatedAt: asString(row.updatedAt),
   };
 }
 
@@ -175,6 +237,8 @@ export function readLedgerIndex(
     );
   }
 
+  checkVersion(root, LEDGER_INDEX_FILE);
+
   return {
     updatedAt: asString(root.updatedAt),
 
@@ -210,15 +274,22 @@ export function readLedgerIndex(
           active: row.active !== false,
           balanceSource: BALANCE_SOURCES.includes(source)
             ? source as BalanceSource
-            : "computed",
+            : "none",
           statementBalance: asNullableNumber(row.statementBalance),
           statementDate: asString(row.statementDate) || null,
+          carriedBalance: asNullableNumber(row.carriedBalance),
+          carriedDate: asString(row.carriedDate) || null,
           balance: asNullableNumber(row.balance),
           balanceDate: asString(row.balanceDate) || null,
           openings: readOpenings(row.openings),
           imports: asArray(row.imports)
             .map(readImport)
             .filter((item): item is LedgerImport => item !== null),
+          files: asArray(row.files)
+            .map(readFile)
+            .filter((item): item is LedgerFile => item !== null),
+          exportedAt: asString(row.exportedAt) || null,
+          allocationsChangedAt: asString(row.allocationsChangedAt) || null,
         };
       }
     ),
@@ -226,7 +297,7 @@ export function readLedgerIndex(
 }
 
 /* =========================
-   Année
+   Fichier d'un compte et d'une année
 ========================= */
 
 export interface LedgerAllocation {
@@ -246,6 +317,8 @@ export interface LedgerMovement extends Movement {
   /* Solde après ce mouvement ; exact seulement si endOfDay. */
   balance: number | null;
   endOfDay: boolean;
+  /* Report de solde (type 998) : amount est le solde à la fin de sa date, pas un flux. */
+  carried: boolean;
   allocated: boolean;
   /* Ré-allocation en cours. */
   pending: boolean;
@@ -254,8 +327,11 @@ export interface LedgerMovement extends Movement {
   allocations: LedgerAllocation[];
 }
 
-export interface LedgerYear {
+export interface LedgerYearFile {
+  accountId: number;
   year: number;
+  /* Même valeur que l'entrée de l'index quand le fichier est à jour. */
+  updatedAt: string;
   movements: LedgerMovement[];
 }
 
@@ -280,11 +356,11 @@ function readAllocation(
   };
 }
 
-/* Lecteur d'un fichier d'année ; fileName sert aux messages d'erreur. */
-export function readLedgerYear(
+/* Lecteur d'un fichier ; fileName (celui de l'index) sert aux messages d'erreur. */
+export function readLedgerYearFile(
   raw: unknown,
   fileName: string
-): LedgerYear {
+): LedgerYearFile {
   const root =
     asObject(raw);
 
@@ -298,8 +374,22 @@ export function readLedgerYear(
     );
   }
 
+  checkVersion(root, fileName);
+
+  const accountId =
+    asNullableNumber(root.accountId);
+
+  if (accountId === null) {
+    throw new ContractError(
+      fileName,
+      "accountId is missing"
+    );
+  }
+
   return {
+    accountId,
     year: asNumber(root.year),
+    updatedAt: asString(root.updatedAt),
 
     movements: movements.map(
       (value, index): LedgerMovement => {
@@ -309,15 +399,11 @@ export function readLedgerYear(
         const fitid =
           asString(row.fitid);
 
-        const accountId =
-          asNullableNumber(row.accountId);
-
         const valueDate =
           asString(row.valueDate);
 
         if (
           !fitid ||
-          accountId === null ||
           !valueDate ||
           typeof row.amount !== "number"
         ) {
@@ -347,6 +433,7 @@ export function readLedgerYear(
           importDate: asString(row.importDate) || null,
           balance: asNullableNumber(row.balance),
           endOfDay: asBoolean(row.endOfDay),
+          carried: asBoolean(row.carried),
           allocated: asBoolean(row.allocated),
           pending: asBoolean(row.pending),
           excluded: asBoolean(row.excluded),
@@ -363,7 +450,7 @@ export function readLedgerYear(
 }
 
 /* =========================
-   Effacement du dernier import (§ 5)
+   Effacement du dernier import (§ 8)
 
    PWA-IMP_<AAAAMMJJHHMMSS>_A<accountId>.json :
      { "eventType": "IMPORT_DELETED", "version": 1,
@@ -382,7 +469,24 @@ export function readLedgerYear(
 export const IMPORT_EVENT_TRIGRAM = "IMP";
 export const IMPORT_DELETED_VERSION = 1;
 
-export function importEventSuffix(
+/* =========================
+   Rafraîchissement d'un compte (§ 7)
+
+   PWA-LDG_<AAAAMMJJHHMMSS>_A<accountId>.json :
+     { "eventType": "LEDGER_REFRESH_REQUESTED", "version": 1,
+       "timestamp": "…",
+       "payload": { "accountId": 15, "source": "<appareil>" } }
+
+   Le Mac réexporte les fichiers du compte et l'index. Statut :
+   « Ledger refreshed: <compte> » ; refus : « Invalid ledger
+   event: … ».
+========================= */
+
+export const LEDGER_EVENT_TRIGRAM = "LDG";
+export const LEDGER_REFRESH_VERSION = 1;
+
+/* Suffixe des événements d'un compte (IMP, LDG). */
+export function accountEventSuffix(
   accountId: number
 ): string {
   return `A${accountId}`;

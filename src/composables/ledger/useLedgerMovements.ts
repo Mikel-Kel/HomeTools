@@ -14,39 +14,42 @@ import { useStorageAccess } from "@/composables/useStorageAccess";
 
 import {
   LEDGER_FOLDER,
-  ledgerYearFile,
-  readLedgerYear,
+  readLedgerYearFile,
+  type LedgerFile,
   type LedgerMovement,
-  type LedgerYear,
+  type LedgerYearFile,
 } from "@/contracts/ledger";
 
 /* =========================
-   Mouvements du Ledger, par fichier d'année
+   Mouvements du Ledger, par fichier de compte et d'année
 
-   Charge les fichiers ledger-<année>.json des années
-   demandées (une seule, ou toutes celles de l'index pour
-   « All »), les garde en mémoire et ne charge que celles qui
-   manquent quand le choix change. Mêmes règles que
-   useRemoteJson, qui ne sert qu'un fichier à la fois :
+   Charge les fichiers demandés (entrées files de l'index :
+   comptes et années affichés), les garde en mémoire et ne
+   relit un fichier que si son updatedAt dans l'index a
+   changé, ou s'il manque. Mêmes règles que useRemoteJson,
+   qui ne sert qu'un fichier à la fois :
    - chargement après que le stockage est prêt ;
-   - dossier ledger/ surveillé : les années affichées sont
-     relues sans repasser par « loading » (les autres sont
-     oubliées) ; en cas d'échec, les données restent ;
+   - « loading » seulement au premier chargement d'un
+     fichier ; une relecture garde les données affichées et,
+     si elle échoue, les données précédentes restent ;
    - seule la réponse de la dernière demande est retenue.
+   Le dossier ledger/ est aussi surveillé : un fichier arrivé
+   après l'index (miroir) est relu dès qu'il change.
 
-   Mouvements rendus dans l'ordre des fichiers : années
-   croissantes, puis compte et ordre du contrat (§ 2).
+   Mouvements rendus dans l'ordre des fichiers demandés, puis
+   dans l'ordre du contrat (§ 4).
 ========================= */
 
 export function useLedgerMovements(
-  years: MaybeRefOrGetter<readonly number[]>
+  files: MaybeRefOrGetter<readonly LedgerFile[]>
 ) {
   const {
     storageReady,
   } = useStorageAccess();
 
-  const files =
-    shallowRef<ReadonlyMap<number, LedgerYear>>(new Map());
+  /* Fichiers chargés, par nom. */
+  const loadedFiles =
+    shallowRef<ReadonlyMap<string, LedgerYearFile>>(new Map());
 
   const loading =
     ref(false);
@@ -56,83 +59,79 @@ export function useLedgerMovements(
 
   let requestId = 0;
 
-  async function loadYear(
-    year: number
-  ): Promise<LedgerYear> {
-    const fileName =
-      ledgerYearFile(year);
-
+  async function loadFile(
+    entry: LedgerFile
+  ): Promise<LedgerYearFile> {
     const raw =
       await loadJSONFromFolder<unknown>(
         LEDGER_FOLDER,
-        fileName
+        entry.file
       );
 
     if (raw === null) {
       throw new Error(
-        `${fileName} not found`
+        `${entry.file} not found`
       );
     }
 
-    return readLedgerYear(raw, fileName);
+    return readLedgerYearFile(raw, entry.file);
   }
 
-  /*
-    background : relecture après un changement du stockage,
-    de toutes les années demandées.
-  */
-  async function load(
-    background: boolean
-  ): Promise<void> {
+  /* Fichier absent, ou d'une autre version que celle de l'index. */
+  function isStale(
+    entry: LedgerFile
+  ): boolean {
+    return loadedFiles.value.get(entry.file)?.updatedAt !== entry.updatedAt;
+  }
+
+  /* Charge les fichiers demandés absents ou différents de l'index. */
+  async function load(): Promise<void> {
     const wanted =
-      [...toValue(years)];
+      [...toValue(files)];
 
     const currentRequest =
       ++requestId;
 
-    if (!storageReady.value || wanted.length === 0) {
-      files.value = new Map();
+    if (!storageReady.value) {
+      loadedFiles.value = new Map();
       error.value = null;
       loading.value = false;
       return;
     }
 
-    const missing =
-      background
-        ? wanted
-        : wanted.filter(year => !files.value.has(year));
+    const stale =
+      wanted.filter(isStale);
 
-    if (missing.length === 0) {
+    /* Premier chargement d'un fichier : « loading » ; sinon relecture discrète. */
+    const firstLoad =
+      stale.some(entry => !loadedFiles.value.has(entry.file));
+
+    if (stale.length === 0) {
+      loading.value = false;
       return;
     }
 
-    if (!background) {
+    if (firstLoad) {
       loading.value = true;
       error.value = null;
     }
 
     try {
       const loaded =
-        await Promise.all(missing.map(loadYear));
+        await Promise.all(stale.map(loadFile));
 
       if (currentRequest !== requestId) {
         return;
       }
 
       const next =
-        new Map<number, LedgerYear>();
+        new Map(loadedFiles.value);
 
-      for (const year of wanted) {
-        const file =
-          loaded[missing.indexOf(year)] ??
-          files.value.get(year);
+      stale.forEach((entry, index) => {
+        next.set(entry.file, loaded[index]);
+      });
 
-        if (file) {
-          next.set(year, file);
-        }
-      }
-
-      files.value = next;
+      loadedFiles.value = next;
       error.value = null;
 
     } catch (err) {
@@ -140,7 +139,7 @@ export function useLedgerMovements(
         return;
       }
 
-      if (background && files.value.size > 0) {
+      if (!firstLoad) {
         console.warn("Unable to refresh the ledger", err);
       } else {
         error.value =
@@ -158,11 +157,14 @@ export function useLedgerMovements(
 
   watch(
     [
-      () => toValue(years).join(","),
+      () =>
+        toValue(files)
+          .map(entry => `${entry.file}@${entry.updatedAt}`)
+          .join(","),
       storageReady,
     ],
 
-    () => load(false),
+    () => load(),
 
     {
       immediate: true,
@@ -191,22 +193,24 @@ export function useLedgerMovements(
         }
 
         if (storageReady.value) {
-          await load(true);
+          await load();
         }
       },
   });
 
-  /* Années demandées toutes chargées. */
+  /* Fichiers demandés tous chargés (dans une version éventuellement plus ancienne). */
   const loaded =
     computed(() =>
-      toValue(years).every(year => files.value.has(year))
+      toValue(files).every(entry =>
+        loadedFiles.value.has(entry.file)
+      )
     );
 
   const movements =
     computed<LedgerMovement[]>(() =>
-      [...toValue(years)]
-        .sort((a, b) => a - b)
-        .flatMap(year => files.value.get(year)?.movements ?? [])
+      toValue(files).flatMap(entry =>
+        loadedFiles.value.get(entry.file)?.movements ?? []
+      )
     );
 
   return {

@@ -5,7 +5,7 @@ import { useEventRequest } from "@/composables/useEventRequest";
 import {
   IMPORT_DELETED_VERSION,
   IMPORT_EVENT_TRIGRAM,
-  importEventSuffix,
+  accountEventSuffix,
 } from "@/contracts/ledger";
 
 import { deviceName } from "@/services/environment/environmentState";
@@ -56,7 +56,7 @@ export function useImportDeleteRequest() {
           source: deviceName(),
         },
       },
-      importEventSuffix(accountId)
+      accountEventSuffix(accountId)
     );
   }
 

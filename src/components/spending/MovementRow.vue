@@ -24,7 +24,8 @@ import { formatDate } from "@/utils/dateFormat";
    Ligne d'un mouvement
 
    Cellules : date, libellé (et texte de la banque si
-   showBankText), porteur, slot status (statut, marqueur…),
+   showBankText), porteur, slot status (colonne présente
+   seulement s'il est fourni : statut, marqueur…),
    devise et montant, puis slot after (cellules en plus,
    ex. solde du Ledger). Un appui sur la ligne signale open
    (sauf openable false).
@@ -32,6 +33,10 @@ import { formatDate } from "@/utils/dateFormat";
    Mouvement en devise étrangère : montant d'origine affiché
    avec son code ; un appui sur le montant montre 2 s le
    montant en CHF dans une bulle.
+
+   amountIsBalance : le montant est un solde (report du
+   Ledger), pas un flux : affiché sans signe « + », en gras
+   et sans couleur.
 
    Les colonnes (colgroup, thead) restent à la table du
    parent, dans cet ordre.
@@ -45,9 +50,12 @@ const props =
 
       /* Ligne qui s'ouvre (open) : curseur main ; false : aucun appui. */
       openable?: boolean;
+
+      amountIsBalance?: boolean;
     }>(),
     {
       openable: true,
+      amountIsBalance: false,
     }
   );
 
@@ -158,7 +166,10 @@ onBeforeUnmount(closePopover);
       {{ record.owner }}
     </td>
 
-    <td class="cell-status">
+    <td
+      v-if="$slots.status"
+      class="cell-status"
+    >
       <slot name="status" />
     </td>
 
@@ -174,12 +185,14 @@ onBeforeUnmount(closePopover);
     <td
       class="cell-amount"
       :class="[
-        record.amount >= 0 ? 'positive' : 'negative',
+        amountIsBalance
+          ? 'balance'
+          : record.amount >= 0 ? 'positive' : 'negative',
         { foreign },
       ]"
       @click.stop="showPopover"
     >
-      {{ formatAmount(displayedAmount, { showPlus: true }) }}
+      {{ formatAmount(displayedAmount, { showPlus: !amountIsBalance }) }}
     </td>
 
     <slot name="after" />
@@ -268,6 +281,10 @@ td {
 
 .cell-amount.negative {
   color: var(--negative);
+}
+
+.cell-amount.balance {
+  font-weight: 700;
 }
 
 .fx-popover {

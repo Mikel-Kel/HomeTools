@@ -5,10 +5,15 @@ import { formatAmount } from "@/utils/amountFormat";
    Section d'un compte
 
    En-tête collant et cliquable : flèche, libellé du compte,
-   nombre d'opérations et total (signé, coloré). Un appui
+   nombre d'opérations et total (signé, coloré ; ou solde :
+   totalIsBalance, sans « + » ; indicatif : en italique ;
+   filtré : total d'une partie des mouvements, encadré en
+   pointillé ; null : rien). Un appui
    signale toggle ; l'état replié reste au parent.
 
    Slots :
+   - details : information centrée dans l'en-tête (ex. solde
+     du compte dans le Ledger) ;
    - actions : boutons après le nombre d'opérations
      (le clic n'atteint pas l'en-tête) ;
    - défaut : contenu du compte, masqué si replié.
@@ -17,7 +22,11 @@ import { formatAmount } from "@/utils/amountFormat";
 defineProps<{
   label: string;
   count: number;
-  total: number;
+  total: number | null;
+  totalIsBalance?: boolean;
+  totalIndicative?: boolean;
+  totalFiltered?: boolean;
+  totalTitle?: string;
   collapsed: boolean;
 }>();
 
@@ -54,11 +63,19 @@ const emit = defineEmits<{
         </span>
       </div>
 
+      <div class="account-details">
+        <slot name="details" />
+      </div>
+
       <div
         class="total"
-        :class="total >= 0 ? 'positive' : 'negative'"
+        :class="[
+          (total ?? 0) >= 0 ? 'positive' : 'negative',
+          { indicative: totalIndicative, filtered: totalFiltered },
+        ]"
+        :title="totalTitle"
       >
-        {{ formatAmount(total, { showPlus: true }) }}
+        {{ formatAmount(total, { showPlus: !totalIsBalance }) }}
       </div>
     </header>
 
@@ -82,9 +99,10 @@ const emit = defineEmits<{
   top: var(--sticky-height);
   z-index: 120;
 
-  display: flex;
+  /* Titre à gauche, détails au centre, total à droite. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   padding: 0.25rem 0;
 
@@ -122,16 +140,39 @@ const emit = defineEmits<{
   white-space: nowrap;
 }
 
+.account-details {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.75rem;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
 .account-actions {
   display: inline-flex;
   align-items: baseline;
 }
 
 .total {
-  flex: 0 0 auto;
+  justify-self: end;
   font-weight: 600;
   text-align: right;
   padding-right: 0.5rem;
+}
+
+.total.indicative {
+  font-style: italic;
+}
+
+.total.filtered {
+  margin-right: 0.5rem;
+  padding: 0 0.4rem;
+  border: 1px dashed currentColor;
+  border-radius: 6px;
 }
 
 .total.positive {

@@ -48,24 +48,29 @@ import { formatDate } from "@/utils/dateFormat";
    mouvements, par compte, du plus récent au plus ancien,
    avec le solde après chaque mouvement. Seul le solde de fin
    de journée est exact (ordre des mouvements d'un jour
-   inconnu) : les autres sont affichés comme indicatifs. Par
-   compte : source du solde, solde du relevé, soldes
-   d'ouverture.
+   inconnu) : les autres sont affichés comme indicatifs, et
+   tous ceux d'un compte sans solde de relevé. En-tête du
+   compte : solde courant et sa source (relevé, report et sa
+   date, aucune). Un report (type 998) est
+   une ligne de solde : montant en gras, hors du total.
 
    Filtres communs avec Spending (useMovementFilters), sans
    le statut d'allocation ; années proposées : celles de
    l'index. Seuls les fichiers des années choisies sont
-   chargés (« All » : toutes).
+   chargés (« All » : toutes), un par compte et par année.
 
-   « Allocations » : lignes d'allocation sous chaque
-   mouvement, en lecture. Un mouvement à allouer ouvre la
-   page Allocation (suggestions lues dans spending.json),
-   avec retour au Ledger.
+   Sous chaque mouvement, au choix (exclusifs) : « Allocations »
+   (par défaut) ou « Bank text » ; le premier montre les lignes
+   d'allocation en lecture, ou « Unallocated » en jaune (et
+   report, exclusion, ré-allocation). Pas de colonne de
+   statut. Un mouvement à allouer ouvre la page Allocation
+   (suggestions lues dans spending.json), avec retour au
+   Ledger.
 
    Filtre « Import » : mouvements arrivés à une date d'import
    (toutes années : Period passe à All). Sur le dernier
    import d'un compte, « Delete import » envoie
-   IMPORT_DELETED (contrat § 5) : seuls les mouvements sans
+   IMPORT_DELETED (contrat § 8) : seuls les mouvements sans
    allocation sont effacés par le Mac.
 ========================= */
 
@@ -115,6 +120,11 @@ const indexYears =
     indexFile.data.value?.years ?? []
   );
 
+const accounts =
+  computed<LedgerAccount[]>(() =>
+    indexFile.data.value?.accounts ?? []
+  );
+
 /* =========================
    Filters
 ========================= */
@@ -123,15 +133,37 @@ const LEDGER_FILTERS_KEY =
   "ledgerFilters";
 
 /*
-  Seconde ligne des écritures (texte de la banque) :
-  préférence d'affichage de l'appareil, hors des filtres.
+  Sous chaque mouvement, au choix : ses allocations (par
+  défaut), le texte de la banque, ou rien. Préférence de
+  l'appareil.
 */
-const showBankText =
-  usePersistentRef("ledger.showBankText", true);
+type SecondLine =
+  | "allocations"
+  | "bankText"
+  | "none";
 
-/* Lignes d'allocation sous les mouvements : préférence de l'appareil. */
+const secondLine =
+  usePersistentRef<SecondLine>("ledger.secondLine", "allocations");
+
 const showAllocations =
-  usePersistentRef("ledger.showAllocations", false);
+  computed(() =>
+    secondLine.value === "allocations"
+  );
+
+const showBankText =
+  computed(() =>
+    secondLine.value === "bankText"
+  );
+
+/* Un second appui sur le choix actif n'affiche plus rien. */
+function toggleSecondLine(
+  choice: SecondLine
+) {
+  secondLine.value =
+    secondLine.value === choice
+      ? "none"
+      : choice;
+}
 
 /* Date d'import choisie (filtre propre au Ledger) ; null : toutes. */
 const importFilter =
@@ -180,6 +212,10 @@ const {
   applyFilters,
   selectedYearEmpty,
   yearFilter,
+  ownerFilter,
+  currencyFilter,
+  minAmount,
+  maxAmount,
 } = movementFilters;
 
 /*
@@ -201,8 +237,18 @@ const wantedYears =
       : [];
   });
 
+/* Fichiers à charger : ceux des années voulues, par compte puis année croissante. */
+const wantedFiles =
+  computed(() =>
+    accounts.value.flatMap(account =>
+      account.files
+        .filter(file => wantedYears.value.includes(file.year))
+        .sort((a, b) => a.year - b.year)
+    )
+  );
+
 const ledger =
-  useLedgerMovements(wantedYears);
+  useLedgerMovements(wantedFiles);
 
 /*
   Un import peut porter des mouvements de l'année précédente :
@@ -275,11 +321,6 @@ const initialized =
    Accounts
 ========================= */
 
-const accounts =
-  computed<LedgerAccount[]>(() =>
-    indexFile.data.value?.accounts ?? []
-  );
-
 const collapsedAccounts =
   ref<Set<string>>(new Set());
 
@@ -296,13 +337,25 @@ function toggleAccount(
   collapsedAccounts.value = next;
 }
 
-/* Mouvements filtrés par compte, le plus récent en premier. */
+/*
+  Mouvements filtrés par compte, le plus récent en premier.
+  Un report (type 998) reste toujours affiché, quels que
+  soient les filtres.
+*/
 const movementsByAccount =
   computed(() => {
     const groups =
       new Map<string, LedgerMovement[]>();
 
-    for (const movement of applyFilters(ledger.movements.value)) {
+    const matching =
+      new Set(applyFilters(ledger.movements.value));
+
+    const shown =
+      ledger.movements.value.filter(movement =>
+        movement.carried || matching.has(movement)
+      );
+
+    for (const movement of shown) {
       const group =
         groups.get(movement.accountId);
 
@@ -326,39 +379,151 @@ function movementsFor(
   return movementsByAccount.value.get(accountId) ?? [];
 }
 
-function totalFor(
+/*
+  Solde à la fin de la période affichée : celui du mouvement
+  affiché le plus récent ; null sans mouvement affiché.
+*/
+function periodBalanceFor(
+  accountId: string
+): number | null {
+  return movementsFor(accountId)
+    .find(movement => movement.balance !== null)
+    ?.balance ?? null;
+}
+
+/*
+  Filtre qui ne garde qu'une partie des mouvements (porteur,
+  devise, import, montant) : les soldes du compte n'ont plus
+  de sens. On affiche alors le total des mouvements affichés
+  et, ligne à ligne, leur cumul depuis 0. La période et les
+  dates ne changent rien aux soldes.
+*/
+const subsetFiltered =
+  computed(() =>
+    ownerFilter.value.size > 0 ||
+    currencyFilter.value.size > 0 ||
+    importFilter.value !== null ||
+    minAmount.value !== null ||
+    maxAmount.value !== null
+  );
+
+/*
+  Cumul des mouvements affichés, du plus ancien au plus
+  récent, depuis 0. Un report (998) n'est pas un flux : ni
+  compté, ni cumulé.
+*/
+const runningTotals =
+  computed(() => {
+    const totals =
+      new Map<LedgerMovement, number>();
+
+    for (const group of movementsByAccount.value.values()) {
+      let total = 0;
+
+      for (let index = group.length - 1; index >= 0; index--) {
+        const movement =
+          group[index];
+
+        if (!movement.carried) {
+          total += movement.amount;
+          totals.set(movement, total);
+        }
+      }
+    }
+
+    return totals;
+  });
+
+/* Total des mouvements affichés (le cumul du plus récent). */
+function filteredTotalFor(
   accountId: string
 ): number {
-  return movementsFor(accountId).reduce(
-    (total, movement) => total + movement.amount,
-    0
-  );
+  const latest =
+    movementsFor(accountId).find(movement => !movement.carried);
+
+  return latest
+    ? runningTotals.value.get(latest) ?? 0
+    : 0;
 }
 
-const BALANCE_SOURCE_LABELS: Record<BalanceSource, string> = {
-  statement: "From statement",
-  initial: "From initial balance",
-  computed: "Computed from movements",
-};
+const FILTERED_TOTAL_TITLE =
+  "Filtered: total of the movements shown (carried balances excluded)";
+
+const RUNNING_TOTAL_TITLE =
+  "Filtered: running total of the movements shown, starting from zero";
+
+/* Cellule de solde d'une ligne : solde du compte, ou cumul filtré. */
+function balanceCellOf(
+  account: LedgerAccount,
+  movement: LedgerMovement
+): { value: number | null; indicative: boolean; filtered: boolean; title: string } {
+  if (subsetFiltered.value) {
+    return {
+      value: runningTotals.value.get(movement) ?? null,
+      indicative: false,
+      filtered: true,
+      title: movement.carried ? "" : RUNNING_TOTAL_TITLE,
+    };
+  }
+
+  return {
+    value: movement.balance,
+    indicative: !movement.endOfDay || !hasStatement(account),
+    filtered: false,
+    title: balanceTitle(account, movement),
+  };
+}
 
 const BALANCE_SOURCE_TITLES: Record<BalanceSource, string> = {
-  statement: "Balances anchored on the last statement balance of the bank",
-  initial: "Balances accumulated from the initial balance movement",
-  computed: "Balances accumulated from zero: exact only if the history is complete",
+  statement: "Balances anchored on the last statement balance received with an import",
+  carried: "Balances anchored on the latest carried balance (transfer type 998)",
+  none: "No statement nor carried balance: each year starts from zero",
 };
 
-/* Soldes d'ouverture affichés : l'année choisie, ou toutes. */
-function openingsFor(
+/*
+  En-tête du compte : « Balance on 16.11.2026: 1'150.00 »,
+  puis la source entre parenthèses (en jaune sans relevé) :
+  « from statement », « carried on from 19.10.2026 » ou
+  « no known balance, running total since 1 January ».
+*/
+function balanceText(
   account: LedgerAccount
-): { year: string; amount: number }[] {
-  return Object.entries(account.openings)
-    .filter(([year]) =>
-      yearFilter.value === null ||
-      year === yearFilter.value
-    )
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([year, amount]) => ({ year, amount }));
+): string {
+  const date =
+    account.balanceDate
+      ? ` on ${formatDate(account.balanceDate, "compact")}`
+      : "";
+
+  return `Balance${date}: ${formatAmount(account.balance)}`;
 }
+
+function balanceSourceText(
+  account: LedgerAccount
+): string {
+  switch (account.balanceSource) {
+    case "statement":
+      return "from statement";
+
+    case "carried":
+      return account.carriedDate
+        ? `carried on from ${formatDate(account.carriedDate, "compact")}`
+        : "carried on";
+
+    case "none":
+      return "no known balance, running total since 1 January";
+  }
+}
+
+/* Compte sans solde de relevé : tous ses soldes sont indicatifs. */
+function hasStatement(
+  account: LedgerAccount
+): boolean {
+  return account.balanceSource === "statement";
+}
+
+const NO_STATEMENT_TITLE =
+  "Indicative: no statement balance known for this account";
+
 
 /* =========================
    Delete last import
@@ -416,15 +581,25 @@ async function deleteImport(
 ========================= */
 
 /*
-  Marqueur de la colonne Status. Un mouvement exclu des
-  dépenses n'est jamais à allouer (absent de spending.json).
+  Mention sous le mouvement, en mode Allocations, à la place
+  ou en plus de ses lignes d'allocation. Un mouvement exclu
+  des dépenses n'est jamais à allouer (absent de
+  spending.json).
 */
 function markerOf(
   movement: LedgerMovement
 ): { label: string; tone: "warning" | "primary" | "neutral"; title: string } | null {
+  if (movement.carried) {
+    return {
+      label: "Carried balance",
+      tone: "neutral",
+      title: "Carried balance: balance at the end of this date, not a movement",
+    };
+  }
+
   if (movement.pending) {
     return {
-      label: "Pending",
+      label: "Re-allocation pending",
       tone: "primary",
       title: "Re-allocation in progress",
     };
@@ -432,7 +607,7 @@ function markerOf(
 
   if (movement.excluded) {
     return {
-      label: "Excluded",
+      label: "Excluded from spending",
       tone: "neutral",
       title: "Excluded from spending, counted in the balance",
     };
@@ -449,11 +624,12 @@ function markerOf(
   return null;
 }
 
-/* À allouer depuis le Ledger : non alloué, ni exclu ni en ré-allocation. */
+/* À allouer depuis le Ledger : non alloué, ni report, ni exclu, ni en ré-allocation. */
 function canAllocate(
   movement: LedgerMovement
 ): boolean {
   return (
+    !movement.carried &&
     !movement.allocated &&
     !movement.pending &&
     !movement.excluded
@@ -495,6 +671,19 @@ function allocationLinesOf(
 
 const INDICATIVE_BALANCE_TITLE =
   "Indicative: the order of the movements within a day is unknown; the end-of-day balance is exact";
+
+function balanceTitle(
+  account: LedgerAccount,
+  movement: LedgerMovement
+): string {
+  if (!hasStatement(account)) {
+    return NO_STATEMENT_TITLE;
+  }
+
+  return movement.endOfDay
+    ? "End-of-day balance"
+    : INDICATIVE_BALANCE_TITLE;
+}
 
 /* =========================
    Initialization
@@ -585,8 +774,8 @@ onMounted(initializeView);
         <template #header>
           <PillButton
             :active="showAllocations"
-            title="Allocation lines under each movement"
-            @click="showAllocations = !showAllocations"
+            title="Under each movement: its allocations, or whether it is still to allocate"
+            @click="toggleSecondLine('allocations')"
           >
             Allocations
           </PillButton>
@@ -594,7 +783,7 @@ onMounted(initializeView);
           <PillButton
             :active="showBankText"
             title="Second line of each movement: the bank text"
-            @click="showBankText = !showBankText"
+            @click="toggleSecondLine('bankText')"
           >
             Bank text
           </PillButton>
@@ -625,7 +814,13 @@ onMounted(initializeView);
         :key="account.id"
         :label="account.label"
         :count="movementsFor(account.id).length"
-        :total="totalFor(account.id)"
+        :total="subsetFiltered ? filteredTotalFor(account.id) : periodBalanceFor(account.id)"
+        :total-is-balance="!subsetFiltered"
+        :total-indicative="!subsetFiltered && !hasStatement(account)"
+        :total-filtered="subsetFiltered"
+        :total-title="subsetFiltered
+          ? FILTERED_TOTAL_TITLE
+          : hasStatement(account) ? 'Balance after the last movement shown' : NO_STATEMENT_TITLE"
         :collapsed="collapsedAccounts.has(account.id)"
         @toggle="toggleAccount(account.id)"
       >
@@ -643,39 +838,17 @@ onMounted(initializeView);
           </PillButton>
         </template>
 
-        <div class="account-balance">
+        <template #details>
           <span
             v-if="account.balance !== null"
-            class="balance-main"
-          >
-            Balance {{ formatAmount(account.balance) }} {{ account.currency }}
-            <template v-if="account.balanceDate">
-              on {{ formatDate(account.balanceDate, "compact") }}
-            </template>
-          </span>
-
-          <span
-            v-if="account.statementBalance !== null"
-          >
-            Statement {{ formatAmount(account.statementBalance) }}
-            <template v-if="account.statementDate">
-              on {{ formatDate(account.statementDate, "compact") }}
-            </template>
-          </span>
-
-          <span
-            v-for="opening in openingsFor(account)"
-            :key="opening.year"
-          >
-            Opening {{ opening.year }}: {{ formatAmount(opening.amount) }}
-          </span>
-
-          <StatusPill
-            tone="neutral"
             :title="BALANCE_SOURCE_TITLES[account.balanceSource]"
           >
-            {{ BALANCE_SOURCE_LABELS[account.balanceSource] }}
-          </StatusPill>
+            {{ balanceText(account) }}
+
+            <span :class="{ 'no-statement': !hasStatement(account) }">
+              ({{ balanceSourceText(account) }})
+            </span>
+          </span>
 
           <StatusPill
             v-if="!account.active"
@@ -684,14 +857,13 @@ onMounted(initializeView);
           >
             Closed
           </StatusPill>
-        </div>
+        </template>
 
         <table class="ledger-table">
           <colgroup>
             <col class="col-date">
             <col class="col-party">
             <col class="col-owner">
-            <col class="col-status">
             <col class="col-currency">
             <col class="col-amount">
             <col class="col-balance">
@@ -702,7 +874,6 @@ onMounted(initializeView);
               <th>Date</th>
               <th>Party</th>
               <th>Owner</th>
-              <th>Status</th>
               <th></th>
               <th>Amount</th>
               <th>Balance</th>
@@ -718,41 +889,45 @@ onMounted(initializeView);
                 :record="movement"
                 :show-bank-text="showBankText"
                 :openable="canAllocate(movement)"
+                :amount-is-balance="movement.carried"
                 @open="openAllocation(movement)"
               >
-                <template #status>
-                  <StatusPill
-                    v-if="markerOf(movement)"
-                    class="movement-marker"
-                    :tone="markerOf(movement)!.tone"
-                    :title="markerOf(movement)!.title"
-                  >
-                    {{ markerOf(movement)!.label }}
-                  </StatusPill>
-                </template>
-
                 <template #after>
                   <td
+                    v-for="cell in [balanceCellOf(account, movement)]"
+                    :key="movement.id"
                     class="balance-cell"
-                    :class="{ indicative: !movement.endOfDay }"
-                    :title="movement.endOfDay ? 'End-of-day balance' : INDICATIVE_BALANCE_TITLE"
+                    :class="{ indicative: cell.indicative, filtered: cell.filtered }"
+                    :title="cell.title"
                   >
-                    {{ formatAmount(movement.balance) }}
+                    {{ cell.value === null ? "" : formatAmount(cell.value) }}
                   </td>
                 </template>
               </MovementRow>
 
               <tr
-                v-if="showAllocations && movement.allocations.length"
+                v-if="showAllocations && (movement.allocations.length || markerOf(movement))"
                 class="allocation-row"
+                :class="{ openable: canAllocate(movement) }"
+                @click="canAllocate(movement) && openAllocation(movement)"
               >
                 <td></td>
 
-                <td colspan="6">
+                <td colspan="5">
                   <AllocationLines
+                    v-if="movement.allocations.length"
                     :lines="allocationLinesOf(movement)"
                     :value-date="movement.date"
                   />
+
+                  <p
+                    v-if="markerOf(movement)"
+                    class="allocation-note"
+                    :class="markerOf(movement)!.tone"
+                    :title="markerOf(movement)!.title"
+                  >
+                    {{ markerOf(movement)!.label }}
+                  </p>
                 </td>
               </tr>
             </template>
@@ -822,22 +997,6 @@ onMounted(initializeView);
   text-align: center;
 }
 
-.account-balance {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3rem 1rem;
-
-  padding: 0.4rem 0.5rem;
-
-  color: var(--text-soft);
-  font-size: var(--font-size-sm);
-}
-
-.balance-main {
-  color: var(--text);
-  font-weight: 600;
-}
 
 .ledger-table {
   width: 100%;
@@ -856,11 +1015,6 @@ onMounted(initializeView);
 
 .ledger-table col.col-owner {
   width: 110px;
-}
-
-/* Assez large pour « UNALLOCATED » en majuscules. */
-.ledger-table col.col-status {
-  width: 130px;
 }
 
 .ledger-table col.col-currency {
@@ -882,18 +1036,38 @@ onMounted(initializeView);
 }
 
 .ledger-table th:nth-child(2),
-.ledger-table th:nth-child(5) {
+.ledger-table th:nth-child(4) {
   text-align: left;
 }
 
-.ledger-table th:nth-child(6),
-.ledger-table th:nth-child(7) {
+.ledger-table th:nth-child(5),
+.ledger-table th:nth-child(6) {
   text-align: right;
 }
 
-.movement-marker {
-  margin: 0 auto;
-  text-transform: uppercase;
+.no-statement {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.allocation-row.openable {
+  cursor: pointer;
+}
+
+.allocation-note {
+  margin: 2px 4px 0;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.allocation-note.warning {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.allocation-note.primary {
+  color: var(--primary);
 }
 
 .balance-cell {
@@ -918,5 +1092,10 @@ onMounted(initializeView);
 .balance-cell.indicative {
   color: var(--text-soft);
   font-style: italic;
+}
+
+/* Cumul des mouvements filtrés : distinct d'un solde. */
+.balance-cell.filtered {
+  color: var(--primary);
 }
 </style>
