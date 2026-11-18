@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { Allocation } from "@/composables/allocations/useAllocation";
-import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
-import { useCategories } from "@/composables/useCategories";
+import { useAllocationLabels } from "@/composables/allocations/useAllocationLabels";
 
 import { formatAmount } from "@/utils/amountFormat";
 import { formatDate } from "@/utils/dateFormat";
@@ -11,9 +10,7 @@ import { formatDate } from "@/utils/dateFormat";
 
    Une ligne par allocation : commentaire, date d'allocation
    (si elle diffère de la date de valeur), tag, catégorie ›
-   sous-catégorie et montant. Libellés tirés des catégories
-   et des tags déjà chargés (useCategories,
-   useAllocationTags).
+   sous-catégorie et montant. Libellés : useAllocationLabels.
 
    editable : boutons « ✎ » (reprendre la ligne dans le
    formulaire, un second appui annule) et « ✕ » (retirer),
@@ -45,43 +42,11 @@ const emit = defineEmits<{
   remove: [index: number];
 }>();
 
-const categoriesStore =
-  useCategories();
-
-const tagsStore =
-  useAllocationTags();
-
-function categoryLabel(
-  id: number | null
-): string {
-  return id === null
-    ? ""
-    : categoriesStore.getCategory(id)?.label ?? "";
-}
-
-function subCategoryLabel(
-  categoryID: number | null,
-  subCategoryID: number | null
-): string {
-  if (categoryID === null || subCategoryID === null) {
-    return "";
-  }
-
-  return (
-    categoriesStore
-      .getSubcategories(categoryID)
-      .find(subCategory => subCategory.id === subCategoryID)
-      ?.label ?? ""
-  );
-}
-
-function tagLabel(
-  id: number | null
-): string {
-  return id
-    ? tagsStore.getTag(id)?.tagName ?? ""
-    : "";
-}
+const {
+  categoryLabel,
+  subCategoryLabel,
+  tagLabel,
+} = useAllocationLabels();
 </script>
 
 <template>
