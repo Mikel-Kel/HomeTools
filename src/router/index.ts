@@ -72,7 +72,7 @@ const router = createRouter({
       name: "ledger",
       component: LedgerView,
       meta: {
-        level: 1,
+        level: 2,
         title: "Ledger",
         requiresDrive: true,
       },

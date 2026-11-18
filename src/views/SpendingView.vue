@@ -355,9 +355,9 @@ function totalFor(
    Navigation
 ========================= */
 
-async function openFollowUp() {
+async function openLedger() {
   await router.push({
-    name: "followup",
+    name: "ledger",
   });
 }
 
@@ -788,11 +788,11 @@ onBeforeUnmount(() => {
       <div class="header-actions">
         <div class="header-group">
           <AppIcon
-            name="followup"
+            name="book"
             :size="32"
             class="header-icon"
-            title="Follow up"
-            @click="openFollowUp"
+            title="Ledger"
+            @click="openLedger"
           />
         </div>
 
