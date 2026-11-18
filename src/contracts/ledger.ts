@@ -361,3 +361,29 @@ export function readLedgerYear(
     ),
   };
 }
+
+/* =========================
+   Effacement du dernier import (§ 5)
+
+   PWA-IMP_<AAAAMMJJHHMMSS>_A<accountId>.json :
+     { "eventType": "IMPORT_DELETED", "version": 1,
+       "timestamp": "…",
+       "payload": { "accountId": 15,
+                    "importDate": "2026-11-17",
+                    "source": "<appareil>" } }
+
+   Seul le dernier import d'un compte est accepté. Effacés :
+   ses mouvements sans allocation ; conservés : ceux qui ont
+   une allocation (base, draft ou partial). Statut du Mac :
+   « 42 movements deleted, 3 kept (allocated) » ; refus :
+   « Invalid import event: … ».
+========================= */
+
+export const IMPORT_EVENT_TRIGRAM = "IMP";
+export const IMPORT_DELETED_VERSION = 1;
+
+export function importEventSuffix(
+  accountId: number
+): string {
+  return `A${accountId}`;
+}

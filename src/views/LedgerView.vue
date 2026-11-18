@@ -3,11 +3,13 @@ import {
   computed,
   onMounted,
   ref,
+  watch,
 } from "vue";
 
 import { useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
+import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import AccountSection from "@/components/spending/AccountSection.vue";
@@ -23,6 +25,7 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
 import { useMovementLabel } from "@/composables/spending/useMovementLabel";
 import { useMovementFilters } from "@/composables/spending/useMovementFilters";
 import { useLedgerMovements } from "@/composables/ledger/useLedgerMovements";
+import { useImportDeleteRequest } from "@/composables/ledger/useImportDeleteRequest";
 
 import {
   LEDGER_FOLDER,
@@ -32,6 +35,8 @@ import {
   type LedgerAccount,
   type LedgerMovement,
 } from "@/contracts/ledger";
+
+import { confirmDialog } from "@/services/dialog/appDialog";
 
 import { formatAmount } from "@/utils/amountFormat";
 import { formatDate } from "@/utils/dateFormat";
@@ -56,6 +61,12 @@ import { formatDate } from "@/utils/dateFormat";
    mouvement, en lecture. Un mouvement à allouer ouvre la
    page Allocation (suggestions lues dans spending.json),
    avec retour au Ledger.
+
+   Filtre « Import » : mouvements arrivés à une date d'import
+   (toutes années : Period passe à All). Sur le dernier
+   import d'un compte, « Delete import » envoie
+   IMPORT_DELETED (contrat § 5) : seuls les mouvements sans
+   allocation sont effacés par le Mac.
 ========================= */
 
 const router =
@@ -122,6 +133,10 @@ const showBankText =
 const showAllocations =
   usePersistentRef("ledger.showAllocations", false);
 
+/* Date d'import choisie (filtre propre au Ledger) ; null : toutes. */
+const importFilter =
+  ref<string | null>(null);
+
 const movementFilters =
   useMovementFilters<LedgerMovement>({
     records:
@@ -137,6 +152,28 @@ const movementFilters =
 
     years:
       () => indexYears.value.map(String),
+
+    extension: {
+      matches:
+        movement =>
+          importFilter.value === null ||
+          movement.importDate === importFilter.value,
+
+      reset: () => {
+        importFilter.value = null;
+      },
+
+      snapshot: () => ({
+        importDate: importFilter.value,
+      }),
+
+      restore: saved => {
+        importFilter.value =
+          typeof saved.importDate === "string"
+            ? saved.importDate
+            : null;
+      },
+    },
   });
 
 const {
@@ -166,6 +203,48 @@ const wantedYears =
 
 const ledger =
   useLedgerMovements(wantedYears);
+
+/*
+  Un import peut porter des mouvements de l'année précédente :
+  choisir un import affiche toutes les années.
+*/
+watch(
+  importFilter,
+  importDate => {
+    if (importDate !== null) {
+      yearFilter.value = null;
+    }
+  }
+);
+
+/* Dates d'import proposées : les plus récentes, tous comptes confondus. */
+const IMPORT_CHOICES =
+  12;
+
+const importItems =
+  computed(() => {
+    const dates =
+      new Set(
+        accounts.value.flatMap(account =>
+          account.imports.map(item => item.importDate)
+        )
+      );
+
+    const recent =
+      [...dates]
+        .sort()
+        .reverse()
+        .slice(0, IMPORT_CHOICES);
+
+    if (importFilter.value !== null && !recent.includes(importFilter.value)) {
+      recent.push(importFilter.value);
+    }
+
+    return recent.map(date => ({
+      id: date,
+      label: formatDate(date, "compact"),
+    }));
+  });
 
 /* =========================
    Load states
@@ -279,6 +358,57 @@ function openingsFor(
     )
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([year, amount]) => ({ year, amount }));
+}
+
+/* =========================
+   Delete last import
+========================= */
+
+const importDelete =
+  useImportDeleteRequest();
+
+/* Dernier import du compte, s'il est celui du filtre. */
+function deletableImport(
+  account: LedgerAccount
+) {
+  const last =
+    account.imports.find(item => item.last);
+
+  return last && last.importDate === importFilter.value
+    ? last
+    : null;
+}
+
+async function deleteImport(
+  account: LedgerAccount
+) {
+  const target =
+    deletableImport(account);
+
+  if (!target || importDelete.inProgress.value) {
+    return;
+  }
+
+  const confirmed =
+    await confirmDialog({
+      title: `Delete the import of ${formatDate(target.importDate, "compact")}?`,
+      message:
+        `${account.label}: ${target.movements} movement(s). ` +
+        "Movements already allocated, or with an allocation in progress " +
+        "(draft, partial), are kept. Deleted movements come back only " +
+        "by importing the bank file again.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+
+  if (!confirmed) {
+    return;
+  }
+
+  await importDelete.send(
+    account.accountId,
+    target.importDate
+  );
 }
 
 /* =========================
@@ -442,6 +572,14 @@ onMounted(initializeView);
     v-else
     class="ledger-scroll"
   >
+    <p
+      v-if="importDelete.message.value"
+      class="request-message"
+      :class="importDelete.tone.value"
+    >
+      {{ importDelete.message.value }}
+    </p>
+
     <div class="sticky-zone">
       <MovementFilters :filters="movementFilters">
         <template #header>
@@ -460,6 +598,16 @@ onMounted(initializeView);
           >
             Bank text
           </PillButton>
+        </template>
+
+        <template #selectors>
+          <ChipSelector
+            v-model="importFilter"
+            label="Import"
+            :items="importItems"
+            :show-all="true"
+            :align-with-content="true"
+          />
         </template>
       </MovementFilters>
     </div>
@@ -481,6 +629,20 @@ onMounted(initializeView);
         :collapsed="collapsedAccounts.has(account.id)"
         @toggle="toggleAccount(account.id)"
       >
+        <template
+          v-if="deletableImport(account)"
+          #actions
+        >
+          <PillButton
+            variant="danger"
+            :disabled="importDelete.inProgress.value"
+            title="Delete the movements of this import that have no allocation"
+            @click="deleteImport(account)"
+          >
+            Delete import
+          </PillButton>
+        </template>
+
         <div class="account-balance">
           <span
             v-if="account.balance !== null"
@@ -608,6 +770,21 @@ onMounted(initializeView);
 }
 
 .loading-state.error {
+  color: var(--negative);
+}
+
+.request-message {
+  margin: 0.5rem 1rem 0;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.request-message.completed {
+  color: var(--positive);
+}
+
+.request-message.error {
   color: var(--negative);
 }
 
