@@ -74,7 +74,8 @@ après chaque navigation, au retour au premier plan et toutes les 30 min (au plu
   charge, surveille et recharge sans clignotement, et les convertir avec la fonction de lecture de leur contrat
   (`src/contracts/<domaine>.ts`, helpers dans `src/contracts/read.ts`). Les types et noms de fichiers du contrat vivent dans ce dossier.
   Toutes les vues sont converties. Exceptions voulues : les Archives chargent par `loadJSONFromFolder` les fichiers que désigne
-  leur index (tous lus par le contrat `archive.ts`), et les drafts d'allocation et statuts d'événements, lus fichier par fichier,
+  leur index (tous lus par le contrat `archive.ts`), le Ledger charge par `useLedgerMovements` les fichiers par compte et
+  par année que désigne son index, et les drafts d'allocation et statuts d'événements, lus fichier par fichier,
   restent hors de `useRemoteJson`.
 
 ## Multi-environnements
@@ -168,6 +169,22 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   Gestion depuis la PWA (W7) : image préparée par `prepareWineImage` (`src/services/wineCellar/`, JPEG redessiné dans
   le bon sens, 1600 px et 1 Mo au plus), envoyée en base64 dans `WINE_PHOTO_SAVED` / `WINE_PHOTO_DELETED` (fiche) ou
   dans `photo` de `WINE_SAVED` (création, héritage par `copyFrom`) ; nouvelle image = nouvelle clé.
+
+- Ledger (vue comptable, `LedgerView.vue`, route `/ledger`, niveau 2) : accessible seulement par l'icône de l'en-tête de
+  Spending, hors de `navigation.ts`. Contrat `../Backend/docs/ledger-contract.md` en version 2 seulement (lecteur
+  `src/contracts/ledger.ts`) : index `ledger/ledger-index.json` et fichiers `ledger/ledger-<accountId>-<année>.json`,
+  chargés par `useLedgerMovements` (`src/composables/ledger/`) pour les seules années choisies, relus quand leur
+  `updatedAt` change dans l'index. Pièces partagées avec Spending : `AccountSection`, `MovementRow`, `MovementFilters`
+  (`src/components/spending/`), `useMovementFilters` (filtre propre au Ledger : date d'import, en extension).
+  - Soldes calculés par le backend (`balanceSource` : `statement`, `carried`, `none`) ; italique sans relevé ou hors fin
+    de journée. Les reports (type 998, `carried`) restent toujours affichés ; leur montant est un solde, pas un flux.
+  - Filtre Owner, Currency, Import ou montant actif : l'en-tête montre le total des mouvements affichés (cadre pointillé)
+    et la colonne Balance leur cumul depuis 0, reports exclus ; Period et dates ne changent pas les soldes.
+  - Événements : `PWA-IMP_…_A<id>.json` (`IMPORT_DELETED`, effacement du dernier import, bouton visible quand le filtre
+    Import désigne ce dernier import ; `useImportDeleteRequest`) et `PWA-LDG_…_A<id>.json` (`LEDGER_REFRESH_REQUESTED`,
+    bouton Refresh de chaque compte, « Allocations changed — Refresh » quand l'index porte `allocationsChangedAt` ;
+    `useLedgerRefreshRequest`). Le ledger n'est plus republié après les allocations : seul l'index les signale.
+  - Mouvement à allouer : ouvre Allocation avec `?from=ledger` (retour au Ledger).
 
 ## Points ouverts connus
 
