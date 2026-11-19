@@ -206,6 +206,11 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 
 ## Points ouverts connus
 
+- Échéance d'une facture (à faire plus tard) : la QR-facture n'a pas de champ d'échéance, seulement parfois des
+  conditions de paiement (balise `/40/` de `//S1/`, « net à N jours »), conservées brutes par le Mac dans
+  `archiveqrbill.BillInfo`. Évolution possible du contrat `archive-qrbill-contract.md` : mesurer leur fréquence,
+  puis publier un champ facultatif `dueDate` dans `qrBill`, que la fiche prendrait comme date de paiement avant la
+  règle actuelle (15 ou fin du mois, vendredi si week-end, `computeNextDTADate`).
 - Changer `PROXY_API_KEY` (`proxy.env`) une fois tous les appareils passés à la version avec coffre : l'ancienne clé
   figure dans les bundles déjà publiés sur `gh-pages`.
 

@@ -586,6 +586,12 @@ function adjustToBusinessDay(date: Date): Date {
   return d
 }
 
+/*
+  Prochaine date de paiement : le 15 ou le dernier jour du
+  mois, ramené au vendredi s'il tombe un week-end ; une date
+  ramenée avant aujourd'hui est écartée (samedi 15 → fin du
+  mois, pas vendredi 14).
+*/
 function computeNextDTADate(): string {
 
   const today = new Date()
@@ -599,28 +605,16 @@ function computeNextDTADate(): string {
   const candidates: Date[] = []
 
   for (let offset = 0; offset <= 1; offset++) {
+    const y = today.getFullYear()
+    const m = today.getMonth() + offset
 
-    const base = new Date(
-      today.getFullYear(),
-      today.getMonth() + offset,
-      1
-    )
-
-    const y = base.getFullYear()
-    const m = base.getMonth()
-
-    candidates.push(new Date(y, m, 15))
-    candidates.push(new Date(y, m + 1, 0))
+    candidates.push(adjustToBusinessDay(new Date(y, m, 15)))
+    candidates.push(adjustToBusinessDay(new Date(y, m + 1, 0)))
   }
 
-  const future = candidates
-    .filter(d => d >= baseToday)
-    .sort((a, b) => a.getTime() - b.getTime())
-
   const selected =
-    future.length ? adjustToBusinessDay(future[0]) : baseToday
+    candidates.find(d => d >= baseToday) ?? baseToday
 
-  // 🔥 FORCER format ISO sûr
   const yyyy = selected.getFullYear()
   const mm = String(selected.getMonth() + 1).padStart(2, "0")
   const dd = String(selected.getDate()).padStart(2, "0")
