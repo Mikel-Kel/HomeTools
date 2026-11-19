@@ -11,6 +11,8 @@ import ChipSelector from "@/components/ChipSelector.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vue";
+import ArchiveTable from "@/components/archive/ArchiveTable.vue";
+import TagTooltip from "@/components/archive/TagTooltip.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
@@ -24,18 +26,15 @@ import { useDocumentTags } from "@/composables/archives/useDocumentTags";
 import { useArchiveDocuments } from "@/composables/archives/useArchiveDocuments";
 import { useArchiveFilters } from "@/composables/archives/useArchiveFilters";
 import { useArchiveClassification } from "@/composables/archives/useArchiveClassification";
+import { useTagTooltip } from "@/composables/archives/useTagTooltip";
 
 import { formatDate } from "@/utils/dateFormat";
-import { formatAmount } from "@/utils/amountFormat";
 
 import {
   TO_FILE_FOLDER,
   type ArchiveItem,
 } from "@/contracts/archive";
 
-import type {
-  DocumentTag,
-} from "@/composables/archives/useDocumentTags";
 import { alertDialog } from "@/services/dialog/appDialog";
 
 /* =========================
@@ -596,180 +595,13 @@ async function deleteDocument(
 }
 
 /* =========================
-   Row click
-========================= */
-
-function rowClick(
-  event: MouseEvent,
-  item: ArchiveItem
-) {
-  const element =
-    event.target as HTMLElement;
-
-  if (
-    element.closest(
-      ".classify-btn"
-    )
-  ) {
-    return;
-  }
-
-  openDocument(item);
-}
-
-/* =========================
    Tags
 ========================= */
 
-const tagMap =
-  computed(() => {
-    const map =
-      new Map<
-        number,
-        DocumentTag
-      >();
-
-    for (
-      const tag
-      of tagsStore.tags.value
-    ) {
-      map.set(
-        tag.id,
-        tag
-      );
-    }
-
-    return map;
-  });
-
-const tooltip =
-  ref<{
-    text: string;
-    x: number;
-    y: number;
-  } | null>(null);
-
-let tooltipTimer:
-  ReturnType<
-    typeof setTimeout
-  > | null = null;
-
-function showTagTooltip(
-  event: MouseEvent,
-  tagID: number
-) {
-  const tag =
-    tagMap.value.get(
-      tagID
-    );
-
-  if (!tag) {
-    return;
-  }
-
-  const target =
-    event.currentTarget as
-      HTMLElement;
-
-  const rect =
-    target.getBoundingClientRect();
-
-  tooltip.value = {
-    text:
-      tag.tagName,
-
-    x:
-      rect.left +
-      rect.width / 2,
-
-    y:
-      rect.top - 8,
-  };
-
-  if (
-    tooltipTimer
-  ) {
-    clearTimeout(
-      tooltipTimer
-    );
-  }
-
-  tooltipTimer =
-    setTimeout(
-      () => {
-        tooltip.value =
-          null;
-
-        tooltipTimer =
-          null;
-      },
-
-      2000
-    );
-}
-
-function hideTagTooltip() {
-  if (
-    tooltipTimer
-  ) {
-    clearTimeout(
-      tooltipTimer
-    );
-
-    tooltipTimer =
-      null;
-  }
-
-  tooltip.value =
-    null;
-}
-
-/* =========================
-   Formatting
-========================= */
-
-function escapeRegExp(
-  value: string
-): string {
-  return value.replace(
-    /[.*+?^${}()|[\]\\]/g,
-    "\\$&"
-  );
-}
-
-function highlight(
-  text:
-    | string
-    | null
-    | undefined
-): string {
-  if (!text) {
-    return "";
-  }
-
-  const query =
-    searchText.value.trim();
-
-  if (!query) {
-    return text;
-  }
-
-  const safeQuery =
-    escapeRegExp(
-      query
-    );
-
-  const regex =
-    new RegExp(
-      `(${safeQuery})`,
-      "gi"
-    );
-
-  return text.replace(
-    regex,
-    "<mark>$1</mark>"
-  );
-}
+const {
+  showTagTooltip,
+  hideTagTooltip,
+} = useTagTooltip();
 
 /* =========================
    Initialize
@@ -860,454 +692,278 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="sticky-stack">
-    <PageHeader
-      title="Documents"
-      icon="bookshelf"
-    />
+  <!--
+    Page à la hauteur de la fenêtre : filtres en haut, seule
+    la liste défile (en-tête du tableau collé en haut).
+  -->
+  <div class="archives-page">
+    <div class="sticky-stack">
+      <PageHeader
+        title="Documents"
+        icon="bookshelf"
+      />
 
-    <div
-      v-if="!storageReady"
-      class="archives-view muted"
-    >
-      {{
-        storageUnavailableMessage ||
-        "Storage not available."
-      }}
-    </div>
+      <div
+        v-if="!storageReady"
+        class="archives-view muted"
+      >
+        {{
+          storageUnavailableMessage ||
+          "Storage not available."
+        }}
+      </div>
 
-    <div v-else>
-      <section class="filters">
-        <header
-          class="filters-header clickable"
-          @click="
-            filtersOpen =
-              !filtersOpen
-          "
-        >
-          <span class="arrow">
-            {{
-              filtersOpen
-                ? "▼"
-                : "►"
-            }}
-          </span>
+      <div v-else>
+        <section class="filters">
+          <header
+            class="filters-header clickable"
+            @click="
+              filtersOpen =
+                !filtersOpen
+            "
+          >
+            <span class="arrow">
+              {{
+                filtersOpen
+                  ? "▼"
+                  : "►"
+              }}
+            </span>
 
-          <span class="filters-title">
-            Filters
-          </span>
+            <span class="filters-title">
+              Filters
+            </span>
 
-          <PillButton
+            <PillButton
+              v-if="filtersOpen"
+              @click.stop="
+                resetFilters
+              "
+            >
+              Reset
+            </PillButton>
+          </header>
+
+          <div
             v-if="filtersOpen"
-            @click.stop="
-              resetFilters
-            "
+            class="filters-body"
           >
-            Reset
-          </PillButton>
-        </header>
+            <ChipSelector
+              v-model="selectedFolder"
+              label="Documents"
+              :items="folderItems"
+              :show-all="true"
+              :align-with-content="true"
+            />
 
-        <div
-          v-if="filtersOpen"
-          class="filters-body"
-        >
-          <ChipSelector
-            v-model="selectedFolder"
-            label="Documents"
-            :items="folderItems"
-            :show-all="true"
-            :align-with-content="true"
-          />
+            <ChipSelector
+              v-if="
+                subFolderItems.length
+              "
+              v-model="
+                selectedSubFolder
+              "
+              label="Type"
+              :items="
+                subFolderItems
+              "
+              :show-all="true"
+              :align-with-content="
+                true
+              "
+            />
 
-          <ChipSelector
-            v-if="
-              subFolderItems.length
-            "
-            v-model="
-              selectedSubFolder
-            "
-            label="Type"
-            :items="
-              subFolderItems
-            "
-            :show-all="true"
-            :align-with-content="
-              true
-            "
-          />
+            <div
+              v-if="
+                tagsStore.tags.value
+                  .length
+              "
+              class="filter-row with-label"
+            >
+              <span class="filter-label">
+                Tags
+              </span>
 
-          <div
-            v-if="
-              tagsStore.tags.value
-                .length
-            "
-            class="filter-row with-label"
-          >
-            <span class="filter-label">
-              Tags
-            </span>
-
-            <div class="chip-line">
-              <button
-                type="button"
-                class="chip"
-                :class="{
-                  active:
-                    selectedTags
-                      .length === 0
-                }"
-                @click="
-                  selectedTags = []
-                "
-              >
-                None
-              </button>
-
-              <div
-                v-for="
-                  tag
-                  in tagsStore.tags.value
-                "
-                :key="tag.id"
-                class="tag-dot"
-                :class="{
-                  active:
-                    selectedTags.includes(
-                      tag.id
-                    )
-                }"
-                :style="{
-                  backgroundColor:
-                    tag.color
-                }"
-                @click="
-                  toggleFilterTag(
-                    tag.id
-                  )
-                "
-                @mouseenter="
-                  showTagTooltip(
-                    $event,
-                    tag.id
-                  )
-                "
-                @mouseleave="
-                  hideTagTooltip
-                "
-              ></div>
-            </div>
-          </div>
-
-          <div
-            v-if="
-              isBillsSelected
-            "
-            class="filter-row paydate-row"
-          >
-            <span class="filter-label">
-              Pay date
-            </span>
-
-            <div class="paydate-content">
-              <div class="quarter-capsule">
-                <span
-                  class="arrow-nav"
-                  @click="
-                    selectedQuarterOffset--
-                  "
-                >
-                  ‹
-                </span>
-
-                <span class="quarter-title">
-                  {{ activeQuarterKey }}
-                </span>
-
-                <span
-                  class="arrow-nav"
-                  @click="
-                    selectedQuarterOffset++
-                  "
-                >
-                  ›
-                </span>
-              </div>
-
-              <div class="chip-scroll">
+              <div class="chip-line">
                 <button
-                  v-for="
-                    date
-                    in payDatesInActiveQuarter
-                  "
-                  :key="date"
                   type="button"
                   class="chip"
                   :class="{
                     active:
-                      selectedDTADate ===
-                      date
+                      selectedTags
+                        .length === 0
                   }"
                   @click="
-                    selectedDTADate =
-                      date
+                    selectedTags = []
                   "
                 >
-                  {{
-                    formatDate(
-                      date,
-                      "text"
-                    )
-                  }}
+                  None
                 </button>
-              </div>
-            </div>
-          </div>
 
-          <div class="filter-row with-label">
-            <span class="filter-label">
-              Search
-            </span>
-
-            <input
-              v-model="searchText"
-              type="text"
-              placeholder="Search info..."
-            />
-          </div>
-        </div>
-      </section>
-
-      <div class="archive-counter-wrapper">
-        <div class="archive-separator"></div>
-
-        <div class="archive-counter">
-          <StatusPill tone="primary">
-            {{ headerCountLabel }}
-          </StatusPill>
-        </div>
-
-        <div class="archive-separator"></div>
-      </div>
-    </div>
-  </div>
-
-  <div
-    v-if="storageReady"
-    class="archives-table-wrapper"
-  >
-    <div
-      v-if="loading"
-      class="archives-view muted"
-    >
-      Loading…
-    </div>
-
-    <div
-      v-else-if="error"
-      class="archives-view error"
-    >
-      {{ error }}
-    </div>
-
-    <table
-      v-else-if="
-        filteredItems.length
-      "
-      class="archive-table"
-    >
-      <colgroup>
-        <col
-          class="col-action"
-          style="width: 35px"
-        >
-
-        <col
-          class="col-date"
-          style="width: 110px"
-        >
-
-        <col class="col-party">
-        <col class="col-info1">
-        <col class="col-info2">
-
-        <col
-          v-if="isBillsSelected"
-          class="col-dta"
-          style="width: 125px"
-        >
-
-        <col
-          v-if="isBillsSelected"
-          class="col-amount"
-        >
-      </colgroup>
-
-      <thead>
-        <tr>
-          <th class="col-action"></th>
-          <th class="col-date">Date</th>
-          <th class="col-party">Party</th>
-          <th class="col-info1">Info1</th>
-          <th class="col-info2">Info2</th>
-
-          <th
-            v-if="isBillsSelected"
-            class="col-dta"
-          >
-            DTA
-          </th>
-
-          <th
-            v-if="isBillsSelected"
-            class="col-amount"
-          >
-            Amount
-          </th>
-        </tr>
-      </thead>
-
-      <tbody>
-        <tr
-          v-for="
-            item
-            in filteredItems
-          "
-          :key="item.tocid"
-          class="clickable-row"
-          @click="
-            rowClick(
-              $event,
-              item
-            )
-          "
-        >
-          <td class="col-action">
-            <button
-              type="button"
-              class="classify-btn"
-              @click.stop="
-                openClassification(
-                  item
-                )
-              "
-            >
-              📂
-            </button>
-          </td>
-
-          <td class="col-date">
-            {{
-              formatDate(
-                item.documentDate,
-                "text"
-              )
-            }}
-          </td>
-
-          <td
-            class="col-party"
-            v-html="
-              highlight(
-                getPartyLabel(
-                  item.partyID
-                )
-              )
-            "
-          ></td>
-
-          <td
-            class="col-info1"
-            v-html="
-              highlight(
-                item.info1
-              )
-            "
-          ></td>
-
-          <td class="col-info2">
-            <div class="info2-cell">
-              <span
-                class="info2-text"
-                v-html="
-                  highlight(
-                    item.info2
-                  )
-                "
-              ></span>
-
-              <span
-                v-if="
-                  item.tagIDs?.length
-                "
-                class="tag-squares"
-              >
-                <span
+                <div
                   v-for="
-                    tagID
-                    in item.tagIDs
+                    tag
+                    in tagsStore.tags.value
                   "
-                  :key="tagID"
-                  class="tag-square"
+                  :key="tag.id"
+                  class="tag-dot"
+                  :class="{
+                    active:
+                      selectedTags.includes(
+                        tag.id
+                      )
+                  }"
                   :style="{
                     backgroundColor:
-                      tagMap.get(
-                        tagID
-                      )?.color ??
-                      '#ccc'
+                      tag.color
                   }"
+                  @click="
+                    toggleFilterTag(
+                      tag.id
+                    )
+                  "
                   @mouseenter="
                     showTagTooltip(
                       $event,
-                      tagID
+                      tag.id
                     )
                   "
                   @mouseleave="
                     hideTagTooltip
                   "
-                ></span>
-              </span>
+                ></div>
+              </div>
             </div>
-          </td>
 
-          <td
-            v-if="isBillsSelected"
-            class="col-dta"
-          >
-            <span
+            <div
               v-if="
-                item.indicatorDTA ===
-                1
+                isBillsSelected
               "
-              class="dta-badge"
+              class="filter-row paydate-row"
             >
-              {{
-                formatDate(
-                  item.dtaDate,
-                  "text"
-                )
-              }}
-            </span>
-          </td>
+              <span class="filter-label">
+                Pay date
+              </span>
 
-          <td
-            v-if="isBillsSelected"
-            class="col-amount"
-          >
-            {{
-              formatAmount(
-                item.refAmount
-              )
-            }}
-          </td>
-        </tr>
-      </tbody>
-    </table>
+              <div class="paydate-content">
+                <div class="quarter-capsule">
+                  <span
+                    class="arrow-nav"
+                    @click="
+                      selectedQuarterOffset--
+                    "
+                  >
+                    ‹
+                  </span>
+
+                  <span class="quarter-title">
+                    {{ activeQuarterKey }}
+                  </span>
+
+                  <span
+                    class="arrow-nav"
+                    @click="
+                      selectedQuarterOffset++
+                    "
+                  >
+                    ›
+                  </span>
+                </div>
+
+                <div class="chip-scroll">
+                  <button
+                    v-for="
+                      date
+                      in payDatesInActiveQuarter
+                    "
+                    :key="date"
+                    type="button"
+                    class="chip"
+                    :class="{
+                      active:
+                        selectedDTADate ===
+                        date
+                    }"
+                    @click="
+                      selectedDTADate =
+                        date
+                    "
+                  >
+                    {{
+                      formatDate(
+                        date,
+                        "text"
+                      )
+                    }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="filter-row with-label">
+              <span class="filter-label">
+                Search
+              </span>
+
+              <input
+                v-model="searchText"
+                type="text"
+                placeholder="Search info..."
+              />
+            </div>
+          </div>
+        </section>
+
+        <div class="archive-counter-wrapper">
+          <div class="archive-separator"></div>
+
+          <div class="archive-counter">
+            <StatusPill tone="primary">
+              {{ headerCountLabel }}
+            </StatusPill>
+          </div>
+
+          <div class="archive-separator"></div>
+        </div>
+      </div>
+    </div>
 
     <div
-      v-else
-      class="empty-state"
+      v-if="storageReady"
+      class="archives-table-wrapper"
     >
-      {{ noDocuments ? "No documents" : "Check filters" }}
+      <div
+        v-if="loading"
+        class="archives-view muted"
+      >
+        Loading…
+      </div>
+
+      <div
+        v-else-if="error"
+        class="archives-view error"
+      >
+        {{ error }}
+      </div>
+
+      <ArchiveTable
+        v-else-if="
+          filteredItems.length
+        "
+        :items="filteredItems"
+        :bills="isBillsSelected"
+        :search-text="searchText"
+        :party-label="getPartyLabel"
+        @open="openDocument"
+        @classify="openClassification"
+      />
+
+      <div
+        v-else
+        class="empty-state"
+      >
+        {{ noDocuments ? "No documents" : "Check filters" }}
+      </div>
     </div>
   </div>
 
@@ -1325,21 +981,7 @@ onBeforeUnmount(() => {
     "
   />
 
-  <div
-    v-if="tooltip"
-    class="tag-tooltip"
-    :style="{
-      left:
-        tooltip.x +
-        'px',
-
-      top:
-        tooltip.y +
-        'px'
-    }"
-  >
-    {{ tooltip.text }}
-  </div>
+  <TagTooltip />
 </template>
 
 <style scoped>
@@ -1347,7 +989,20 @@ onBeforeUnmount(() => {
    BASE LAYOUT
 ========================================================= */
 
+/*
+  Hauteur de la fenêtre : les filtres (hauteur variable :
+  date de paiement, tags…) gardent leur place, la liste
+  prend le reste et défile seule.
+*/
+.archives-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
 .sticky-stack {
+  flex: 0 0 auto;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -1368,9 +1023,6 @@ onBeforeUnmount(() => {
       var(--bg) 92%,
       transparent
     );
-
-  --sticky-offset:
-    0px;
 }
 
 /* =========================================================
@@ -1784,8 +1436,11 @@ onBeforeUnmount(() => {
 ========================================================= */
 
 .archives-table-wrapper {
-  height:
-    calc(100vh - 220px);
+  flex:
+    1 1 auto;
+
+  min-height:
+    0;
 
   overflow-y:
     auto;
@@ -1798,305 +1453,8 @@ onBeforeUnmount(() => {
 }
 
 /* =========================================================
-   TABLE
-========================================================= */
-
-.archive-table {
-  width:
-    100%;
-
-  table-layout:
-    fixed;
-
-  font-size:
-    0.85rem;
-}
-
-.archive-table col.col-party {
-  width:
-    auto;
-}
-
-.archive-table col.col-info1 {
-  width:
-    auto;
-}
-
-.archive-table col.col-info2 {
-  width:
-    auto;
-}
-
-.archive-table col.col-dta {
-  width:
-    100px;
-}
-
-.archive-table col.col-amount {
-  width:
-    80px;
-}
-
-.archive-table thead th {
-  position:
-    sticky;
-
-  top:
-    var(--sticky-offset);
-
-  z-index:
-    50;
-
-  border-bottom:
-    1px solid
-    var(--border);
-
-  font-weight:
-    700;
-
-  background:
-    color-mix(
-      in srgb,
-      var(--bg) 96%,
-      transparent
-    );
-}
-
-.archive-table th,
-.archive-table td {
-  padding:
-    0.5rem 0.6rem;
-
-  border-bottom:
-    1px solid
-    var(--border);
-
-  vertical-align:
-    middle;
-
-  white-space:
-    nowrap;
-
-  overflow:
-    hidden;
-
-  text-overflow:
-    ellipsis;
-}
-
-.archive-table th.col-date,
-.archive-table td.col-date,
-.archive-table th.col-dta,
-.archive-table td.col-dta {
-  text-align:
-    center;
-}
-
-.archive-table th.col-party,
-.archive-table td.col-party,
-.archive-table th.col-info1,
-.archive-table td.col-info1,
-.archive-table th.col-info2,
-.archive-table td.col-info2 {
-  text-align:
-    left;
-}
-
-.archive-table th.col-amount,
-.archive-table td.col-amount {
-  text-align:
-    right;
-
-  font-variant-numeric:
-    tabular-nums;
-}
-
-/* =========================================================
-   ROWS
-========================================================= */
-
-.clickable-row {
-  cursor:
-    pointer;
-
-  transition:
-    background 0.15s ease;
-}
-
-.clickable-row:hover {
-  background:
-    var(--primary-soft);
-}
-
-/* =========================================================
-   CELLS
-========================================================= */
-
-.col-action {
-  width:
-    30px;
-
-  text-align:
-    center;
-}
-
-.classify-btn {
-  border:
-    none;
-
-  background:
-    transparent;
-
-  cursor:
-    pointer;
-
-  font-size:
-    16px;
-
-  opacity:
-    0.7;
-}
-
-.classify-btn:hover {
-  opacity:
-    1;
-}
-
-.dta-badge {
-  padding:
-    2px 6px;
-
-  border-radius:
-    6px;
-
-  background:
-    var(--primary-soft);
-
-  color:
-    var(--primary);
-
-  font-size:
-    0.75rem;
-}
-
-/* =========================================================
-   TAGS
-========================================================= */
-
-.info2-cell {
-  display:
-    flex;
-
-  align-items:
-    center;
-
-  justify-content:
-    space-between;
-
-  gap:
-    8px;
-}
-
-.info2-text {
-  min-width:
-    0;
-
-  flex:
-    1 1 auto;
-}
-
-.tag-squares {
-  flex:
-    0 0 auto;
-
-  display:
-    inline-flex;
-
-  align-items:
-    center;
-
-  gap:
-    4px;
-}
-
-.tag-square {
-  width:
-    11px;
-
-  height:
-    11px;
-
-  border-radius:
-    2px;
-
-  border:
-    1px solid
-    var(--border);
-
-  box-shadow:
-    inset 0 0 0 1px
-    rgba(255, 255, 255, 0.1);
-
-  cursor:
-    pointer;
-}
-
-/* =========================================================
-   TOOLTIP
-========================================================= */
-
-.tag-tooltip {
-  position:
-    fixed;
-
-  transform:
-    translate(-50%, -100%);
-
-  padding:
-    4px 8px;
-
-  border-radius:
-    6px;
-
-  background:
-    var(--surface);
-
-  color:
-    var(--text);
-
-  font-size:
-    0.75rem;
-
-  white-space:
-    nowrap;
-
-  pointer-events:
-    none;
-
-  z-index:
-    3000;
-
-  box-shadow:
-    var(--shadow-sm);
-}
-
-/* =========================================================
    MISC
 ========================================================= */
-
-mark {
-  background:
-    var(--primary-soft);
-
-  color:
-    var(--primary);
-
-  padding:
-    0 2px;
-
-  border-radius:
-    3px;
-}
 
 .muted {
   opacity:
