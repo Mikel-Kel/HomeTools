@@ -15,6 +15,11 @@ import DateChip from "@/components/DateChip.vue"
 import { useDocumentTags } from "@/composables/archives/useDocumentTags"
 import { useAmountInput } from "@/composables/useAmountInput"
 import { confirmDialog } from "@/services/dialog/appDialog"
+import ArchiveSuggestions from "@/components/archive/ArchiveSuggestions.vue"
+import type {
+  ArchiveSuggestionSource,
+  ArchiveSuggestionTarget
+} from "@/composables/archives/useArchiveSuggestions"
 
 /* =========================
    Emits
@@ -48,6 +53,8 @@ interface ArchiveFolderConfig {
 ========================= */
 const props = defineProps<{
   doc: ArchiveDocument
+  /* Suggestions de Description et d'Additional info (historique des classements). */
+  suggest?: ArchiveSuggestionSource
 }>()
 
 /* =========================
@@ -229,6 +236,32 @@ const filteredParties = computed(() => {
     .filter(p => p.label.toLowerCase().includes(q))
     .slice(0, 15)
 })
+
+/* ---------- Suggestions ---------- */
+/* Document tel qu'il est saisi : dossier, relation et date choisis. */
+const suggestionTarget = computed<ArchiveSuggestionTarget | null>(() =>
+  activeRelation.value
+    ? {
+        tocid: localDoc.value.tocid,
+        folder: localDoc.value.folder,
+        partyID: activeRelation.value,
+        documentDate: localDoc.value.documentDate
+      }
+    : null
+)
+
+const descriptionSuggestions = computed(() =>
+  props.suggest && suggestionTarget.value
+    ? props.suggest.descriptionsFor(suggestionTarget.value)
+    : []
+)
+
+/* Recalculées selon la Description saisie ou choisie. */
+const additionalInfoSuggestions = computed(() =>
+  props.suggest && suggestionTarget.value
+    ? props.suggest.additionalInfosFor(suggestionTarget.value, localDoc.value.info1 ?? "")
+    : []
+)
 
 /* ---------- Tags ---------- */
 const tooltip = ref<{
@@ -568,6 +601,11 @@ async function onDelete() {
       v-model="localDoc.info1"
     />
   </div>
+  <ArchiveSuggestions
+    :suggestions="descriptionSuggestions"
+    :current="localDoc.info1 ?? ''"
+    @apply="localDoc.info1 = $event"
+  />
   <!-- Additional info -->
   <div class="row input-row">
     <span class="label">Additional info</span>
@@ -576,6 +614,11 @@ async function onDelete() {
       v-model="localDoc.info2"
     />
   </div>
+  <ArchiveSuggestions
+    :suggestions="additionalInfoSuggestions"
+    :current="localDoc.info2 ?? ''"
+    @apply="localDoc.info2 = $event"
+  />
   <!-- Reference amount -->
   <div v-if="isBillsFolder" class="row input-row">
     <span class="label">Amount</span>

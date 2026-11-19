@@ -27,6 +27,7 @@ import { useArchiveDocuments } from "@/composables/archives/useArchiveDocuments"
 import { useArchiveFilters } from "@/composables/archives/useArchiveFilters";
 import { useArchiveClassification } from "@/composables/archives/useArchiveClassification";
 import { useTagTooltip } from "@/composables/archives/useTagTooltip";
+import { useArchiveSuggestions } from "@/composables/archives/useArchiveSuggestions";
 
 import { formatDate } from "@/utils/dateFormat";
 
@@ -533,6 +534,10 @@ function closeClassification() {
     null;
 }
 
+/* Suggestions de la fiche, tirées des documents chargés. */
+const archiveSuggestions =
+  useArchiveSuggestions(archive);
+
 /*
   Classement (ARCHIVE_UPDATED) et suppression
   (ARCHIVE_DELETED) : fiche fermée si l'événement est
@@ -970,6 +975,7 @@ onBeforeUnmount(() => {
   <ArchiveDocumentSheet
     v-if="selectedItem"
     :doc="selectedItem"
+    :suggest="archiveSuggestions"
     @close="
       closeClassification
     "
