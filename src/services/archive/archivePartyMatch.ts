@@ -17,10 +17,25 @@ import {
      écartés (« C&A »).
    - Classement : nom le plus long d'abord, puis partie la
      plus utilisée dans les archives.
+
+   Relation déduite d'un IBAN (créancier d'une QR-facture) :
+   partie qui a l'alias « IBAN <iban> » (contrat des parties),
+   mêmes exclusions ; aucune si l'IBAN est l'alias de
+   plusieurs parties.
 ========================= */
 
 const MIN_NAME_LENGTH =
   3;
+
+const IBAN_ALIAS_PREFIX =
+  "IBAN ";
+
+/* Majuscules sans espaces, comme dans les alias. */
+function normalizeIban(
+  iban: string
+): string {
+  return iban.replace(/\s+/g, "").toUpperCase();
+}
 
 /* Minuscules sans accents, mots séparés par une espace. */
 function normalizeWords(
@@ -78,4 +93,30 @@ export function matchPartiesInText(
       b.party.usage.archives - a.party.usage.archives
     )
     .map(match => match.party);
+}
+
+export function matchPartyByIban(
+  iban: string,
+  parties: readonly Party[]
+): Party | null {
+  const wanted =
+    normalizeIban(iban);
+
+  if (!wanted) {
+    return null;
+  }
+
+  const matches =
+    parties.filter(party =>
+      isStandardParty(party) &&
+      !party.generic &&
+      party.aliases.some(alias =>
+        alias.startsWith(IBAN_ALIAS_PREFIX) &&
+        normalizeIban(alias.slice(IBAN_ALIAS_PREFIX.length)) === wanted
+      )
+    );
+
+  return matches.length === 1
+    ? matches[0]
+    : null;
 }

@@ -140,14 +140,15 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
     (`useArchiveSuggestions`, historique déjà chargé par dossier et partie, périodes en jetons relatifs à la date du
     document par `src/services/archive/archiveTemplates.ts`, propres à la PWA, ni stockés ni échangés), pastilles
     `ArchiveSuggestions.vue`.
-  - Documents de « A Classer » seulement, pré-remplissage (jamais d'une saisie de Michel) : relation tirée du
-    créancier de la QR-facture puis du nom de fichier libre (`archivePartyMatch.ts`, libellés et alias), dossier Bills
+  - Documents de « A Classer » seulement, pré-remplissage (jamais d'une saisie de Michel) : relation tirée de
+    l'IBAN du créancier de la QR-facture (alias `IBAN <iban>` d'une seule partie), puis de son nom, puis du nom de
+    fichier libre (`archivePartyMatch.ts`, libellés et alias), dossier Bills
     s'il y a une QR-facture, sinon dossier habituel de la relation (hors Tourism / Various), date de la QR-facture si
     le nom n'en donne pas, Description et Additional info, montant de la QR-facture dans Bills (devise affichée hors
     CHF, indice « from QR-bill »).
   - QR-facture : champ facultatif `qrBill` des documents de `archive/toFile.json`, lu par le Mac au dépôt (contrat
     `../Backend/docs/archive-qrbill-contract.md`, lecteur `src/contracts/archive.ts`) ; le Mac n'écrit jamais le montant,
-    Michel le valide en classant. Lot 2 annoncé : alias `IBAN <iban>` des parties, relation par `creditorIban`.
+    Michel le valide en classant. Alias `IBAN <iban>` des parties créés par le lot 2 du contrat (2026-11-19).
 
 - Budget (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/budget-contract.md`
   (section `years` de `budget.json`, événements `PWA-BUD_…`, journal `budgetLog-<année>.json`).

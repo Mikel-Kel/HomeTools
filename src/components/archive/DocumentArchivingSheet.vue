@@ -16,7 +16,7 @@ import { useDocumentTags } from "@/composables/archives/useDocumentTags"
 import { useAmountInput } from "@/composables/useAmountInput"
 import { confirmDialog } from "@/services/dialog/appDialog"
 import ArchiveSuggestions from "@/components/archive/ArchiveSuggestions.vue"
-import { matchPartiesInText } from "@/services/archive/archivePartyMatch"
+import { matchPartiesInText, matchPartyByIban } from "@/services/archive/archivePartyMatch"
 import { TO_FILE_FOLDER, type ArchiveQrBill } from "@/contracts/archive"
 import type {
   ArchiveSuggestionSource,
@@ -351,8 +351,9 @@ function prefill(field: "info1" | "info2", text: string | undefined) {
 }
 
 /*
-  Relation déduite du créancier de la QR-facture, sinon du
-  nom de fichier (libellé ou alias d'une partie : « wingo-… »
+  Relation déduite de l'IBAN du créancier de la QR-facture
+  (alias « IBAN <iban> »), sinon de son nom, sinon du nom de
+  fichier (libellé ou alias d'une partie : « wingo-… »
   → la partie qui a l'alias Wingo), une seule fois, si aucune
   relation n'est choisie.
 */
@@ -368,6 +369,14 @@ function guessRelation() {
   ) return
 
   relationGuessed = true
+
+  const byIban = props.doc.qrBill?.creditorIban
+    ? matchPartyByIban(props.doc.qrBill.creditorIban, partiesStore.parties.value)
+    : null
+  if (byIban) {
+    selectParty(byIban)
+    return
+  }
 
   for (const text of [props.doc.qrBill?.creditorName ?? "", fileNameText.value]) {
     const party = text && matchPartiesInText(text, partiesStore.parties.value)[0]

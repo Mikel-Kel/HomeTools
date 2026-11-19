@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.6.0** — 2026-11-14
+**Version : 1.6.1** — 2026-11-19
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -188,7 +188,7 @@ Format unique :
 - Chaque nouvel environnement reçoit ses propres buckets (ex. `fantoine-prod`, `fantoine-archives`), sous réserve de disponibilité des noms chez Hetzner.
 - **Référence des archives** : le magasin `archives` (`s3.archivesBucket`, préfixe `s3.prefix`) est la référence des documents archivés de chaque environnement. `localArchive.root`, quand il existe, en est une copie locale sur le serveur. Elle sert à la lecture rapide (`/api/local/read`) et à l'ouverture native (`/api/local/open`). Un environnement sans `localArchive` (ex. `fantoine`) n'a que le magasin `archives`.
   - **Écritures** : tout ajout, déplacement (classement) ou suppression d'un document se fait d'abord dans le magasin `archives`, puis dans la copie locale par le même traitement. Un échec dans le magasin annule l'opération ; un échec sur la copie locale n'est qu'un avertissement, rattrapé par la copie de nuit.
-  - **Noms** : les clés des nouveaux documents sont en Unicode NFC. Les clés existantes dans une autre forme restent valides et ne sont pas renommées (le proxy essaie les deux formes, §5.3).
+  - **Noms** : les clés du magasin sont en Unicode NFC. Les anciennes clés décomposées (NFD) de `hometools` ont été renommées en NFC le 2026-11-19. La réconciliation signale toute clé qui ne serait pas en NFC. Le proxy essaie toujours les deux formes (§5.3).
   - **Suppression** : un document supprimé est déplacé dans la corbeille du magasin, `_deleted/<AAAA-MM-JJ>/<clé>` (date de la suppression), et retiré de la copie locale. La corbeille n'est ni indexée, ni réconciliée, ni copiée sur le disque ; les scripts la purgent après 90 jours.
   - **Copie locale** : une étape de nuit ajoute à `localArchive.root` les documents du magasin qui y manquent. Elle ne supprime, ne remplace et ne déplace jamais un fichier local, compare les noms en NFC sans lire le contenu des fichiers, et signale sans y toucher les fichiers présents seulement en local. Rien n'est jamais copié d'une copie locale vers le magasin.
   - **Réconciliation** : l'index MySQL des archives est comparé au magasin `archives`, pour tout environnement, avec ou sans `localArchive`.
@@ -292,3 +292,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.5.0 | 2026-11-09 | §6 : règles du magasin `archives` de référence (écritures dans le magasin d'abord, clés NFC, corbeille `_deleted/` purgée après 90 jours, copie locale sans suppression, réconciliation sur le magasin), transition précisée ; §3.3 : `localArchive.root` dans un dossier synchronisé ; §5.3 : `404 NOT_FOUND` pour un fichier local absent ou non téléchargé ; §10 : repli de la PWA sur le magasin. Évolution MINOR : `hometools` inchangé jusqu'à la bascule, les lectures locales qui réussissent aujourd'hui sont inchangées |
 | 1.5.1 | 2026-11-09 | §6 : fin de la transition, `hometools` écrit aussi d'abord dans le magasin `archives` et sa copie locale en est alimentée ; la publication disque → magasin est retirée. Publié en PATCH : bascule annoncée en 1.5.0, sans changement d'interface |
 | 1.6.0 | 2026-11-14 | §3.4 : capacité `wineCellar` (cave à vins), `false` par défaut ; schéma et exemples complétés. Évolution MINOR : nouvelle capacité avec défaut `false`, aucun comportement existant ne change |
+| 1.6.1 | 2026-11-19 | §6 : toutes les clés du magasin sont en NFC (anciennes clés NFD de `hometools` renommées le 2026-11-19), signalées par la réconciliation sinon. Publié en PATCH : aucun changement d'interface, le proxy essaie toujours les deux formes |
