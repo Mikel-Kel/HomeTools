@@ -14,7 +14,6 @@ import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vu
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
-import { emitEvent } from "@/services/events/eventFiles";
 import { openArchiveDocument } from "@/services/archive/archiveDocumentOpen";
 
 import { useParties } from "@/composables/useParties";
@@ -24,6 +23,7 @@ import { useVariousFolders } from "@/composables/archives/useVariousFolders";
 import { useDocumentTags } from "@/composables/archives/useDocumentTags";
 import { useArchiveDocuments } from "@/composables/archives/useArchiveDocuments";
 import { useArchiveFilters } from "@/composables/archives/useArchiveFilters";
+import { useArchiveClassification } from "@/composables/archives/useArchiveClassification";
 
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount } from "@/utils/amountFormat";
@@ -534,318 +534,64 @@ function closeClassification() {
     null;
 }
 
-function formatPartyID(
-  partyID: number
-): string {
-  return (
-    "P" +
-    String(partyID)
-      .padStart(5, "0")
-  );
-}
-
 /*
-  Nom des nouveaux documents en Unicode NFC (contrat §6) :
-  Info1, Info2 ou le libellé du tiers peuvent arriver en NFD.
+  Classement (ARCHIVE_UPDATED) et suppression
+  (ARCHIVE_DELETED) : fiche fermée si l'événement est
+  écrit, sinon erreur affichée.
 */
-function buildPhysicalName(
-  item: ArchiveItem
-): string {
-  const documentDate =
-    item.documentDate;
+const classification =
+  useArchiveClassification({
+    items: archive,
+    partyLabel: getPartyLabel,
+  });
 
-  const dta =
-    item.dtaDate
-      ? `-DTA${item.dtaDate.replace(
-          /-/g,
-          ""
-        )}`
-      : "";
-
-  const info1 =
-    item.info1
-      ? `-IF1${item.info1}`
-      : "";
-
-  const info2 =
-    item.info2
-      ? `-IF2${item.info2}`
-      : "";
-
-  const tags =
-    item.tagIDs?.length
-      ? `-TAG${item.tagIDs.join(
-          "_"
-        )}`
-      : "";
-
-  const amount =
-    item.refAmount
-      ? `-AMT${Math.round(
-          item.refAmount * 100
-        )}`
-      : "";
-
-  /*
-    Extension du fichier d’origine (.pdf, .docx, .jpg…),
-    conservée au classement.
-  */
-  const extension =
-    /\.[A-Za-z0-9]+$/.exec(
-      item.physicalName
-    )?.[0] ?? ".pdf";
-
-  if (
-    item.folder ===
-    "A Classer"
-  ) {
-    const partyLabel =
-      getPartyLabel(
-        item.partyID
-      ) ||
-      `${item.partyID}`;
-
-    return (
-      `${documentDate}-` +
-      `${partyLabel}` +
-      `${info1}` +
-      `${info2}` +
-      `${tags}` +
-      `${amount}` +
-      `${extension}`
-    ).normalize("NFC");
+function storageMissing(): boolean {
+  if (storageReady.value) {
+    return false;
   }
 
-  const year =
-    item.documentDate.slice(
-      0,
-      4
-    );
+  actionError.value =
+    storageUnavailableMessage.value ||
+    "Storage not available.";
 
-  const party =
-    formatPartyID(
-      item.partyID
-    );
-
-  return (
-    `${year}/` +
-    `${item.folder}/` +
-    `${party}/` +
-    `${documentDate}` +
-    `${dta}` +
-    `${info1}` +
-    `${info2}` +
-    `${tags}` +
-    `${amount}` +
-    `${extension}`
-  ).normalize("NFC");
+  return true;
 }
-
-/* =========================
-   Save classification
-========================= */
 
 async function saveClassification(
   updated: ArchiveItem
 ) {
-  if (!storageReady.value) {
-    actionError.value =
-      storageUnavailableMessage.value ||
-      "Storage not available.";
-
+  if (storageMissing()) {
     return;
   }
 
-  const previousItem =
-    archive.value.find(
-      item =>
-        item.tocid ===
-        updated.tocid
-    );
+  const failure =
+    await classification.save(updated);
 
-  const previousSnapshot =
-    previousItem
-      ? { ...previousItem }
-      : null;
-
-  const processedFilePhysicalName =
-    updated.physicalName;
-
-  try {
-    const index =
-      archive.value.findIndex(
-        item =>
-          item.tocid ===
-          updated.tocid
-      );
-
-    if (index !== -1) {
-      archive.value[index] = {
-        ...updated,
-      };
-    }
-
-    const newPhysicalName =
-      buildPhysicalName(
-        updated
-      );
-
-    const event = {
-      eventType:
-        "ARCHIVE_UPDATED",
-
-      version:
-        1,
-
-      timestamp:
-        new Date().toISOString(),
-
-      processedFile:
-        processedFilePhysicalName,
-
-      archiveMetadata: {
-        tocid:
-          updated.tocid,
-
-        newPhysicalName,
-
-        folder:
-          updated.folder,
-
-        partyID:
-          updated.partyID,
-
-        documentDate:
-          updated.documentDate,
-
-        dtaDate:
-          updated.dtaDate,
-
-        info1:
-          updated.info1,
-
-        info2:
-          updated.info2,
-
-        refAmount:
-          updated.refAmount,
-
-        tagIDs:
-          updated.tagIDs ??
-          [],
-      },
-    };
-
-    /*
-      events/PWA-TOC_<AAAAMMJJHHMMSS>_<TOCID>.json
-    */
-    await emitEvent(
-      "TOC",
-      event,
-      String(updated.tocid)
-    );
-
+  if (failure === null) {
     closeClassification();
-
-    /*
-      Do not reload immediately.
-
-      The local backend processor updates the archive
-      indexes, and index.json watcher reloads the
-      affected bucket afterwards.
-
-      Keeping the optimistic update avoids briefly
-      restoring stale index data.
-    */
-
-  } catch (err) {
-    console.error(
-      "Archive classification save failed",
-      err
-    );
-
-    if (
-      previousSnapshot
-    ) {
-      const index =
-        archive.value.findIndex(
-          item =>
-            item.tocid ===
-            previousSnapshot.tocid
-        );
-
-      if (index !== -1) {
-        archive.value[index] = {
-          ...previousSnapshot,
-        };
-      }
-    }
-
+  } else {
     actionError.value =
-      err instanceof Error
-        ? err.message
-        : "Save failed";
+      failure;
   }
 }
-
-/* =========================
-   Delete document
-========================= */
 
 async function deleteDocument(
   payload: {
     tocid: number;
   }
 ) {
-  if (!storageReady.value) {
-    actionError.value =
-      storageUnavailableMessage.value ||
-      "Storage not available.";
-
+  if (storageMissing()) {
     return;
   }
 
-  try {
-    const event = {
-      eventType:
-        "ARCHIVE_DELETED",
+  const failure =
+    await classification.remove(payload.tocid);
 
-      version:
-        1,
-
-      timestamp:
-        new Date().toISOString(),
-
-      archiveMetadata: {
-        tocid:
-          payload.tocid,
-      },
-    };
-
-    await emitEvent(
-      "TOC",
-      event,
-      String(payload.tocid)
-    );
-
+  if (failure === null) {
     closeClassification();
-
-    /*
-      No optimistic removal:
-      archive/index.json watcher reloads the index
-      after the backend has processed the event.
-    */
-
-  } catch (err) {
-    console.error(
-      "Archive deletion request failed",
-      err
-    );
-
+  } else {
     actionError.value =
-      err instanceof Error
-        ? err.message
-        : "Delete failed";
+      failure;
   }
 }
 
