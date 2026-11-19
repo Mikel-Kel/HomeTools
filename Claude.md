@@ -52,7 +52,8 @@ après chaque navigation, au retour au premier plan et toutes les 30 min (au plu
 - Proxy Flask local, exposé via Tailscale : `https://airmike.tail73b300.ts.net`, authentification par header `X-Proxy-Key`.
   Hetzner refuse les requêtes SigV4 signées par le navigateur (CORS) : ne jamais réintroduire d'accès S3 direct.
   - `/api/s3/read`, `write`, `head`, `list`, `delete` : utilisés par `src/services/s3/s3StorageAdapter.ts`.
-  - PDF d'archives (`DocumentsArchiveView.vue`, quel que soit le backend actif ; page jamais masquée) : si `localArchive`
+  - PDF d'archives (`DocumentsArchiveView.vue`, ouverture par `src/services/archive/archiveDocumentOpen.ts`, quel que soit
+    le backend actif ; page jamais masquée) : si `localArchive`
     et `isServer` (le Mac serveur), `/api/local/open` (ouverture native) puis repli sur `/api/local/read` (disque),
     puis, si la copie locale répond 404 (en retard ou fichier non téléchargé par iCloud), sur `/api/s3/read` (contrat 1.5.0, §10) ;
     ailleurs, iPad compris, `/api/s3/read` avec `store=archives` (octets bruts, contrat 1.3.0). Clé = chemin relatif
