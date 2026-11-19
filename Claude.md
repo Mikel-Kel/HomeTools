@@ -132,6 +132,22 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   `AAAA/<Folder>/P<PartyID sur 5 chiffres>/<AAAA-MM-JJ>[-DTA<AAAAMMJJ>][-IF1<Info1>][-IF2<Info2>][-TAG<id>[_<id>…]][-AMT<centimes>].pdf`.
   Le backend reconstruit `archivetoc` et les tags à partir de ces noms (`scripts/python/archive_reconcile.py`) :
   ne pas changer cette grammaire sans adapter le script. Tags séparés par `_`.
+- Page Documents (`DocumentsArchiveView.vue`) : chargement `useArchiveDocuments` (attend la configuration des dossiers,
+  sinon les groupes garderaient leur libellé), filtres `useArchiveFilters` (dates de paiement `useArchivePayDates`),
+  classement et suppression `useArchiveClassification` (`PWA-TOC_…`, document mis à jour tout de suite sous son nouveau
+  nom), tableau `ArchiveTable.vue`, info-bulle des tags partagée `useTagTooltip` / `TagTooltip.vue`.
+  - Fiche de classement (`DocumentArchivingSheet.vue`) : suggestions de Description puis d'Additional info
+    (`useArchiveSuggestions`, historique déjà chargé par dossier et partie, périodes en jetons relatifs à la date du
+    document par `src/services/archive/archiveTemplates.ts`, propres à la PWA, ni stockés ni échangés), pastilles
+    `ArchiveSuggestions.vue`.
+  - Documents de « A Classer » seulement, pré-remplissage (jamais d'une saisie de Michel) : relation tirée du
+    créancier de la QR-facture puis du nom de fichier libre (`archivePartyMatch.ts`, libellés et alias), dossier Bills
+    s'il y a une QR-facture, sinon dossier habituel de la relation (hors Tourism / Various), date de la QR-facture si
+    le nom n'en donne pas, Description et Additional info, montant de la QR-facture dans Bills (devise affichée hors
+    CHF, indice « from QR-bill »).
+  - QR-facture : champ facultatif `qrBill` des documents de `archive/toFile.json`, lu par le Mac au dépôt (contrat
+    `../Backend/docs/archive-qrbill-contract.md`, lecteur `src/contracts/archive.ts`) ; le Mac n'écrit jamais le montant,
+    Michel le valide en classant. Lot 2 annoncé : alias `IBAN <iban>` des parties, relation par `creditorIban`.
 
 - Budget (nouvelle page, en cours) : contrat d'échange dans `../Backend/docs/budget-contract.md`
   (section `years` de `budget.json`, événements `PWA-BUD_…`, journal `budgetLog-<année>.json`).

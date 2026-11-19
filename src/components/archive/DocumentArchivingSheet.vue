@@ -17,7 +17,7 @@ import { useAmountInput } from "@/composables/useAmountInput"
 import { confirmDialog } from "@/services/dialog/appDialog"
 import ArchiveSuggestions from "@/components/archive/ArchiveSuggestions.vue"
 import { matchPartiesInText } from "@/services/archive/archivePartyMatch"
-import { TO_FILE_FOLDER } from "@/contracts/archive"
+import { TO_FILE_FOLDER, type ArchiveQrBill } from "@/contracts/archive"
 import type {
   ArchiveSuggestionSource,
   ArchiveSuggestionTarget
@@ -41,6 +41,9 @@ interface ArchiveDocument {
   info2: string
   refAmount: number | null
   tagIDs?: number[]
+  physicalName?: string
+  /* QR-facture lue par le Mac au dépôt (« A Classer »). */
+  qrBill?: ArchiveQrBill | null
 }
 
 interface ArchiveFolderConfig {
@@ -282,10 +285,14 @@ const fileNameText = computed(() =>
 )
 
 /*
-  Dossier habituel de la relation choisie (hors Tourism et
-  Various, dont la relation est un sous-dossier).
+  Dossier proposé : Bills pour un document qui a une
+  QR-facture, sinon le dossier habituel de la relation
+  choisie (hors Tourism et Various, dont la relation est un
+  sous-dossier).
 */
 const suggestedFolder = computed(() => {
+  if (props.doc.qrBill && billsFolderSource.value) return billsFolderSource.value
+
   const partyID = relationState.value.normal
   if (!props.suggest || !partyID) return null
 
@@ -344,9 +351,10 @@ function prefill(field: "info1" | "info2", text: string | undefined) {
 }
 
 /*
-  Relation déduite du nom de fichier (libellé ou alias d'une
-  partie : « wingo-… » → la partie qui a l'alias Wingo), une
-  seule fois, si aucune relation n'est choisie.
+  Relation déduite du créancier de la QR-facture, sinon du
+  nom de fichier (libellé ou alias d'une partie : « wingo-… »
+  → la partie qui a l'alias Wingo), une seule fois, si aucune
+  relation n'est choisie.
 */
 let relationGuessed = false
 
@@ -361,9 +369,48 @@ function guessRelation() {
 
   relationGuessed = true
 
-  const party = matchPartiesInText(fileNameText.value, partiesStore.parties.value)[0]
-  if (party) selectParty(party)
+  for (const text of [props.doc.qrBill?.creditorName ?? "", fileNameText.value]) {
+    const party = text && matchPartiesInText(text, partiesStore.parties.value)[0]
+    if (party) {
+      selectParty(party)
+      return
+    }
+  }
 }
+
+/* ---------- QR-facture (documents de « A Classer ») ---------- */
+const qrBill = computed(() =>
+  isToFileDocument.value ? props.doc.qrBill ?? null : null
+)
+
+/*
+  Date de la QR-facture comme date du document, sauf si le
+  Mac l'a tirée du nom du fichier (« wingo-2026-10-31-… »).
+*/
+function prefillBillDate() {
+  const billDate = qrBill.value?.billDate
+  const current = props.doc.documentDate ?? ""
+  const name = props.doc.physicalName ?? ""
+  const dateFromName =
+    !!current && (name.includes(current) || name.includes(current.replace(/-/g, "")))
+
+  if (billDate && !dateFromName && localDoc.value.documentDate === current) {
+    localDoc.value.documentDate = billDate
+  }
+}
+
+/* Montant de la QR-facture, dans Bills, si le champ est vide. */
+function prefillAmount() {
+  const amount = qrBill.value?.amount
+  if (isBillsFolder.value && amount != null && !localDoc.value.refAmount) {
+    localDoc.value.refAmount = amount
+  }
+}
+
+/* Montant affiché égal à celui de la QR-facture : indice « from QR-bill ». */
+const amountFromQrBill = computed(() =>
+  qrBill.value?.amount != null && localDoc.value.refAmount === qrBill.value.amount
+)
 
 /* ---------- Tags ---------- */
 const tooltip = ref<{
@@ -477,9 +524,18 @@ watch(
 
 /*
   Pré-remplissage : après la copie du document (props.doc),
-  qui l'effacerait. Le dossier d'abord : les suggestions en
-  dépendent.
+  qui l'effacerait. La date et le dossier d'abord : les
+  suggestions en dépendent ; le montant après la remise à
+  zéro du changement de dossier.
 */
+prefillBillDate()
+
+watch(
+  isBillsFolder,
+  () => prefillAmount(),
+  { immediate: true }
+)
+
 watch(
   suggestedFolder,
   source => prefillFolder(source),
@@ -757,6 +813,19 @@ async function onDelete() {
       inputmode="decimal"
       class="amount-input"
     />
+    <span
+      v-if="qrBill && qrBill.currency !== 'CHF'"
+      class="amount-currency"
+    >
+      {{ qrBill.currency }}
+    </span>
+    <span
+      v-if="amountFromQrBill"
+      class="amount-source"
+      :title="qrBill?.creditorIban"
+    >
+      (from QR-bill{{ qrBill?.creditorName ? " · " + qrBill.creditorName : "" }})
+    </span>
   </div>
   <!-- Tags -->
   <div class="row tags-row">
@@ -1002,6 +1071,22 @@ border-radius: 6px;
 background: var(--surface-soft);
 color:var(--text)
 }
+.amount-currency {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.amount-source {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
 .amount-input {
   flex: 0 0 40px;
   max-width: 90px;

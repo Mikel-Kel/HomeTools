@@ -1,5 +1,6 @@
 import {
   asArray,
+  asNullableNumber,
   asNumber,
   asObject,
   asString,
@@ -39,25 +40,6 @@ function objects(
       (item): item is JsonObject =>
         item !== null
     );
-}
-
-function asNullableNumber(
-  value: unknown
-): number | null {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return null;
-  }
-
-  const number =
-    asNumber(value, Number.NaN);
-
-  return Number.isNaN(number)
-    ? null
-    : number;
 }
 
 /* =========================
@@ -112,13 +94,61 @@ export function readArchiveIndex(
        "dtaDate": "2026-11-13" | null, "info1": "…", "info2": "…",
        "indicatorDTA": 1, "physicalName": "2026/Factures/P01364/…",
        "partyID": 1364, "refAmount": 9473.88 | null,
-       "tagIDs": [0, 1] }
+       "tagIDs": [0, 1],
+       "qrBill": { … } }
+
+   qrBill : QR-facture lue par le Mac au dépôt, documents de
+   toFile.json seulement, absent sans QR-facture (contrat
+   ../Backend/docs/archive-qrbill-contract.md, § 2 et § 4) :
+     { "amount": 123.45 | null, "currency": "CHF" | "EUR",
+       "creditorName": "…", "creditorIban": "…",
+       "referenceType": "QRR" | "SCOR" | "NON",
+       "reference": "…" | null, "message": "…" | null,
+       "billDate": "AAAA-MM-JJ" | null, "page": 2 }
 
    Les groupes d’une année portent le libellé du dossier
    (« Bills », « Tourism »…) : ils sont ramenés au nom du
    dossier (« Factures », « Tourisme »…) par la configuration
    archiveFolders d’AppParameters.json.
 ========================= */
+
+export interface ArchiveQrBill {
+  /* null : facture sans montant imposé. */
+  amount: number | null;
+  currency: string;
+  creditorName: string;
+  creditorIban: string;
+  referenceType: string;
+  reference: string | null;
+  message: string | null;
+  billDate: string | null;
+  page: number | null;
+}
+
+function readQrBill(
+  value: unknown
+): ArchiveQrBill | null {
+  const qrBill =
+    asObject(value);
+
+  if (!qrBill) {
+    return null;
+  }
+
+  return {
+    amount: asNullableNumber(qrBill.amount),
+    currency: asString(qrBill.currency, "CHF") || "CHF",
+    creditorName: asString(qrBill.creditorName).trim(),
+    creditorIban: asString(qrBill.creditorIban),
+    referenceType: asString(qrBill.referenceType),
+    reference: asString(qrBill.reference) || null,
+    message: asString(qrBill.message) || null,
+    billDate: /^\d{4}-\d{2}-\d{2}$/.test(asString(qrBill.billDate))
+      ? asString(qrBill.billDate)
+      : null,
+    page: asNullableNumber(qrBill.page),
+  };
+}
 
 export interface ArchiveItem {
   tocid: number;
@@ -132,6 +162,9 @@ export interface ArchiveItem {
   partyID: number;
   refAmount: number | null;
   tagIDs: number[];
+
+  /* QR-facture lue au dépôt (« A Classer » seulement). */
+  qrBill: ArchiveQrBill | null;
 
   /*
     Fichier d’origine (« toFile » ou l’année), pour le
@@ -179,6 +212,9 @@ function readArchiveItem(
       asArray(item.tagIDs)
         .map(tag => asNumber(tag, Number.NaN))
         .filter(tag => Number.isInteger(tag)),
+
+    qrBill:
+      readQrBill(item.qrBill),
 
     sourceBucket,
   };
