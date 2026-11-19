@@ -16,6 +16,8 @@ import { useDocumentTags } from "@/composables/archives/useDocumentTags"
 import { useAmountInput } from "@/composables/useAmountInput"
 import { confirmDialog } from "@/services/dialog/appDialog"
 import ArchiveSuggestions from "@/components/archive/ArchiveSuggestions.vue"
+import { matchPartiesInText } from "@/services/archive/archivePartyMatch"
+import { TO_FILE_FOLDER } from "@/contracts/archive"
 import type {
   ArchiveSuggestionSource,
   ArchiveSuggestionTarget
@@ -263,6 +265,66 @@ const additionalInfoSuggestions = computed(() =>
     : []
 )
 
+/* ---------- Pré-remplissage (documents de « A Classer ») ---------- */
+const isToFileDocument = computed(() =>
+  props.doc.folder === TO_FILE_FOLDER
+)
+
+/*
+  Texte tiré d'un nom de fichier libre : document de
+  « A Classer » sans relation, dont le Mac a mis le nom
+  dans la Description.
+*/
+const fileNameText = computed(() =>
+  isToFileDocument.value && !props.doc.partyID
+    ? props.doc.info1 ?? ""
+    : ""
+)
+
+/* Dernières valeurs pré-remplies : remplaçables, contrairement à une saisie. */
+const prefilled: Record<"info1" | "info2", string | null> = {
+  info1: null,
+  info2: null
+}
+
+function isReplaceable(field: "info1" | "info2"): boolean {
+  const value = localDoc.value[field] ?? ""
+  return (
+    !value.trim() ||
+    value === prefilled[field] ||
+    (field === "info1" && !!fileNameText.value && value === fileNameText.value)
+  )
+}
+
+/* Champ vide, texte du nom de fichier ou pré-rempli : première suggestion. */
+function prefill(field: "info1" | "info2", text: string | undefined) {
+  if (!isToFileDocument.value || !text || !isReplaceable(field)) return
+  localDoc.value[field] = text
+  prefilled[field] = text
+}
+
+/*
+  Relation déduite du nom de fichier (libellé ou alias d'une
+  partie : « wingo-… » → la partie qui a l'alias Wingo), une
+  seule fois, si aucune relation n'est choisie.
+*/
+let relationGuessed = false
+
+function guessRelation() {
+  if (
+    relationGuessed ||
+    !fileNameText.value ||
+    isSpecialRelationMode.value ||
+    relationState.value.normal ||
+    !partiesStore.parties.value.length
+  ) return
+
+  relationGuessed = true
+
+  const party = matchPartiesInText(fileNameText.value, partiesStore.parties.value)[0]
+  if (party) selectParty(party)
+}
+
 /* ---------- Tags ---------- */
 const tooltip = ref<{
   text: string
@@ -349,6 +411,7 @@ watch(
 watch(
   parties,
   () => {
+    guessRelation()
     if (!activeRelation.value) return
     const p = parties.value.find(x => x.id === activeRelation.value)
     if (p) relationSearch.value = p.label
@@ -369,6 +432,22 @@ watch(
       localDoc.value.refAmount = 0
     }
   },
+  { immediate: true }
+)
+
+/*
+  Pré-remplissage : après la copie du document (props.doc),
+  qui l'effacerait.
+*/
+watch(
+  () => descriptionSuggestions.value[0]?.text,
+  text => prefill("info1", text),
+  { immediate: true }
+)
+
+watch(
+  () => additionalInfoSuggestions.value[0]?.text,
+  text => prefill("info2", text),
   { immediate: true }
 )
 
