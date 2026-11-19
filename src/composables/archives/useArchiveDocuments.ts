@@ -2,6 +2,7 @@ import {
   computed,
   ref,
   watch,
+  type Ref,
 } from "vue";
 
 import { loadJSONFromFolder } from "@/services/driveAdapter";
@@ -31,6 +32,9 @@ import {
    Contrat : src/contracts/archive.ts.
 
    Options :
+   - ready : configuration chargée (archiveFolders) ; avant,
+     aucun fichier n'est lu, sinon les groupes garderaient
+     leur libellé et chaque dossier apparaîtrait deux fois ;
    - folderOfLabel : nom du dossier d'un groupe d'année
      (libellé « Bills » → « Factures ») ;
    - onLoaded : appelé après chaque chargement réussi.
@@ -41,6 +45,7 @@ import {
 ========================= */
 
 export interface ArchiveDocumentsOptions {
+  ready: Ref<boolean>;
   folderOfLabel: (label: string) => string;
   onLoaded: () => void;
 }
@@ -188,19 +193,32 @@ export function useArchiveDocuments(
     }
   }
 
-  watch(
-    () =>
-      archiveIndex.data.value,
+  /* Dernière version de l'index chargée ; null : aucune. */
+  let loadedIndex: ArchiveIndex | null =
+    null;
 
-    async (index, previous) => {
-      if (!index) {
+  watch(
+    [
+      () => archiveIndex.data.value,
+      options.ready,
+    ],
+
+    async ([index, ready]) => {
+      if (
+        !index ||
+        !ready ||
+        index === loadedIndex
+      ) {
         return;
       }
 
       const partial =
         loaded.value &&
-        previous !== null &&
+        loadedIndex !== null &&
         index.foldersUpdated.length > 0;
+
+      loadedIndex =
+        index;
 
       if (partial) {
         /*
@@ -229,6 +247,9 @@ export function useArchiveDocuments(
       if (!ready) {
         loaded.value =
           false;
+
+        loadedIndex =
+          null;
 
         items.value =
           [];

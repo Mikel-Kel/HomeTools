@@ -23,7 +23,7 @@ import { useTourismFolders } from "@/composables/archives/useTourismFolders";
 import { useVariousFolders } from "@/composables/archives/useVariousFolders";
 import { useDocumentTags } from "@/composables/archives/useDocumentTags";
 import { useArchiveDocuments } from "@/composables/archives/useArchiveDocuments";
-import { useArchivePayDates } from "@/composables/archives/useArchivePayDates";
+import { useArchiveFilters } from "@/composables/archives/useArchiveFilters";
 
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount } from "@/utils/amountFormat";
@@ -37,7 +37,6 @@ import type {
   DocumentTag,
 } from "@/composables/archives/useDocumentTags";
 import { alertDialog } from "@/services/dialog/appDialog";
-import { usePersistentRef } from "@/composables/usePersistentRef";
 
 /* =========================
    Types
@@ -121,45 +120,6 @@ const actionError =
 
 const filtersOpen =
   ref(true);
-
-/* null : All. */
-const selectedFolder =
-  usePersistentRef<string | null>("archives.selectedFolder", null);
-
-/*
-  Dossier par défaut déjà appliqué dans la session : un
-  « All » choisi ensuite n'est plus remplacé.
-*/
-const folderChosen =
-  usePersistentRef("archives.folderChosen", false);
-
-function applyDefaultFolder() {
-  if (folderChosen.value) {
-    return;
-  }
-
-  selectedFolder.value =
-    selectedFolder.value ??
-    defaultFolder.value;
-
-  folderChosen.value =
-    selectedFolder.value !== null;
-}
-
-const selectedSubFolder =
-  usePersistentRef<number | null>("archives.selectedSubFolder", null);
-
-const selectedDTADate =
-  usePersistentRef<string | null>("archives.selectedDTADate", null);
-
-const selectedTags =
-  usePersistentRef<number[]>("archives.selectedTags", []);
-
-const searchText =
-  usePersistentRef("archives.searchText", "");
-
-const selectedQuarterOffset =
-  usePersistentRef("archives.selectedQuarterOffset", 0);
 
 const selectedItem =
   ref<ArchiveItem | null>(null);
@@ -434,51 +394,6 @@ function getPartyLabel(
 }
 
 /* =========================
-   Visibility rules
-========================= */
-
-const isPayDateVisible =
-  computed(() =>
-    selectedFolder.value ===
-    billsFolderSource.value
-  );
-
-const isBillsSelected =
-  computed(() =>
-    selectedFolder.value ===
-    billsFolderSource.value
-  );
-
-/* =========================
-   Folder watcher
-========================= */
-
-watch(
-  selectedFolder,
-  value => {
-    selectedSubFolder.value =
-      null;
-
-    if (
-      value ===
-      billsFolderSource.value
-    ) {
-      selectedTags.value =
-        [];
-
-      selectedQuarterOffset.value =
-        0;
-
-      selectDefaultPayDateForQuarter();
-
-    } else {
-      selectedDTADate.value =
-        null;
-    }
-  }
-);
-
-/* =========================
    Open document
 ========================= */
 
@@ -533,6 +448,7 @@ const {
   loading: archiveLoading,
   error: archiveError,
 } = useArchiveDocuments({
+  ready: bootstrapped,
   folderOfLabel,
 
   onLoaded: () => {
@@ -560,207 +476,31 @@ const error =
   );
 
 /* =========================
-   Pay dates
+   Filters
 ========================= */
 
 const {
+  selectedFolder,
+  folderChosen,
+  applyDefaultFolder,
+  selectedSubFolder,
+  selectedDTADate,
+  selectedTags,
+  searchText,
+  selectedQuarterOffset,
+  isBillsSelected,
   activeQuarterKey,
   payDatesInActiveQuarter,
   selectDefaultPayDateForQuarter,
-} = useArchivePayDates({
+  toggleFilterTag,
+  resetFilters,
+  filteredItems,
+} = useArchiveFilters({
   items: archive,
-  quarterOffset: selectedQuarterOffset,
-  selectedDate: selectedDTADate,
+  billsFolderSource,
+  defaultFolder,
+  partyLabel: getPartyLabel,
 });
-
-/* =========================
-   Tag filters
-========================= */
-
-function toggleFilterTag(
-  id: number
-) {
-  const index =
-    selectedTags.value.indexOf(
-      id
-    );
-
-  if (index >= 0) {
-    selectedTags.value.splice(
-      index,
-      1
-    );
-  } else {
-    selectedTags.value.push(
-      id
-    );
-
-    /* Choisir un tag depuis « To file » : recherche dans tous les dossiers (All). */
-    if (
-      selectedFolder.value ===
-      TO_FILE_FOLDER
-    ) {
-      selectedFolder.value =
-        null;
-    }
-  }
-}
-
-/* =========================
-   Filtering
-========================= */
-
-function resetFilters() {
-  selectedFolder.value =
-    defaultFolder.value;
-
-  selectedSubFolder.value =
-    null;
-
-  selectedDTADate.value =
-    null;
-
-  selectedTags.value =
-    [];
-
-  searchText.value =
-    "";
-
-  selectedQuarterOffset.value =
-    0;
-
-  if (
-    selectedFolder.value ===
-    billsFolderSource.value
-  ) {
-    selectDefaultPayDateForQuarter();
-  }
-}
-
-const filteredItems =
-  computed(() => {
-    return archive.value
-      .filter(item => {
-        if (
-          selectedFolder.value &&
-          item.folder !==
-            selectedFolder.value
-        ) {
-          return false;
-        }
-
-        if (
-          selectedSubFolder.value &&
-          item.partyID !==
-            selectedSubFolder.value
-        ) {
-          return false;
-        }
-
-        if (
-          isPayDateVisible.value &&
-          selectedDTADate.value &&
-          item.dtaDate !==
-            selectedDTADate.value
-        ) {
-          return false;
-        }
-
-        const query =
-          searchText.value
-            .trim()
-            .toLowerCase();
-
-        if (query) {
-          const party =
-            getPartyLabel(
-              item.partyID
-            ).toLowerCase();
-
-          const info1 =
-            item.info1
-              ?.toLowerCase() ??
-            "";
-
-          const info2 =
-            item.info2
-              ?.toLowerCase() ??
-            "";
-
-          if (
-            !party.includes(
-              query
-            ) &&
-            !info1.includes(
-              query
-            ) &&
-            !info2.includes(
-              query
-            )
-          ) {
-            return false;
-          }
-        }
-
-        const itemTags =
-          item.tagIDs ?? [];
-
-        if (
-          isBillsSelected.value
-        ) {
-          if (
-            selectedTags.value
-              .length === 0
-          ) {
-            if (
-              itemTags.includes(7)
-            ) {
-              return false;
-            }
-
-          } else {
-            const hasMatch =
-              selectedTags.value
-                .some(
-                  tagID =>
-                    itemTags.includes(
-                      tagID
-                    )
-                );
-
-            if (!hasMatch) {
-              return false;
-            }
-          }
-
-        } else if (
-          selectedTags.value
-            .length > 0
-        ) {
-          const hasMatch =
-            selectedTags.value
-              .some(
-                tagID =>
-                  itemTags.includes(
-                    tagID
-                  )
-              );
-
-          if (!hasMatch) {
-            return false;
-          }
-        }
-
-        return true;
-      })
-      .sort(
-        (a, b) =>
-          b.documentDate
-            .localeCompare(
-              a.documentDate
-            )
-      );
-  });
 
 const resultCount =
   computed(() =>
@@ -1514,7 +1254,7 @@ onBeforeUnmount(() => {
 
           <div
             v-if="
-              isPayDateVisible
+              isBillsSelected
             "
             class="filter-row paydate-row"
           >
