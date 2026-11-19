@@ -14,7 +14,6 @@ import ArchiveDocumentSheet from "@/components/archive/DocumentArchivingSheet.vu
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
-import { useRemoteJson } from "@/composables/useRemoteJson";
 import { emitEvent } from "@/services/events/eventFiles";
 import { openArchiveDocument } from "@/services/archive/archiveDocumentOpen";
 
@@ -23,25 +22,13 @@ import { useArchiveFolders } from "@/composables/archives/useArchiveFolders";
 import { useTourismFolders } from "@/composables/archives/useTourismFolders";
 import { useVariousFolders } from "@/composables/archives/useVariousFolders";
 import { useDocumentTags } from "@/composables/archives/useDocumentTags";
-
-import {
-  loadJSONFromFolder,
-} from "@/services/driveAdapter";
+import { useArchiveDocuments } from "@/composables/archives/useArchiveDocuments";
 
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount } from "@/utils/amountFormat";
 
 import {
-  ARCHIVE_FOLDER,
-  ARCHIVE_INDEX_FILE,
-  ARCHIVE_TO_FILE_FILE,
-  archiveYearFile,
-  readArchiveIndex,
-  readArchiveToFile,
-  readArchiveYear,
-  TO_FILE_BUCKET,
   TO_FILE_FOLDER,
-  type ArchiveIndex,
   type ArchiveItem,
 } from "@/contracts/archive";
 
@@ -130,52 +117,6 @@ const bootstrapped =
 */
 const actionError =
   ref<string | null>(null);
-
-/*
-  Index des archives, relu dès qu’il change : chaque
-  nouvelle version recharge les fichiers qu’il désigne.
-  Contrat : src/contracts/archive.ts.
-*/
-const archiveIndex =
-  useRemoteJson({
-    folder:
-      ARCHIVE_FOLDER,
-
-    file:
-      ARCHIVE_INDEX_FILE,
-
-    read:
-      readArchiveIndex,
-  });
-
-/*
-  Documents de toFile.json et des fichiers d’année.
-*/
-const archive =
-  ref<ArchiveItem[]>([]);
-
-const archiveLoading =
-  ref(false);
-
-const archiveLoaded =
-  ref(false);
-
-const archiveError =
-  ref<string | null>(null);
-
-const loading =
-  computed(() =>
-    bootstrapping.value ||
-    archiveIndex.loading.value ||
-    archiveLoading.value
-  );
-
-const error =
-  computed(() =>
-    actionError.value ??
-    archiveIndex.error.value ??
-    archiveError.value
-  );
 
 const filtersOpen =
   ref(true);
@@ -583,84 +524,17 @@ function folderOfLabel(
 }
 
 /*
-  Documents d’un fichier de l’index : « toFile » ou une
-  année. Un fichier absent ne contient aucun document.
+  Documents de toFile.json et des fichiers d’année, après
+  chaque version de l’index.
 */
-async function loadBucket(
-  bucket: string
-): Promise<ArchiveItem[]> {
-  if (bucket === TO_FILE_BUCKET) {
-    return readArchiveToFile(
-      await loadJSONFromFolder<unknown>(
-        ARCHIVE_FOLDER,
-        ARCHIVE_TO_FILE_FILE
-      )
-    );
-  }
+const {
+  items: archive,
+  loading: archiveLoading,
+  error: archiveError,
+} = useArchiveDocuments({
+  folderOfLabel,
 
-  return readArchiveYear(
-    await loadJSONFromFolder<unknown>(
-      ARCHIVE_FOLDER,
-      archiveYearFile(bucket)
-    ),
-    bucket,
-    folderOfLabel
-  );
-}
-
-/*
-  Lecture complète (première version de l’index), ou
-  partielle : seuls les fichiers republiés par le dernier
-  classement (foldersUpdated) sont relus.
-*/
-async function loadArchive(
-  index: ArchiveIndex,
-  partial: boolean
-) {
-  const buckets =
-    partial
-      ? index.foldersUpdated.filter(
-          bucket =>
-            bucket === TO_FILE_BUCKET ||
-            /^\d{4}$/.test(bucket)
-        )
-      : [
-          TO_FILE_BUCKET,
-          ...index.years.map(String),
-        ];
-
-  if (!partial) {
-    archiveLoading.value =
-      true;
-  }
-
-  archiveError.value =
-    null;
-
-  try {
-    const loaded =
-      (
-        await Promise.all(
-          buckets.map(loadBucket)
-        )
-      ).flat();
-
-    archive.value =
-      partial
-        ? [
-            ...archive.value.filter(
-              item =>
-                !buckets.includes(
-                  item.sourceBucket
-                )
-            ),
-            ...loaded,
-          ]
-        : loaded;
-
-    archiveLoaded.value =
-      true;
-
+  onLoaded: () => {
     applyDefaultFolder();
 
     if (
@@ -669,60 +543,20 @@ async function loadArchive(
     ) {
       selectDefaultPayDateForQuarter();
     }
+  },
+});
 
-  } catch (err) {
-    console.error(
-      "Archive loading failed",
-      err
-    );
+const loading =
+  computed(() =>
+    bootstrapping.value ||
+    archiveLoading.value
+  );
 
-    if (!partial) {
-      archiveError.value =
-        err instanceof Error
-          ? err.message
-          : "Failed to load archive";
-    }
-
-  } finally {
-    archiveLoading.value =
-      false;
-  }
-}
-
-watch(
-  () =>
-    archiveIndex.data.value,
-
-  async (index, previous) => {
-    if (!index) {
-      return;
-    }
-
-    const partial =
-      archiveLoaded.value &&
-      previous !== null &&
-      index.foldersUpdated.length > 0;
-
-    if (partial) {
-      /*
-        L’index peut être publié un instant avant les
-        fichiers qu’il désigne.
-      */
-      await new Promise<void>(
-        resolve =>
-          window.setTimeout(
-            resolve,
-            200
-          )
-      );
-    }
-
-    await loadArchive(
-      index,
-      partial
-    );
-  }
-);
+const error =
+  computed(() =>
+    actionError.value ??
+    archiveError.value
+  );
 
 /* =========================
    Quarter logic
@@ -1756,12 +1590,6 @@ watch(
     if (!ready) {
       bootstrapped.value =
         false;
-
-      archiveLoaded.value =
-        false;
-
-      archive.value =
-        [];
 
       /* Changement de backend : retour au dossier par défaut. */
       if (wasReady) {
