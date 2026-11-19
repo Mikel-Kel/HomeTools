@@ -22,7 +22,9 @@ import {
    - descriptionsFor : Descriptions les plus probables ;
    - additionalInfosFor : Additional info les plus probables,
      parmi les documents qui avaient la Description donnée
-     (tous ceux de l'historique si aucun ne l'avait).
+     (tous ceux de l'historique si aucun ne l'avait) ;
+   - foldersFor : dossiers habituels de la partie, du plus
+     probable au moins probable (mêmes poids).
 
    - Historique : documents du même dossier et de la même
      partie (ou sous-dossier Tourism / Various) ; s'il n'y
@@ -62,6 +64,7 @@ export interface ArchiveSuggestion {
 
 interface HistoryEntry {
   tocid: number;
+  folder: string;
   info1Template: string;
   info2Template: string;
   year: number;
@@ -198,6 +201,7 @@ export function useArchiveSuggestions(
 
         const entry: HistoryEntry = {
           tocid: item.tocid,
+          folder: item.folder,
           info1Template: toArchiveTemplate(item.info1, item.documentDate),
           info2Template: toArchiveTemplate(item.info2, item.documentDate),
           ...date,
@@ -284,9 +288,37 @@ export function useArchiveSuggestions(
     );
   }
 
+  function foldersFor(
+    target: ArchiveSuggestionTarget
+  ): string[] {
+    const date =
+      yearMonth(target.documentDate);
+
+    if (!date || target.partyID <= 0) {
+      return [];
+    }
+
+    const scores =
+      new Map<string, number>();
+
+    for (
+      const entry
+      of history.value.byParty.get(target.partyID) ?? []
+    ) {
+      if (entry.tocid !== target.tocid) {
+        scores.set(entry.folder, (scores.get(entry.folder) ?? 0) + weight(entry, date));
+      }
+    }
+
+    return [...scores.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([folder]) => folder);
+  }
+
   return {
     descriptionsFor,
     additionalInfosFor,
+    foldersFor,
   };
 }
 

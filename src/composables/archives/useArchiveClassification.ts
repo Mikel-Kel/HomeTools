@@ -13,7 +13,10 @@ import type { ArchiveItem } from "@/contracts/archive";
    statut :
    - ARCHIVE_UPDATED : nouveau nom physique et métadonnées ;
      le document est mis à jour tout de suite dans items,
-     remis dans son état précédent si l'envoi échoue ;
+     sous son nouveau nom (ouverture, nouveau classement
+     avant la relecture : le Mac traite les événements dans
+     l'ordre), et remis dans son état précédent si l'envoi
+     échoue ;
    - ARCHIVE_DELETED : pas de retrait anticipé.
    Dans les deux cas, l'index republié par le Mac recharge
    ensuite les fichiers concernés (useArchiveDocuments) :
@@ -77,8 +80,17 @@ export function useArchiveClassification(
         ? { ...previousItem }
         : null;
 
+    const newPhysicalName =
+      buildPhysicalName(
+        updated,
+        options.partyLabel
+      );
+
     try {
-      replaceItem(updated);
+      replaceItem({
+        ...updated,
+        physicalName: newPhysicalName,
+      });
 
       const event = {
         eventType:
@@ -97,11 +109,7 @@ export function useArchiveClassification(
           tocid:
             updated.tocid,
 
-          newPhysicalName:
-            buildPhysicalName(
-              updated,
-              options.partyLabel
-            ),
+          newPhysicalName,
 
           folder:
             updated.folder,

@@ -281,6 +281,46 @@ const fileNameText = computed(() =>
     : ""
 )
 
+/*
+  Dossier habituel de la relation choisie (hors Tourism et
+  Various, dont la relation est un sous-dossier).
+*/
+const suggestedFolder = computed(() => {
+  const partyID = relationState.value.normal
+  if (!props.suggest || !partyID) return null
+
+  return props.suggest
+    .foldersFor({
+      tocid: localDoc.value.tocid,
+      folder: localDoc.value.folder,
+      partyID,
+      documentDate: localDoc.value.documentDate
+    })
+    .find(source => {
+      const label = folders.value.find(f => f.source === source)?.label
+      return (
+        source !== TO_FILE_FOLDER &&
+        !!label &&
+        label !== "Tourism" &&
+        label !== "Various"
+      )
+    }) ?? null
+})
+
+/* Dernier dossier pré-rempli : remplaçable, contrairement à un choix. */
+let prefilledFolder: string | null = null
+
+function prefillFolder(source: string | null) {
+  const current = localDoc.value.folder
+  if (
+    !isToFileDocument.value ||
+    !source ||
+    (current !== TO_FILE_FOLDER && current !== prefilledFolder)
+  ) return
+  localDoc.value.folder = source
+  prefilledFolder = source
+}
+
 /* Dernières valeurs pré-remplies : remplaçables, contrairement à une saisie. */
 const prefilled: Record<"info1" | "info2", string | null> = {
   info1: null,
@@ -437,8 +477,15 @@ watch(
 
 /*
   Pré-remplissage : après la copie du document (props.doc),
-  qui l'effacerait.
+  qui l'effacerait. Le dossier d'abord : les suggestions en
+  dépendent.
 */
+watch(
+  suggestedFolder,
+  source => prefillFolder(source),
+  { immediate: true }
+)
+
 watch(
   () => descriptionSuggestions.value[0]?.text,
   text => prefill("info1", text),
