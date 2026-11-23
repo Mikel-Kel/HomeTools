@@ -40,7 +40,7 @@ export function isNavigationItemActive(
 }
 
 export const NAVIGATION_ITEMS: NavigationItem[] = [
-  { path: "/spending", label: "Spending", icon: "spending", related: ["/allocation", "/ledger"] },
+  { path: "/spending", label: "Spending", icon: "creditcard", related: ["/allocation", "/ledger"] },
   { path: "/follow-up", label: "Follow-up", icon: "followup" },
   { path: "/documentsArchive", label: "Documents", icon: "bookshelf" },
   { path: "/portfolio", label: "Portfolio", icon: "portfolio" },

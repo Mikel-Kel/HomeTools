@@ -851,7 +851,7 @@ function onEditAllocation(
 <template>
   <PageHeader
     title="Allocation"
-    icon="spending"
+    icon="creditcard"
   />
 
   <div

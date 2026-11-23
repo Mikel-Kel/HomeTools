@@ -1,13 +1,24 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import {
+  computed,
+  ref,
+  watch,
+} from "vue";
 
 import PageHeader from "@/components/PageHeader.vue";
+import PositionDetail from "@/components/portfolio/PositionDetail.vue";
 import SecuritiesPanel from "@/components/portfolio/SecuritiesPanel.vue";
 import TransactionsPanel from "@/components/portfolio/TransactionsPanel.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 
 import { usePersistentRef } from "@/composables/usePersistentRef";
 import { useRemoteJson } from "@/composables/useRemoteJson";
+
+import {
+  INDICATORS_FOLDER,
+  MARKET_HISTORY_FILE,
+  readMarketHistory,
+} from "@/contracts/indicators";
 
 import {
   PORTFOLIO_FILE,
@@ -34,7 +45,10 @@ import {
    Totaux, avertissements, positions consolidées (détail par
    dépositaire quand il y en a plusieurs), liquidités et
    positions soldées. La date du cours est affichée, car les
-   titres n'ont pas tous la même dernière date.
+   titres n'ont pas tous la même dernière date. Un clic sur
+   une position ouvre son détail (PositionDetail) ; les cours
+   sont chargés à la première ouverture et gardés (fichier
+   volumineux).
 
    Onglet Transactions : journal (TransactionsPanel).
    Onglet Securities : liste et saisie des titres
@@ -79,6 +93,54 @@ const isEmpty =
       !value.closedPositions.length &&
       !value.cash.length
     );
+  });
+
+/* =========================
+   Position sélectionnée
+========================= */
+
+const selectedId =
+  usePersistentRef<number | null>("portfolio.selected", null);
+
+/* Sélection retrouvée, mais titre sans position ni solde : liste. */
+const detailId =
+  computed(() => {
+    const id =
+      selectedId.value;
+
+    const value =
+      portfolio.value;
+
+    return (
+      id !== null &&
+      value &&
+      (
+        value.positions.some(item => item.securityId === id) ||
+        value.closedPositions.some(item => item.securityId === id)
+      )
+    )
+      ? id
+      : null;
+  });
+
+const marketNeeded =
+  ref(false);
+
+watch(
+  detailId,
+  id => {
+    if (id !== null) {
+      marketNeeded.value = true;
+    }
+  },
+  { immediate: true }
+);
+
+const marketFile =
+  useRemoteJson({
+    folder: INDICATORS_FOLDER,
+    file: () => marketNeeded.value ? MARKET_HISTORY_FILE : null,
+    read: readMarketHistory,
   });
 
 const securityById =
@@ -192,6 +254,15 @@ function warningText(
       :portfolio="portfolio"
     />
 
+    <PositionDetail
+      v-else-if="detailId !== null"
+      :portfolio="portfolio"
+      :security-id="detailId"
+      :series="marketFile.data.value ?? []"
+      :series-error="marketFile.error.value || null"
+      @back="selectedId = null"
+    />
+
     <div
       v-else-if="isEmpty"
       class="empty-message"
@@ -279,6 +350,8 @@ function warningText(
             <tbody
               v-for="position in portfolio.positions"
               :key="position.securityId"
+              class="selectable"
+              @click="selectedId = position.securityId"
             >
               <tr>
                 <td>
@@ -403,6 +476,8 @@ function warningText(
               <tr
                 v-for="position in portfolio.closedPositions"
                 :key="position.securityId"
+                class="selectable"
+                @click="selectedId = position.securityId"
               >
                 <td>{{ securityLabel(position.securityId) }}</td>
                 <td
@@ -546,6 +621,14 @@ td {
 th {
   color: var(--text-soft);
   font-weight: 600;
+}
+
+.selectable {
+  cursor: pointer;
+}
+
+.selectable:hover {
+  background: var(--primary-soft);
 }
 
 .number {

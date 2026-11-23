@@ -782,7 +782,7 @@ onBeforeUnmount(() => {
 <template>
   <PageHeader
     title="Spending"
-    icon="spending"
+    icon="creditcard"
   >
     <template #actions>
       <div class="header-actions">

@@ -17,6 +17,9 @@ import { niceScale } from "@/utils/chartScale";
    séries : étiquette au bout de chaque courbe, reliée par
    un trait si les courbes se resserrent. Couleurs : variables
    CSS passées par série (--chart-series-*, theme.css).
+   Repères facultatifs (markers) : opérations à une date et
+   une valeur, inclus dans les échelles et repris dans la
+   bulle à leur date.
 ========================= */
 
 export interface LineSeries {
@@ -28,8 +31,16 @@ export interface LineSeries {
   values: number[];
 }
 
+export interface LineMarker {
+  date: string;
+  value: number;
+  kind: "entry" | "exit" | "income" | "split";
+  label: string;
+}
+
 const props = defineProps<{
   series: LineSeries[];
+  markers?: LineMarker[];
   formatValue: (value: number) => string;
 
   /* Description lue par les lecteurs d'écran. */
@@ -122,15 +133,17 @@ function toTime(
 
 const timeDomain =
   computed(() => {
-    const times =
-      props.series.flatMap(series =>
+    const times = [
+      ...props.series.flatMap(series =>
         series.dates.length
           ? [
               toTime(series.dates[0]),
               toTime(series.dates[series.dates.length - 1]),
             ]
           : []
-      );
+      ),
+      ...(props.markers ?? []).map(marker => toTime(marker.date)),
+    ];
 
     const min =
       times.length ? Math.min(...times) : 0;
@@ -149,6 +162,7 @@ const scale =
     niceScale(
       [
         ...props.series.flatMap(series => series.values),
+        ...(props.markers ?? []).map(marker => marker.value),
         ...(props.baseline === undefined ? [] : [props.baseline]),
       ],
       false
@@ -199,6 +213,51 @@ const paths =
               `${y(series.values[index]).toFixed(1)}`
           )
           .join(""),
+      })
+    )
+  );
+
+/* Pointe du triangle sur le prix ; rond et losange centrés. */
+const MARKER_SIZE = 6;
+
+function markerPath(
+  kind: LineMarker["kind"],
+  px: number,
+  py: number
+): string {
+  const size =
+    MARKER_SIZE;
+
+  switch (kind) {
+    case "entry":
+      return `M${px},${py}l${size},${size * 1.6}h${-2 * size}z`;
+
+    case "exit":
+      return `M${px},${py}l${size},${-size * 1.6}h${-2 * size}z`;
+
+    case "split":
+      return `M${px},${py - size}l${size},${size}l${-size},${size}l${-size},${-size}z`;
+
+    default:
+      return (
+        `M${px - size + 1},${py}` +
+        `a${size - 1},${size - 1} 0 1,0 ${2 * (size - 1)},0` +
+        `a${size - 1},${size - 1} 0 1,0 ${-2 * (size - 1)},0z`
+      );
+  }
+}
+
+const markerShapes =
+  computed(() =>
+    (props.markers ?? []).map(
+      (marker, index) => ({
+        key: `${marker.date}-${index}`,
+        kind: marker.kind,
+        d: markerPath(
+          marker.kind,
+          Number(x(toTime(marker.date)).toFixed(1)),
+          Number(y(marker.value).toFixed(1))
+        ),
       })
     )
   );
@@ -388,8 +447,22 @@ const hover =
       return null;
     }
 
+    const reference =
+      props.series.find(series => series.dates.length);
+
+    const hoverIndex =
+      reference ? nearestIndex(reference.dates, time) : -1;
+
     return {
       x: x(time),
+
+      markers:
+        reference
+          ? (props.markers ?? []).filter(
+              marker =>
+                nearestIndex(reference.dates, toTime(marker.date)) === hoverIndex
+            )
+          : [],
 
       date:
         new Date(time).toLocaleDateString(
@@ -514,6 +587,16 @@ const tooltipStyle =
           class="series-line"
         />
 
+        <!-- Markers -->
+
+        <path
+          v-for="marker in markerShapes"
+          :key="marker.key"
+          :d="marker.d"
+          class="marker"
+          :class="marker.kind"
+        />
+
         <!-- End labels -->
 
         <g
@@ -608,6 +691,15 @@ const tooltipStyle =
             {{ row.label }}
           </span>
         </div>
+
+        <div
+          v-for="(marker, index) in hover.markers"
+          :key="index"
+          class="tooltip-marker"
+          :class="marker.kind"
+        >
+          {{ marker.label }} · {{ formatValue(marker.value) }}
+        </div>
       </div>
     </div>
   </figure>
@@ -677,6 +769,48 @@ svg {
   stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
+}
+
+.marker {
+  stroke: var(--surface);
+  stroke-width: 1;
+}
+
+.marker.entry {
+  fill: var(--positive);
+}
+
+.marker.exit {
+  fill: var(--negative);
+}
+
+.marker.income {
+  fill: var(--warning);
+}
+
+.marker.split {
+  fill: var(--primary);
+}
+
+.tooltip-marker {
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.tooltip-marker.entry {
+  color: var(--positive);
+}
+
+.tooltip-marker.exit {
+  color: var(--negative);
+}
+
+.tooltip-marker.income {
+  color: var(--warning);
+}
+
+.tooltip-marker.split {
+  color: var(--primary);
 }
 
 .end-label text {

@@ -193,7 +193,9 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   `transactions.json`). Le Mac rejoue le journal et publie tous les calculs : aucun calcul de position ni de P&L dans la
   PWA. Saisies par événements `PWA-PFL_…_<S|T><id ou NEW>.json` (`_DEL` pour une suppression), refus affichés tels quels.
   Composants dans `src/components/portfolio/` ; champs par type, contrôles et charge utile de `TRANSACTION_SAVED` dans
-  `src/services/portfolio/transactionForm.ts` (le Mac reste juge).
+  `src/services/portfolio/transactionForm.ts` (le Mac reste juge). Détail d'une position (`PositionDetail.vue`) : effet
+  cours + effet change = P&L latent, courbe de `market-history.json` avec repères `markers` de `LineChart` (entrées et
+  sorties à `adjustedPrice`).
 
 - Ledger (vue comptable, `LedgerView.vue`, route `/ledger`, niveau 2) : accessible seulement par l'icône de l'en-tête de
   Spending, hors de `navigation.ts`. Contrat `../Backend/docs/ledger-contract.md` en version 2 seulement (lecteur
