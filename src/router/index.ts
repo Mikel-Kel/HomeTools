@@ -25,6 +25,7 @@ import IndicatorsView from "../views/IndicatorsView.vue";
 import IndicatorHistoryView from "../views/IndicatorHistoryView.vue";
 import MasterDataView from "../views/MasterDataView.vue";
 import WineCellarView from "../views/WineCellarView.vue";
+import PortfolioView from "../views/PortfolioView.vue";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -115,6 +116,16 @@ const router = createRouter({
       meta: {
         level: 1,
         title: "Housekeeping",
+        requiresDrive: true,
+      },
+    },
+    {
+      path: "/portfolio",
+      name: "portfolio",
+      component: PortfolioView,
+      meta: {
+        level: 1,
+        title: "Portfolio",
         requiresDrive: true,
       },
     },

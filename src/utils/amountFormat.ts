@@ -62,6 +62,21 @@ export function formatMeasure(
 }
 
 /*
+  Quantité de titres : jusqu'à six décimales (fonds).
+*/
+export function formatQuantity(
+  value: number | null | undefined
+): string {
+
+  if (value == null) return ""
+
+  return value.toLocaleString(NUMBER_LOCALE, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6
+  })
+}
+
+/*
   Cours de marché : quatre décimales sous 10 (devises),
   deux au-delà (indices, fonds).
 */
