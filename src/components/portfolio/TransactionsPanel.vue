@@ -5,6 +5,7 @@ import {
   watch,
 } from "vue";
 
+import TransactionSheet from "@/components/portfolio/TransactionSheet.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 
@@ -14,11 +15,19 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useStorageAccess } from "@/composables/useStorageAccess";
 
+import { isStandardParty } from "@/contracts/parties";
+
+import {
+  INDICATORS_FOLDER,
+  MARKET_HISTORY_FILE,
+} from "@/contracts/indicators";
+
 import {
   PORTFOLIO_EVENT_TRIGRAM,
   PORTFOLIO_EVENT_VERSION,
   PORTFOLIO_FOLDER,
   PORTFOLIO_TRANSACTIONS_FILE,
+  readPortfolioMarketChoices,
   readPortfolioTransactions,
   TRANSACTION_TYPES,
   transactionDeleteSuffix,
@@ -47,9 +56,12 @@ import {
 
    transactions.json, relu dès que le Mac le republie, du
    plus récent au plus ancien, filtré par titre et par type.
-   Suppression par TRANSACTION_DELETED, après confirmation :
-   le Mac rejoue le journal et peut refuser (quantité devenue
-   négative), son message est affiché tel quel.
+   Création et modification par TransactionSheet (clic sur
+   une ligne). Suppression par TRANSACTION_DELETED, après
+   confirmation : le Mac rejoue le journal et peut refuser
+   (quantité devenue négative), son message est affiché tel
+   quel. Devises proposées : market-history.json, chargé à
+   la première ouverture d'une fiche (fichier volumineux).
 
    « Pending » est déduit des événements qui attendent dans
    events/, quel que soit l'appareil.
@@ -201,6 +213,15 @@ const waitingSuffixes =
     )
   );
 
+const newWaiting =
+  computed(() =>
+    deleteRequest.waitingFiles.value
+      .filter(name =>
+        eventPattern.exec(name)?.[1] === transactionEventSuffix(null)
+      )
+      .length
+  );
+
 function isPending(
   txId: number
 ): boolean {
@@ -331,6 +352,73 @@ function cashClass(
   return amount > 0 ? "gain" : "loss";
 }
 
+/* =========================
+   Fiche
+========================= */
+
+/* undefined : fiche fermée ; null : nouvelle transaction. */
+const editing =
+  ref<PortfolioTransaction | null | undefined>(undefined);
+
+const marketNeeded =
+  ref(false);
+
+const marketFile =
+  useRemoteJson({
+    folder: INDICATORS_FOLDER,
+    file: () => marketNeeded.value ? MARKET_HISTORY_FILE : null,
+    read: readPortfolioMarketChoices,
+    watchRemote: false,
+  });
+
+const currencies =
+  computed(() =>
+    [
+      ...new Set([
+        ...(marketFile.data.value?.currencies ?? ["CHF"]),
+        ...props.securities.map(security => security.currency),
+      ]),
+    ]
+  );
+
+const custodians =
+  computed(() =>
+    partiesStore.parties.value.filter(isStandardParty)
+  );
+
+const usedPartyIds =
+  computed(() => [
+    ...new Set(
+      transactions.value.flatMap(transaction =>
+        [transaction.partyId, transaction.toPartyId]
+          .filter((id): id is number => id !== null)
+      )
+    ),
+  ]);
+
+function openSheet(
+  transaction: PortfolioTransaction | null
+) {
+  if (transaction && isPending(transaction.txId)) {
+    return;
+  }
+
+  marketNeeded.value = true;
+  editing.value = transaction;
+}
+
+async function closeSheet() {
+  editing.value = undefined;
+
+  await deleteRequest.check().catch(
+    err =>
+      console.warn(
+        "Unable to read events",
+        err
+      )
+  );
+}
+
 const hasFilters =
   computed(() =>
     securityFilter.value !== ALL ||
@@ -390,6 +478,20 @@ function toggleComment(
         >
           Reset
         </PillButton>
+
+        <StatusPill
+          v-if="newWaiting"
+          tone="warning"
+        >
+          {{ newWaiting }} new pending
+        </StatusPill>
+
+        <PillButton
+          variant="primary"
+          @click="openSheet(null)"
+        >
+          New transaction
+        </PillButton>
       </div>
     </div>
 
@@ -446,7 +548,10 @@ function toggleComment(
           v-for="transaction in visibleTransactions"
           :key="transaction.txId"
         >
-          <tr>
+          <tr
+            class="transaction-row"
+            @click="openSheet(transaction)"
+          >
             <td>{{ transaction.date }}</td>
             <td>{{ transactionTypeLabel(transaction.type) }}</td>
             <td class="name">{{ securityLabel(transaction.securityId) }}</td>
@@ -484,7 +589,10 @@ function toggleComment(
                 {{ formatAmount(transaction.counterAmount, { showPlus: true }) }}
               </span>
             </td>
-            <td class="actions">
+            <td
+              class="actions"
+              @click.stop
+            >
               <button
                 v-if="transaction.comment"
                 type="button"
@@ -523,6 +631,16 @@ function toggleComment(
       </table>
     </div>
   </section>
+
+  <TransactionSheet
+    v-if="editing !== undefined"
+    :transaction="editing"
+    :securities="securities"
+    :parties="custodians"
+    :used-party-ids="usedPartyIds"
+    :currencies="currencies"
+    @close="closeSheet"
+  />
 </template>
 
 <style scoped>
@@ -606,6 +724,14 @@ td {
 th {
   color: var(--text-soft);
   font-weight: 600;
+}
+
+.transaction-row {
+  cursor: pointer;
+}
+
+.transaction-row:hover {
+  background: var(--primary-soft);
 }
 
 .number {
