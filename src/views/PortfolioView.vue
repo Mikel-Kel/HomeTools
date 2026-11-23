@@ -3,6 +3,7 @@ import { computed } from "vue";
 
 import PageHeader from "@/components/PageHeader.vue";
 import SecuritiesPanel from "@/components/portfolio/SecuritiesPanel.vue";
+import TransactionsPanel from "@/components/portfolio/TransactionsPanel.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 
 import { usePersistentRef } from "@/composables/usePersistentRef";
@@ -35,14 +36,16 @@ import {
    positions soldées. La date du cours est affichée, car les
    titres n'ont pas tous la même dernière date.
 
+   Onglet Transactions : journal (TransactionsPanel).
    Onglet Securities : liste et saisie des titres
    (SecuritiesPanel), à créer avant la première transaction.
 ========================= */
 
-type PortfolioTab = "positions" | "securities";
+type PortfolioTab = "positions" | "transactions" | "securities";
 
 const tabOptions: { value: PortfolioTab; label: string }[] = [
   { value: "positions", label: "Positions" },
+  { value: "transactions", label: "Transactions" },
   { value: "securities", label: "Securities" },
 ];
 
@@ -151,7 +154,7 @@ function warningText(
 <template>
   <PageHeader
     title="Portfolio"
-    icon="folder"
+    icon="portfolio"
   />
 
   <div
@@ -179,8 +182,13 @@ function warningText(
       />
     </div>
 
+    <TransactionsPanel
+      v-if="tab === 'transactions'"
+      :securities="portfolio.securities"
+    />
+
     <SecuritiesPanel
-      v-if="tab === 'securities'"
+      v-else-if="tab === 'securities'"
       :portfolio="portfolio"
     />
 

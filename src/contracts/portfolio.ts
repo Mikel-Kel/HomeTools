@@ -37,6 +37,11 @@ import {
    Une version autre que 1, ou une ligne sans identifiant,
    rend le fichier invalide.
 
+   transactions.json (§ 5.2) : journal, du plus récent au plus
+   ancien. price est le prix réel de l'avis ; adjustedPrice
+   le place sur une courbe ajustée des splits. cashAmount est
+   signé (+ crédit, − débit).
+
    Saisies par événements (§ 7) :
      events/PWA-PFL_<AAAAMMJJHHMMSS>_S<securityId|NEW>.json
        { "version": 1, "eventType": "SECURITY_SAVED",
@@ -44,10 +49,14 @@ import {
                       "currency", "priceIndicatorType",
                       "quoteFactor", "seriesSplitAdjusted",
                       "active" } }
+     events/PWA-PFL_<AAAAMMJJHHMMSS>_T<txId>_DEL.json
+       { "version": 1, "eventType": "TRANSACTION_DELETED",
+         "payload": { "txId" } }
 ========================= */
 
 export const PORTFOLIO_FOLDER = "portfolio";
 export const PORTFOLIO_FILE = "portfolio.json";
+export const PORTFOLIO_TRANSACTIONS_FILE = "transactions.json";
 
 const PORTFOLIO_VERSION = 1;
 
@@ -159,6 +168,67 @@ export interface Portfolio {
   closedPositions: PortfolioClosedPosition[];
   cash: PortfolioCash[];
   warnings: PortfolioWarning[];
+}
+
+export const TRANSACTION_TYPES = [
+  { value: "OPENING", label: "Opening" },
+  { value: "CASH_IN", label: "Cash in" },
+  { value: "CASH_OUT", label: "Cash out" },
+  { value: "FX_EXCHANGE", label: "FX exchange" },
+  { value: "BUY", label: "Buy" },
+  { value: "SELL", label: "Sell" },
+  { value: "TRANSFER", label: "Transfer" },
+  { value: "DIVIDEND", label: "Dividend" },
+  { value: "SPLIT", label: "Split" },
+  { value: "FEE", label: "Fee" },
+  { value: "INTEREST", label: "Interest" },
+] as const;
+
+export type PortfolioTransactionType =
+  typeof TRANSACTION_TYPES[number]["value"];
+
+export interface PortfolioTransaction {
+  txId: number;
+  date: string;
+  type: PortfolioTransactionType | string;
+  partyId: number | null;
+  toPartyId: number | null;
+  securityId: number | null;
+  quantity: number | null;
+  price: number | null;
+  adjustedPrice: number | null;
+  grossAmount: number | null;
+  fxRate: number | null;
+  fees: number;
+  taxes: number;
+  cashCurrency: string | null;
+  cashAmount: number | null;
+  counterCurrency: string | null;
+  counterAmount: number | null;
+  splitFrom: number | null;
+  splitTo: number | null;
+  comment: string | null;
+}
+
+export function transactionTypeLabel(
+  type: string
+): string {
+  return (
+    TRANSACTION_TYPES.find(item => item.value === type)?.label ??
+    type
+  );
+}
+
+export function transactionEventSuffix(
+  txId: number | null
+): string {
+  return `T${txId ?? "NEW"}`;
+}
+
+export function transactionDeleteSuffix(
+  txId: number
+): string {
+  return `${transactionEventSuffix(txId)}_DEL`;
 }
 
 export type PortfolioSecuritySave =
@@ -392,4 +462,57 @@ export function readPortfolio(
     cash: asArray(root.cash).map(readCash),
     warnings: asArray(root.warnings).map(readWarning),
   };
+}
+
+function readTransaction(
+  value: unknown
+): PortfolioTransaction {
+  const row =
+    asObject(value) ?? {};
+
+  const txId =
+    asNullableNumber(row.txId);
+
+  if (txId === null) {
+    throw new ContractError(PORTFOLIO_TRANSACTIONS_FILE, "missing txId");
+  }
+
+  return {
+    txId,
+    date: asString(row.date),
+    type: asString(row.type),
+    partyId: asNullableNumber(row.partyId),
+    toPartyId: asNullableNumber(row.toPartyId),
+    securityId: asNullableNumber(row.securityId),
+    quantity: asNullableNumber(row.quantity),
+    price: asNullableNumber(row.price),
+    adjustedPrice: asNullableNumber(row.adjustedPrice),
+    grossAmount: asNullableNumber(row.grossAmount),
+    fxRate: asNullableNumber(row.fxRate),
+    fees: asNumber(row.fees),
+    taxes: asNumber(row.taxes),
+    cashCurrency: asNullableString(row.cashCurrency),
+    cashAmount: asNullableNumber(row.cashAmount),
+    counterCurrency: asNullableString(row.counterCurrency),
+    counterAmount: asNullableNumber(row.counterAmount),
+    splitFrom: asNullableNumber(row.splitFrom),
+    splitTo: asNullableNumber(row.splitTo),
+    comment: asNullableString(row.comment),
+  };
+}
+
+export function readPortfolioTransactions(
+  raw: unknown
+): PortfolioTransaction[] {
+  const root =
+    asObject(raw);
+
+  if (!root || root.version !== PORTFOLIO_VERSION) {
+    throw new ContractError(
+      PORTFOLIO_TRANSACTIONS_FILE,
+      `unsupported version (expected ${PORTFOLIO_VERSION})`
+    );
+  }
+
+  return asArray(root.transactions).map(readTransaction);
 }

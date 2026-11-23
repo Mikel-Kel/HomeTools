@@ -43,7 +43,7 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
   { path: "/spending", label: "Spending", icon: "spending", related: ["/allocation", "/ledger"] },
   { path: "/follow-up", label: "Follow-up", icon: "followup" },
   { path: "/documentsArchive", label: "Documents", icon: "bookshelf" },
-  { path: "/portfolio", label: "Portfolio", icon: "folder" },
+  { path: "/portfolio", label: "Portfolio", icon: "portfolio" },
   { path: "/budget", label: "Budget", icon: "budget" },
   { path: "/indicators", label: "Indicators", icon: "indicators" },
   { path: "/wine-cellar", label: "Wine cellar", icon: "wine", capability: "wineCellar" },

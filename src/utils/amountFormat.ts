@@ -77,6 +77,22 @@ export function formatQuantity(
 }
 
 /*
+  Prix ou change d'un avis d'opération, sans perdre de
+  décimales : deux au moins, huit au plus.
+*/
+export function formatTradeValue(
+  value: number | null | undefined
+): string {
+
+  if (value == null) return ""
+
+  return value.toLocaleString(NUMBER_LOCALE, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 8
+  })
+}
+
+/*
   Cours de marché : quatre décimales sous 10 (devises),
   deux au-delà (indices, fonds).
 */
