@@ -1,4 +1,8 @@
 import {
+  readMarketHistory,
+} from "@/contracts/indicators";
+
+import {
   asArray,
   asBoolean,
   asNullableNumber,
@@ -32,12 +36,33 @@ import {
 
    Une version autre que 1, ou une ligne sans identifiant,
    rend le fichier invalide.
+
+   Saisies par événements (§ 7) :
+     events/PWA-PFL_<AAAAMMJJHHMMSS>_S<securityId|NEW>.json
+       { "version": 1, "eventType": "SECURITY_SAVED",
+         "payload": { "securityId" | null, "label", "isin",
+                      "currency", "priceIndicatorType",
+                      "quoteFactor", "seriesSplitAdjusted",
+                      "active" } }
 ========================= */
 
 export const PORTFOLIO_FOLDER = "portfolio";
 export const PORTFOLIO_FILE = "portfolio.json";
 
 const PORTFOLIO_VERSION = 1;
+
+export const PORTFOLIO_EVENT_TRIGRAM = "PFL";
+export const PORTFOLIO_EVENT_VERSION = 1;
+
+/* Valeur = quantité × cours × facteur (§ 6.2). */
+export const QUOTE_UNITS: { factor: number; label: string }[] = [
+  { factor: 1, label: "Per unit" },
+  { factor: 0.01, label: "% of nominal" },
+  { factor: 0.001, label: "‰ of nominal" },
+];
+
+const STOCKS_GROUP = "Stocks";
+const FX_GROUP = "FX";
 
 export type PortfolioValueSource = "market" | "transaction";
 
@@ -134,6 +159,53 @@ export interface Portfolio {
   closedPositions: PortfolioClosedPosition[];
   cash: PortfolioCash[];
   warnings: PortfolioWarning[];
+}
+
+export type PortfolioSecuritySave =
+  Omit<PortfolioSecurity, "securityId"> & { securityId: number | null };
+
+export function securityEventSuffix(
+  securityId: number | null
+): string {
+  return `S${securityId ?? "NEW"}`;
+}
+
+/* Séries de cours et devises proposées à la saisie d'un titre. */
+export interface PortfolioPriceSeries {
+  itemId: number;
+  label: string;
+  last: string;
+  lastValue: number | null;
+}
+
+export interface PortfolioMarketChoices {
+  series: PortfolioPriceSeries[];
+  currencies: string[];
+}
+
+/* Lecture de market-history.json, sans garder ses points. */
+export function readPortfolioMarketChoices(
+  raw: unknown
+): PortfolioMarketChoices {
+  const history =
+    readMarketHistory(raw);
+
+  return {
+    series: history
+      .filter(series => series.group === STOCKS_GROUP)
+      .map(({ itemId, label, last, lastValue }) => ({
+        itemId,
+        label,
+        last,
+        lastValue,
+      })),
+    currencies: [
+      "CHF",
+      ...history
+        .filter(series => series.group === FX_GROUP)
+        .map(series => series.label),
+    ],
+  };
 }
 
 function requiredId(
