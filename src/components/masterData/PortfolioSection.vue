@@ -4,7 +4,7 @@ import {
   ref,
 } from "vue";
 
-import SecuritySheet from "@/components/portfolio/SecuritySheet.vue";
+import SecuritySheet from "@/components/masterData/SecuritySheet.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 
@@ -28,12 +28,13 @@ import {
 import { eventFilePattern } from "@/services/events/eventFiles";
 
 /* =========================
-   Titres du portefeuille
+   Section « Portfolio » de la page Master data
 
-   Liste et saisie minimale (SecuritySheet), en attendant
-   leur gestion dans Master data. Les séries de cours et les
-   devises proposées viennent de market-history.json, chargé
-   à l'ouverture de l'onglet seulement (fichier volumineux).
+   Titres du portefeuille : liste et saisie (SecuritySheet),
+   à créer avant la première transaction. Les séries de cours
+   et les devises proposées viennent de market-history.json,
+   chargé à l'ouverture de la section seulement (fichier
+   volumineux).
 
    « Pending » est déduit des événements qui attendent dans
    events/, quel que soit l'appareil.

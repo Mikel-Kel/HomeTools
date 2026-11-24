@@ -11,6 +11,7 @@ import PartyDataSection from "@/components/masterData/PartyDataSection.vue";
 import SpendingSection from "@/components/masterData/SpendingSection.vue";
 import DocumentsSection from "@/components/masterData/DocumentsSection.vue";
 import WineSection from "@/components/masterData/WineSection.vue";
+import PortfolioSection from "@/components/masterData/PortfolioSection.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useCategories } from "@/composables/useCategories";
@@ -61,6 +62,12 @@ import {
   WINE_CELLAR_FOLDER,
 } from "@/contracts/wineCellar";
 
+import {
+  PORTFOLIO_FILE,
+  PORTFOLIO_FOLDER,
+  readPortfolio,
+} from "@/contracts/portfolio";
+
 import { hasCapability } from "@/services/environment/environmentState";
 
 import {
@@ -81,6 +88,7 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
    - Spending : catégories, tags, types d'opération et
      règles d'allocation (libellés des parties) ;
    - Documents : dossiers Tourism et Various, tags ;
+   - Portfolio : titres du portefeuille ;
    - Wine cellar : données de base de la cave, avec la
      capacité wineCellar seulement.
 ========================= */
@@ -89,6 +97,7 @@ type MasterDataSection =
   | "parties"
   | "spending"
   | "documents"
+  | "portfolio"
   | "wine";
 
 const sectionOptions: {
@@ -98,6 +107,7 @@ const sectionOptions: {
   { value: "parties", label: "Parties" },
   { value: "spending", label: "Spending" },
   { value: "documents", label: "Documents" },
+  { value: "portfolio", label: "Portfolio" },
   ...(hasCapability("wineCellar")
     ? [{ value: "wine" as const, label: "Wine cellar" }]
     : []),
@@ -297,6 +307,31 @@ const cellarFile =
     read: readWineCellar,
   });
 
+/* Portefeuille (section « Portfolio ») : chargé à la première ouverture de la section. */
+const portfolioWanted =
+  ref(false);
+
+watch(
+  section,
+
+  value => {
+    if (value === "portfolio") {
+      portfolioWanted.value = true;
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
+const portfolioFile =
+  useRemoteJson({
+    folder: PORTFOLIO_FOLDER,
+    file: () => (portfolioWanted.value ? PORTFOLIO_FILE : null),
+    read: readPortfolio,
+  });
+
 const tagsFile =
   useRemoteJson({
     folder: ALLOCATION_TAGS_FOLDER,
@@ -376,7 +411,9 @@ const current =
           ? toIdentifyFile
           : section.value === "wine"
             ? cellarFile
-            : partiesFile
+            : section.value === "portfolio"
+              ? portfolioFile
+              : partiesFile
   );
 </script>
 
@@ -430,6 +467,11 @@ const current =
         v-else-if="section === 'documents' && partiesFile.data.value"
         :data="partiesFile.data.value"
         :document-tags="documentTagsFile.data.value"
+      />
+
+      <PortfolioSection
+        v-else-if="section === 'portfolio' && portfolioFile.data.value"
+        :portfolio="portfolioFile.data.value"
       />
 
       <WineSection

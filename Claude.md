@@ -188,7 +188,8 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   le bon sens, 1600 px et 1 Mo au plus), envoyée en base64 dans `WINE_PHOTO_SAVED` / `WINE_PHOTO_DELETED` (fiche) ou
   dans `photo` de `WINE_SAVED` (création, héritage par `copyFrom`) ; nouvelle image = nouvelle clé.
 
-- Portfolio (page « Portfolio », `PortfolioView.vue`, onglets Positions, Transactions, Securities) : contrat
+- Portfolio (page « Portfolio », `PortfolioView.vue`, onglets Positions et Transactions ; titres dans
+  Master data, section « Portfolio », `PortfolioSection.vue` et `SecuritySheet.vue`) : contrat
   `../Backend/docs/portfolio-contract.md` (lecteur `src/contracts/portfolio.ts`, exports `portfolio/portfolio.json` et
   `transactions.json`). Le Mac rejoue le journal et publie tous les calculs : aucun calcul de position ni de P&L dans la
   PWA. Saisies par événements `PWA-PFL_…_<S|T><id ou NEW>.json` (`_DEL` pour une suppression), refus affichés tels quels.

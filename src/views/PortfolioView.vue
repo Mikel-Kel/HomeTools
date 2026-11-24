@@ -8,7 +8,6 @@ import {
 import PageHeader from "@/components/PageHeader.vue";
 import PortfolioPie from "@/components/portfolio/PortfolioPie.vue";
 import PositionDetail from "@/components/portfolio/PositionDetail.vue";
-import SecuritiesPanel from "@/components/portfolio/SecuritiesPanel.vue";
 import TransactionsPanel from "@/components/portfolio/TransactionsPanel.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 
@@ -54,16 +53,15 @@ import {
    volumineux).
 
    Onglet Transactions : journal (TransactionsPanel).
-   Onglet Securities : liste et saisie des titres
-   (SecuritiesPanel), à créer avant la première transaction.
+   Titres : section « Portfolio » de Master data, à créer
+   avant la première transaction.
 ========================= */
 
-type PortfolioTab = "positions" | "transactions" | "securities";
+type PortfolioTab = "positions" | "transactions";
 
 const tabOptions: { value: PortfolioTab; label: string }[] = [
   { value: "positions", label: "Positions" },
   { value: "transactions", label: "Transactions" },
-  { value: "securities", label: "Securities" },
 ];
 
 const tab =
@@ -281,11 +279,6 @@ function warningText(
       :securities="portfolio.securities"
     />
 
-    <SecuritiesPanel
-      v-else-if="tab === 'securities'"
-      :portfolio="portfolio"
-    />
-
     <PositionDetail
       v-else-if="detailId !== null"
       :portfolio="portfolio"
@@ -299,7 +292,7 @@ function warningText(
       v-else-if="isEmpty"
       class="empty-message"
     >
-      No transaction yet. Create the securities first, in the Securities tab.
+      No transaction yet. Create the securities first, in Master data › Portfolio.
     </div>
 
     <template v-else>
