@@ -231,6 +231,8 @@ interface QuarterGroup {
   key: string;
   label: string;
   items: PortfolioTransaction[];
+  totals: RunningBalance[];
+  balances: RunningBalance[];
 }
 
 /* « 2026-11-24 » → « 2026-Q4 ». */
@@ -253,6 +255,80 @@ function quarterLabel(
   return `${quarter} ${year}`;
 }
 
+/* Liquidités nettes d'un trimestre par devise (réglées et reçues d'un change), en centimes ; totaux nuls omis. */
+function quarterTotals(
+  items: readonly PortfolioTransaction[]
+): RunningBalance[] {
+  const cents =
+    new Map<string, number>();
+
+  function add(
+    currency: string | null,
+    amount: number | null
+  ) {
+    if (amount !== null && currency) {
+      cents.set(currency, (cents.get(currency) ?? 0) + Math.round(amount * 100));
+    }
+  }
+
+  for (const transaction of items) {
+    add(transaction.cashCurrency, transaction.cashAmount);
+    add(transaction.counterCurrency, transaction.counterAmount);
+  }
+
+  return centsToLines(cents);
+}
+
+/* Montants en centimes par devise → lignes triées par devise, montants nuls omis. */
+function centsToLines(
+  cents: ReadonlyMap<string, number>
+): RunningBalance[] {
+  return [...cents]
+    .filter(([, total]) => total !== 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([currency, total]) => ({ currency, amount: total / 100 }));
+}
+
+/* Soldes en fin de trimestre par devise, cumulés sur les dépositaires et devises retenus par les filtres
+   (tous sinon), sur tout le journal ; soldes nuls omis. */
+const quarterEndBalances =
+  computed(() => {
+    const parties =
+      new Set(filters.partyModel.value);
+
+    const currencies =
+      new Set(filters.currencyModel.value);
+
+    const kept = (partyId: number | null, currency: string) =>
+      (!parties.size || parties.has(String(partyId))) &&
+      (!currencies.size || currencies.has(currency));
+
+    const cents =
+      new Map<string, number>();
+
+    const result =
+      new Map<string, RunningBalance[]>();
+
+    function add(
+      partyId: number | null,
+      currency: string | null,
+      amount: number | null
+    ) {
+      if (amount !== null && currency && kept(partyId, currency)) {
+        cents.set(currency, (cents.get(currency) ?? 0) + Math.round(amount * 100));
+      }
+    }
+
+    for (const transaction of replayed.value) {
+      add(transaction.partyId, transaction.cashCurrency, transaction.cashAmount);
+      add(transaction.partyId, transaction.counterCurrency, transaction.counterAmount);
+
+      result.set(quarterKey(transaction.date), centsToLines(cents));
+    }
+
+    return result;
+  });
+
 /* Transactions affichées, déjà du plus récent au plus ancien. */
 const quarterGroups =
   computed<QuarterGroup[]>(() => {
@@ -268,8 +344,13 @@ const quarterGroups =
       if (last?.key === key) {
         last.items.push(transaction);
       } else {
-        groups.push({ key, label: quarterLabel(key), items: [transaction] });
+        groups.push({ key, label: quarterLabel(key), items: [transaction], totals: [], balances: [] });
       }
+    }
+
+    for (const group of groups) {
+      group.totals = quarterTotals(group.items);
+      group.balances = quarterEndBalances.value.get(group.key) ?? [];
     }
 
     return groups;
@@ -568,11 +649,38 @@ function toggleComment(
               class="group-header"
               @click="toggleQuarter(group.key)"
             >
-              <td colspan="11">
+              <td colspan="8">
                 <span class="group-toggle">{{ isOpen(group.key) ? "▼" : "►" }}</span>
                 {{ group.label }}
                 <span class="group-count">({{ group.items.length }})</span>
               </td>
+              <td
+                class="number group-amounts"
+                title="Net cash of the quarter"
+              >
+                <span
+                  v-for="line in group.totals"
+                  :key="line.currency"
+                  class="balance-line"
+                  :class="{ loss: line.amount < 0 }"
+                >
+                  {{ line.currency }} {{ formatAmount(line.amount, { showPlus: true }) }}
+                </span>
+              </td>
+              <td
+                class="number group-amounts"
+                title="Balance at the end of the quarter"
+              >
+                <span
+                  v-for="line in group.balances"
+                  :key="line.currency"
+                  class="balance-line"
+                  :class="{ loss: line.amount < 0 }"
+                >
+                  {{ line.currency }} {{ formatAmount(line.amount) }}
+                </span>
+              </td>
+              <td />
             </tr>
           </tbody>
 
@@ -782,6 +890,11 @@ th {
 .group-count {
   color: var(--text-muted);
   font-weight: 400;
+}
+
+.group-header td.group-amounts {
+  font-style: normal;
+  vertical-align: top;
 }
 
 .transaction-row {

@@ -362,18 +362,6 @@ function warningText(
         </div>
       </section>
 
-      <ul
-        v-if="portfolio.warnings.length"
-        class="warnings"
-      >
-        <li
-          v-for="(warning, index) in portfolio.warnings"
-          :key="index"
-        >
-          {{ warningText(warning) }}
-        </li>
-      </ul>
-
       <section
         v-if="portfolio.positions.length"
         class="panel"
@@ -538,6 +526,18 @@ function warningText(
           </table>
         </div>
       </section>
+
+      <ul
+        v-if="portfolio.warnings.length"
+        class="warnings"
+      >
+        <li
+          v-for="(warning, index) in portfolio.warnings"
+          :key="index"
+        >
+          {{ warningText(warning) }}
+        </li>
+      </ul>
     </template>
   </main>
 </template>
