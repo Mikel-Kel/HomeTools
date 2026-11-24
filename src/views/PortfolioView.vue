@@ -6,6 +6,7 @@ import {
 } from "vue";
 
 import PageHeader from "@/components/PageHeader.vue";
+import PortfolioPie from "@/components/portfolio/PortfolioPie.vue";
 import PositionDetail from "@/components/portfolio/PositionDetail.vue";
 import SecuritiesPanel from "@/components/portfolio/SecuritiesPanel.vue";
 import TransactionsPanel from "@/components/portfolio/TransactionsPanel.vue";
@@ -42,7 +43,9 @@ import {
    que le Mac le republie : aucun calcul de position ni de
    P&L ici.
 
-   Totaux, avertissements, positions consolidées (détail par
+   En-tête : répartition (PortfolioPie, total au centre), P&L
+   latent, puis réalisé, revenus et frais dans un tableau.
+   Avertissements, positions consolidées (détail par
    dépositaire quand il y en a plusieurs), liquidités et
    positions soldées. La date du cours est affichée, car les
    titres n'ont pas tous la même dernière date. Un clic sur
@@ -178,6 +181,35 @@ function partyLabel(
   );
 }
 
+/* Effet cours et effet change : barres horizontales de part et
+   d'autre de zéro, à l'échelle du plus grand des deux. */
+const effectBars =
+  computed(() => {
+    const totals =
+      portfolio.value?.totals;
+
+    const effects = [
+      { label: "Price", amount: totals?.priceEffectChf ?? 0 },
+      { label: "FX", amount: totals?.fxEffectChf ?? 0 },
+    ];
+
+    const scale =
+      Math.max(...effects.map(effect => Math.abs(effect.amount)));
+
+    return effects.map(effect => {
+      const width =
+        scale > 0 ? (Math.abs(effect.amount) / scale) * 50 : 0;
+
+      return {
+        ...effect,
+        style: {
+          width: `${width}%`,
+          left: effect.amount < 0 ? `${50 - width}%` : "50%",
+        },
+      };
+    });
+  });
+
 function formatWeight(
   weight: number
 ): string {
@@ -272,19 +304,12 @@ function warningText(
 
     <template v-else>
       <section class="totals">
-        <div class="total main">
-          <span class="total-label">Total value (CHF)</span>
-          <strong>{{ formatAmount(portfolio.totals.valueChf) }}</strong>
-        </div>
-
-        <div class="total">
-          <span class="total-label">Securities</span>
-          <strong>{{ formatAmount(portfolio.totals.securitiesChf) }}</strong>
-        </div>
-
-        <div class="total">
-          <span class="total-label">Cash</span>
-          <strong>{{ formatAmount(portfolio.totals.cashChf) }}</strong>
+        <div class="total allocation">
+          <span class="total-label">Allocation</span>
+          <PortfolioPie
+            :portfolio="portfolio"
+            @select="selectedId = $event"
+          />
         </div>
 
         <div class="total">
@@ -292,27 +317,54 @@ function warningText(
           <strong :class="amountClass(portfolio.totals.unrealizedChf)">
             {{ formatAmount(portfolio.totals.unrealizedChf, { showPlus: true }) }}
           </strong>
-          <span class="total-detail">
-            Price {{ formatAmount(portfolio.totals.priceEffectChf, { showPlus: true }) }}
-            · FX {{ formatAmount(portfolio.totals.fxEffectChf, { showPlus: true }) }}
-          </span>
+          <div class="effects">
+            <template
+              v-for="effect in effectBars"
+              :key="effect.label"
+            >
+              <span class="effect-label">{{ effect.label }}</span>
+              <span class="effect-track">
+                <span
+                  class="effect-bar"
+                  :class="effect.amount < 0 ? 'negative' : 'positive'"
+                  :style="effect.style"
+                />
+              </span>
+              <span
+                class="effect-value"
+                :class="amountClass(effect.amount)"
+              >
+                {{ formatAmount(effect.amount, { showPlus: true }) }}
+              </span>
+            </template>
+          </div>
         </div>
 
         <div class="total">
-          <span class="total-label">Realized P&amp;L</span>
-          <strong :class="amountClass(portfolio.totals.realizedChf)">
-            {{ formatAmount(portfolio.totals.realizedChf, { showPlus: true }) }}
-          </strong>
-        </div>
-
-        <div class="total">
-          <span class="total-label">Income</span>
-          <strong>{{ formatAmount(portfolio.totals.incomeChf) }}</strong>
-        </div>
-
-        <div class="total">
-          <span class="total-label">Fees</span>
-          <strong>{{ formatAmount(portfolio.totals.feesChf) }}</strong>
+          <span class="total-label">Since inception (CHF)</span>
+          <table class="summary">
+            <tbody>
+              <tr>
+                <th>Realized P&amp;L</th>
+                <td
+                  class="number"
+                  :class="amountClass(portfolio.totals.realizedChf)"
+                >
+                  {{ formatAmount(portfolio.totals.realizedChf, { showPlus: true }) }}
+                </td>
+              </tr>
+              <tr>
+                <th>Income</th>
+                <td class="number">{{ formatAmount(portfolio.totals.incomeChf) }}</td>
+              </tr>
+              <tr>
+                <th title="Fee transactions only: fees on buys and sells are in the cost">
+                  Other fees
+                </th>
+                <td class="number">{{ formatAmount(portfolio.totals.feesChf) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -530,9 +582,93 @@ function warningText(
 ========================= */
 
 .totals {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
   gap: 0.6rem;
+}
+
+.totals .total {
+  flex: 1 1 180px;
+}
+
+.totals .total.allocation {
+  flex: 2 1 380px;
+}
+
+.effects {
+  display: grid;
+  grid-template-columns: auto minmax(60px, 1fr) auto;
+  align-items: center;
+  gap: 6px 8px;
+
+  margin-top: 8px;
+
+  font-size: var(--font-size-xs);
+}
+
+.effect-label {
+  color: var(--text-soft);
+}
+
+.effect-track {
+  position: relative;
+
+  height: 12px;
+}
+
+.effect-track::before {
+  content: "";
+
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 50%;
+
+  border-left: 1px solid var(--text-muted);
+}
+
+.effect-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.effect-bar.positive {
+  border-radius: 0 4px 4px 0;
+
+  background: var(--positive);
+}
+
+.effect-bar.negative {
+  border-radius: 4px 0 0 4px;
+
+  background: var(--negative);
+}
+
+.effect-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary {
+  margin-top: 2px;
+}
+
+.summary th,
+.summary td {
+  padding: 3px 0;
+}
+
+.summary th {
+  padding-right: 12px;
+
+  font-weight: 400;
+}
+
+.summary tr:last-child th,
+.summary tr:last-child td {
+  border-bottom: none;
 }
 
 .total {
@@ -550,13 +686,7 @@ function warningText(
   font-variant-numeric: tabular-nums;
 }
 
-.total.main {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-}
-
-.total-label,
-.total-detail {
+.total-label {
   color: var(--text-soft);
   font-size: var(--font-size-xs);
 }

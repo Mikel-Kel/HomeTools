@@ -220,6 +220,9 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   `archiveqrbill.BillInfo`. Évolution possible du contrat `archive-qrbill-contract.md` : mesurer leur fréquence,
   puis publier un champ facultatif `dueDate` dans `qrBill`, que la fiche prendrait comme date de paiement avant la
   règle actuelle (15 ou fin du mois, vendredi si week-end, `computeNextDTADate`).
+- Frais transactionnels du Portfolio (à faire plus tard) : `totals.feesChf` ne cumule que les transactions `FEE`
+  (« Other fees » dans l'en-tête), les frais d'achat et de vente étant dans le prix de revient. Évolution possible du
+  contrat `portfolio-contract.md` : un total en CHF de ces frais publié par le Mac (aucun calcul dans la PWA).
 - Changer `PROXY_API_KEY` (`proxy.env`) une fois tous les appareils passés à la version avec coffre : l'ancienne clé
   figure dans les bundles déjà publiés sur `gh-pages`.
 
