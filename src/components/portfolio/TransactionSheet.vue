@@ -20,12 +20,15 @@ import {
   PORTFOLIO_EVENT_TRIGRAM,
   PORTFOLIO_EVENT_VERSION,
   TRANSACTION_TYPES,
+  transactionDeleteSuffix,
   transactionEventSuffix,
   transactionTypeLabel,
   type PortfolioSecurity,
   type PortfolioTransaction,
   type PortfolioTransactionType,
 } from "@/contracts/portfolio";
+
+import { confirmDialog } from "@/services/dialog/appDialog";
 
 import {
   CREATED_ON_SERVER,
@@ -59,6 +62,9 @@ import { formatAmount } from "@/utils/amountFormat";
      n'a pas été saisi à la main (« Use net » le reprend).
    - Nouvelle saisie : type, dépositaire et titre de la
      précédente sont repris, pour enchaîner un historique.
+   - Suppression (transaction existante, après confirmation)
+     par TRANSACTION_DELETED : le Mac rejoue le journal et
+     peut refuser (quantité devenue négative).
 ========================= */
 
 const props = defineProps<{
@@ -414,6 +420,45 @@ async function save() {
   );
 }
 
+async function remove() {
+  const transaction =
+    props.transaction;
+
+  if (
+    !transaction ||
+    saveRequest.inProgress.value ||
+    waitingElsewhere.value
+  ) {
+    return;
+  }
+
+  const security =
+    props.securities.find(item => item.securityId === transaction.securityId)?.label;
+
+  if (
+    !(await confirmDialog({
+      title: `Delete this ${transactionTypeLabel(transaction.type)}?`,
+      message: `${transaction.date}${security ? ` · ${security}` : ""}`,
+      confirmLabel: "Delete",
+      destructive: true,
+    }))
+  ) {
+    return;
+  }
+
+  await saveRequest.send(
+    {
+      version: PORTFOLIO_EVENT_VERSION,
+      eventType: "TRANSACTION_DELETED",
+      timestamp: new Date().toISOString(),
+      payload: {
+        txId: transaction.txId,
+      },
+    },
+    transactionDeleteSuffix(transaction.txId)
+  );
+}
+
 watch(
   () => saveRequest.request.value?.phase,
 
@@ -462,7 +507,9 @@ const isBusy =
     :save-label="isNew ? 'Create' : 'Save'"
     :hint="hint"
     :hint-is-error="!!hint && !waitingElsewhere"
+    :can-delete="!isNew && !waitingElsewhere"
     @save="save"
+    @delete="remove"
     @close="emit('close')"
   >
     <div class="grid">

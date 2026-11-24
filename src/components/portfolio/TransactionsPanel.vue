@@ -23,8 +23,8 @@ import {
 } from "@/contracts/indicators";
 
 import {
+  compareReplayOrder,
   PORTFOLIO_EVENT_TRIGRAM,
-  PORTFOLIO_EVENT_VERSION,
   PORTFOLIO_FOLDER,
   PORTFOLIO_TRANSACTIONS_FILE,
   readPortfolioMarketChoices,
@@ -37,13 +37,7 @@ import {
   type PortfolioTransaction,
 } from "@/contracts/portfolio";
 
-import { confirmDialog } from "@/services/dialog/appDialog";
 import { eventFilePattern } from "@/services/events/eventFiles";
-
-import {
-  pendingMessage,
-  processingMessage,
-} from "@/services/events/requestMessages";
 
 import {
   formatAmount,
@@ -55,13 +49,16 @@ import {
    Journal des transactions
 
    transactions.json, relu dès que le Mac le republie, du
-   plus récent au plus ancien, filtré par titre et par type.
-   Création et modification par TransactionSheet (clic sur
-   une ligne). Suppression par TRANSACTION_DELETED, après
-   confirmation : le Mac rejoue le journal et peut refuser
-   (quantité devenue négative), son message est affiché tel
-   quel. Devises proposées : market-history.json, chargé à
-   la première ouverture d'une fiche (fichier volumineux).
+   plus récent au plus ancien dans l'ordre inverse du rejeu
+   (§ 4.1), filtré par titre et par type. Création,
+   modification et suppression par TransactionSheet (clic sur
+   une ligne). Devises proposées : market-history.json, chargé
+   à la première ouverture d'une fiche (fichier volumineux).
+
+   Solde courant : liquidités du dépositaire dans la devise
+   réglée après la transaction, cumulées depuis 0 sur tout le
+   journal dans l'ordre du rejeu, comme le Mac ; les filtres
+   ne le changent pas. Change : un solde par devise.
 
    « Pending » est déduit des événements qui attendent dans
    events/, quel que soit l'appareil.
@@ -177,9 +174,67 @@ watch(
   { immediate: true }
 );
 
+/* Ordre du rejeu du Mac. */
+const replayed =
+  computed(() =>
+    [...transactions.value].sort(compareReplayOrder)
+  );
+
+interface RunningBalance {
+  currency: string;
+  amount: number;
+}
+
+/* Solde par dépositaire et devise après chaque transaction, en centimes pour éviter les écarts d'arrondi. */
+const balances =
+  computed(() => {
+    const cents =
+      new Map<string, number>();
+
+    const result =
+      new Map<number, RunningBalance[]>();
+
+    function add(
+      partyId: number | null,
+      currency: string | null,
+      amount: number | null
+    ): RunningBalance | null {
+      if (amount === null || !currency) {
+        return null;
+      }
+
+      const key =
+        `${partyId}|${currency}`;
+
+      const total =
+        (cents.get(key) ?? 0) + Math.round(amount * 100);
+
+      cents.set(key, total);
+
+      return { currency, amount: total / 100 };
+    }
+
+    for (const transaction of replayed.value) {
+      const lines = [
+        add(transaction.partyId, transaction.cashCurrency, transaction.cashAmount),
+        add(transaction.partyId, transaction.counterCurrency, transaction.counterAmount),
+      ].filter((line): line is RunningBalance => line !== null);
+
+      result.set(transaction.txId, lines);
+    }
+
+    return result;
+  });
+
+function balancesOf(
+  transaction: PortfolioTransaction
+): RunningBalance[] {
+  return balances.value.get(transaction.txId) ?? [];
+}
+
 const visibleTransactions =
   computed(() =>
-    transactions.value.filter(transaction =>
+    [...replayed.value].reverse().filter(transaction =>
       (
         securityFilter.value === ALL ||
         String(transaction.securityId) === securityFilter.value
@@ -192,10 +247,10 @@ const visibleTransactions =
   );
 
 /* =========================
-   Suppression et suivi
+   Suivi des demandes
 ========================= */
 
-const deleteRequest =
+const events =
   useEventRequest({
     trigram: PORTFOLIO_EVENT_TRIGRAM,
     noAnswerDelayMs: NO_ANSWER_DELAY_MS,
@@ -207,7 +262,7 @@ const eventPattern =
 const waitingSuffixes =
   computed(() =>
     new Set(
-      deleteRequest.waitingFiles.value
+      events.waitingFiles.value
         .map(name => eventPattern.exec(name)?.[1])
         .filter((suffix): suffix is string => !!suffix)
     )
@@ -215,7 +270,7 @@ const waitingSuffixes =
 
 const newWaiting =
   computed(() =>
-    deleteRequest.waitingFiles.value
+    events.waitingFiles.value
       .filter(name =>
         eventPattern.exec(name)?.[1] === transactionEventSuffix(null)
       )
@@ -228,75 +283,6 @@ function isPending(
   return (
     waitingSuffixes.value.has(transactionEventSuffix(txId)) ||
     waitingSuffixes.value.has(transactionDeleteSuffix(txId))
-  );
-}
-
-const requestMessage =
-  computed(() => {
-    const current =
-      deleteRequest.request.value;
-
-    switch (current?.phase) {
-      case "requested":
-        return pendingMessage("Deletion sent", deleteRequest.noAnswerYet.value);
-
-      case "started":
-        return processingMessage("Deleting");
-
-      case "completed":
-        return current.message ?? "";
-
-      case "error":
-        return `Rejected: ${current.message ?? "unknown error"}`;
-
-      default:
-        return "";
-    }
-  });
-
-async function remove(
-  transaction: PortfolioTransaction
-) {
-  if (
-    deleteRequest.inProgress.value ||
-    isPending(transaction.txId)
-  ) {
-    return;
-  }
-
-  const subject =
-    securityLabel(transaction.securityId) ||
-    partyLabel(transaction.partyId);
-
-  if (
-    !(await confirmDialog({
-      title: `Delete this ${transactionTypeLabel(transaction.type)}?`,
-      message: `${transaction.date}${subject ? ` · ${subject}` : ""}`,
-      confirmLabel: "Delete",
-      destructive: true,
-    }))
-  ) {
-    return;
-  }
-
-  await deleteRequest.send(
-    {
-      version: PORTFOLIO_EVENT_VERSION,
-      eventType: "TRANSACTION_DELETED",
-      timestamp: new Date().toISOString(),
-      payload: {
-        txId: transaction.txId,
-      },
-    },
-    transactionDeleteSuffix(transaction.txId)
-  );
-
-  await deleteRequest.check().catch(
-    err =>
-      console.warn(
-        "Unable to read events",
-        err
-      )
   );
 }
 
@@ -410,7 +396,7 @@ function openSheet(
 async function closeSheet() {
   editing.value = undefined;
 
-  await deleteRequest.check().catch(
+  await events.check().catch(
     err =>
       console.warn(
         "Unable to read events",
@@ -496,14 +482,6 @@ function toggleComment(
     </div>
 
     <p
-      v-if="requestMessage"
-      class="request-message"
-      :class="deleteRequest.request.value?.phase"
-    >
-      {{ requestMessage }}
-    </p>
-
-    <p
       v-if="transactionsFile.error.value"
       class="message error"
     >
@@ -540,6 +518,7 @@ function toggleComment(
             <th class="number">FX rate</th>
             <th class="number">Fees + taxes</th>
             <th class="number">Cash</th>
+            <th class="number">Balance</th>
             <th />
           </tr>
         </thead>
@@ -589,6 +568,16 @@ function toggleComment(
                 {{ formatAmount(transaction.counterAmount, { showPlus: true }) }}
               </span>
             </td>
+            <td class="number">
+              <span
+                v-for="line in balancesOf(transaction)"
+                :key="line.currency"
+                class="balance-line"
+                :class="{ loss: line.amount < 0 }"
+              >
+                {{ line.currency }} {{ formatAmount(line.amount) }}
+              </span>
+            </td>
             <td
               class="actions"
               @click.stop
@@ -610,14 +599,6 @@ function toggleComment(
               >
                 Pending
               </StatusPill>
-
-              <PillButton
-                v-else
-                :disabled="deleteRequest.inProgress.value"
-                @click="remove(transaction)"
-              >
-                Delete
-              </PillButton>
             </td>
           </tr>
 
@@ -625,7 +606,7 @@ function toggleComment(
             v-if="expandedComment === transaction.txId"
             class="comment-row"
           >
-            <td colspan="10">{{ transaction.comment }}</td>
+            <td colspan="11">{{ transaction.comment }}</td>
           </tr>
         </tbody>
       </table>
@@ -686,16 +667,14 @@ function toggleComment(
   font-size: var(--font-size-sm);
 }
 
-.message,
-.request-message {
+.message {
   margin: 0 0 8px;
 
   color: var(--text-soft);
   font-size: var(--font-size-sm);
 }
 
-.message.error,
-.request-message.error {
+.message.error {
   color: var(--negative);
 }
 
@@ -747,6 +726,10 @@ th {
   display: block;
 
   font-size: var(--font-size-xs);
+}
+
+.balance-line {
+  display: block;
 }
 
 .actions {

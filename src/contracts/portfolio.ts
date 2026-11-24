@@ -187,6 +187,32 @@ export const TRANSACTION_TYPES = [
 export type PortfolioTransactionType =
   typeof TRANSACTION_TYPES[number]["value"];
 
+/* Ordre de rejeu du Mac (§ 4.1) : date, type dans la journée, puis identifiant. */
+const REPLAY_TYPE_ORDER: readonly string[] = [
+  "OPENING", "SPLIT", "CASH_IN", "INTEREST", "DIVIDEND", "FX_EXCHANGE",
+  "BUY", "TRANSFER", "SELL", "FEE", "CASH_OUT",
+];
+
+function replayRank(
+  type: string
+): number {
+  const rank =
+    REPLAY_TYPE_ORDER.indexOf(type);
+
+  return rank < 0 ? REPLAY_TYPE_ORDER.length : rank;
+}
+
+export function compareReplayOrder(
+  a: { date: string; type: string; txId: number },
+  b: { date: string; type: string; txId: number }
+): number {
+  return (
+    a.date.localeCompare(b.date) ||
+    replayRank(a.type) - replayRank(b.type) ||
+    a.txId - b.txId
+  );
+}
+
 export interface PortfolioTransaction {
   txId: number;
   date: string;
