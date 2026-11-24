@@ -5,6 +5,7 @@ import {
   watch,
 } from "vue";
 
+import TransactionFilters from "@/components/portfolio/TransactionFilters.vue";
 import TransactionSheet from "@/components/portfolio/TransactionSheet.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
@@ -13,6 +14,7 @@ import { useEventRequest } from "@/composables/useEventRequest";
 import { useParties } from "@/composables/useParties";
 import { usePersistentRef } from "@/composables/usePersistentRef";
 import { useRemoteJson } from "@/composables/useRemoteJson";
+import { useTransactionFilters } from "@/composables/portfolio/useTransactionFilters";
 import { useStorageAccess } from "@/composables/useStorageAccess";
 
 import { isStandardParty } from "@/contracts/parties";
@@ -29,7 +31,6 @@ import {
   PORTFOLIO_TRANSACTIONS_FILE,
   readPortfolioMarketChoices,
   readPortfolioTransactions,
-  TRANSACTION_TYPES,
   transactionDeleteSuffix,
   transactionEventSuffix,
   transactionTypeLabel,
@@ -51,7 +52,11 @@ import {
 
    transactions.json, relu dès que le Mac le republie, du
    plus récent au plus ancien dans l'ordre inverse du rejeu
-   (§ 4.1), filtré par titre et par type. Création,
+   (§ 4.1), filtré par TransactionFilters
+   (useTransactionFilters), découpé par trimestre, comme
+   Follow-up par mois (en-têtes repliables, trimestre le plus
+   récent ouvert au départ, trimestres ouverts gardés en
+   session). Création,
    modification et suppression par TransactionSheet (clic sur
    une ligne). Devises proposées : market-history.json, chargé
    à la première ouverture d'une fiche (fichier volumineux).
@@ -67,9 +72,6 @@ import {
 
 const NO_ANSWER_DELAY_MS =
   2 * 60 * 1000;
-
-/* Filtre sans sélection. */
-const ALL = "";
 
 const props = defineProps<{
   securities: PortfolioSecurity[];
@@ -150,33 +152,13 @@ function currencyOf(
    Filtres
 ========================= */
 
-const securityFilter =
-  usePersistentRef<string>("portfolio.journal.security", ALL);
-
-const typeFilter =
-  usePersistentRef<string>("portfolio.journal.type", ALL);
-
-const securityOptions =
-  computed(() =>
-    [...props.securities]
-      .sort((a, b) => a.label.localeCompare(b.label))
-  );
-
-/* Titre retrouvé de la session mais disparu : aucun filtre. */
-watch(
-  () => props.securities,
-  securities => {
-    if (
-      securityFilter.value !== ALL &&
-      !securities.some(
-        security => String(security.securityId) === securityFilter.value
-      )
-    ) {
-      securityFilter.value = ALL;
-    }
-  },
-  { immediate: true }
-);
+const filters =
+  useTransactionFilters({
+    transactions,
+    loaded: () => !!transactionsFile.data.value,
+    partyLabel,
+    securityLabel,
+  });
 
 /* Ordre du rejeu du Mac. */
 const replayed =
@@ -238,17 +220,86 @@ function balancesOf(
 
 const visibleTransactions =
   computed(() =>
-    [...replayed.value].reverse().filter(transaction =>
-      (
-        securityFilter.value === ALL ||
-        String(transaction.securityId) === securityFilter.value
-      ) &&
-      (
-        typeFilter.value === ALL ||
-        transaction.type === typeFilter.value
-      )
-    )
+    [...replayed.value].reverse().filter(filters.matches)
   );
+
+/* =========================
+   Trimestres
+========================= */
+
+interface QuarterGroup {
+  key: string;
+  label: string;
+  items: PortfolioTransaction[];
+}
+
+/* « 2026-11-24 » → « 2026-Q4 ». */
+function quarterKey(
+  date: string
+): string {
+  const month =
+    Number(date.slice(5, 7));
+
+  return `${date.slice(0, 4)}-Q${Math.ceil(month / 3)}`;
+}
+
+/* « 2026-Q4 » → « Q4 2026 ». */
+function quarterLabel(
+  key: string
+): string {
+  const [year, quarter] =
+    key.split("-");
+
+  return `${quarter} ${year}`;
+}
+
+/* Transactions affichées, déjà du plus récent au plus ancien. */
+const quarterGroups =
+  computed<QuarterGroup[]>(() => {
+    const groups: QuarterGroup[] = [];
+
+    for (const transaction of visibleTransactions.value) {
+      const key =
+        quarterKey(transaction.date);
+
+      const last =
+        groups[groups.length - 1];
+
+      if (last?.key === key) {
+        last.items.push(transaction);
+      } else {
+        groups.push({ key, label: quarterLabel(key), items: [transaction] });
+      }
+    }
+
+    return groups;
+  });
+
+/* Trimestres ouverts ; null : pas encore choisis, le plus récent est ouvert. */
+const openQuarters =
+  usePersistentRef<string[] | null>("portfolio.journal.openQuarters", null);
+
+function isOpen(
+  key: string
+): boolean {
+  return openQuarters.value === null
+    ? key === quarterGroups.value[0]?.key
+    : openQuarters.value.includes(key);
+}
+
+function toggleQuarter(
+  key: string
+) {
+  const open =
+    quarterGroups.value
+      .map(group => group.key)
+      .filter(isOpen);
+
+  openQuarters.value =
+    open.includes(key)
+      ? open.filter(item => item !== key)
+      : [...open, key];
+}
 
 /* =========================
    Suivi des demandes
@@ -428,12 +479,6 @@ async function closeSheet() {
   );
 }
 
-const hasFilters =
-  computed(() =>
-    securityFilter.value !== ALL ||
-    typeFilter.value !== ALL
-  );
-
 const expandedComment =
   ref<number | null>(null);
 
@@ -450,44 +495,7 @@ function toggleComment(
     <div class="panel-header">
       <h2>Transactions</h2>
 
-      <div class="filters">
-        <select
-          v-model="securityFilter"
-          aria-label="Security"
-        >
-          <option :value="ALL">All securities</option>
-
-          <option
-            v-for="security in securityOptions"
-            :key="security.securityId"
-            :value="String(security.securityId)"
-          >
-            {{ security.label }}
-          </option>
-        </select>
-
-        <select
-          v-model="typeFilter"
-          aria-label="Type"
-        >
-          <option :value="ALL">All types</option>
-
-          <option
-            v-for="type in TRANSACTION_TYPES"
-            :key="type.value"
-            :value="type.value"
-          >
-            {{ type.label }}
-          </option>
-        </select>
-
-        <PillButton
-          v-if="hasFilters"
-          @click="securityFilter = ALL; typeFilter = ALL"
-        >
-          Reset
-        </PillButton>
-
+      <div class="header-actions">
         <StatusPill
           v-if="newWaiting"
           tone="warning"
@@ -503,6 +511,11 @@ function toggleComment(
         </PillButton>
       </div>
     </div>
+
+    <TransactionFilters
+      v-if="transactionsFile.data.value"
+      :filters="filters"
+    />
 
     <p
       v-if="transactionsFile.error.value"
@@ -546,92 +559,112 @@ function toggleComment(
           </tr>
         </thead>
 
-        <tbody
-          v-for="transaction in visibleTransactions"
-          :key="transaction.txId"
+        <template
+          v-for="group in quarterGroups"
+          :key="group.key"
         >
-          <tr
-            class="transaction-row"
-            @click="openSheet(transaction)"
-          >
-            <td>{{ transaction.date }}</td>
-            <td>{{ transactionTypeLabel(transaction.type) }}</td>
-            <td class="name">{{ securityLabel(transaction.securityId) }}</td>
-            <td>
-              {{ partyLabel(transaction.partyId) }}
-              <template v-if="transaction.toPartyId !== null">
-                → {{ partyLabel(transaction.toPartyId) }}
-              </template>
-            </td>
-            <td class="number">{{ quantityText(transaction) }}</td>
-            <td class="number">{{ priceText(transaction) }}</td>
-            <td class="number">
-              {{ formatTradeValue(transaction.fxRate) }}
-            </td>
-            <td
-              class="number"
-              :title="costsText(transaction) ? costsTitle(transaction) : undefined"
+          <tbody>
+            <tr
+              class="group-header"
+              @click="toggleQuarter(group.key)"
             >
-              {{ costsText(transaction) }}
-            </td>
-            <td class="number">
-              <span
-                v-if="transaction.cashAmount !== null"
-                :class="cashClass(transaction.cashAmount)"
-              >
-                {{ transaction.cashCurrency }}
-                {{ formatAmount(transaction.cashAmount, { showPlus: true }) }}
-              </span>
+              <td colspan="11">
+                <span class="group-toggle">{{ isOpen(group.key) ? "▼" : "►" }}</span>
+                {{ group.label }}
+                <span class="group-count">({{ group.items.length }})</span>
+              </td>
+            </tr>
+          </tbody>
 
-              <span
-                v-if="transaction.counterAmount !== null"
-                class="secondary gain"
-              >
-                {{ transaction.counterCurrency }}
-                {{ formatAmount(transaction.counterAmount, { showPlus: true }) }}
-              </span>
-            </td>
-            <td class="number">
-              <span
-                v-for="line in balancesOf(transaction)"
-                :key="line.currency"
-                class="balance-line"
-                :class="{ loss: line.amount < 0 }"
-              >
-                {{ line.currency }} {{ formatAmount(line.amount) }}
-              </span>
-            </td>
-            <td
-              class="actions"
-              @click.stop
+          <template v-if="isOpen(group.key)">
+            <tbody
+              v-for="transaction in group.items"
+              :key="transaction.txId"
             >
-              <button
-                v-if="transaction.comment"
-                type="button"
-                class="comment-button"
-                :title="transaction.comment"
-                aria-label="Show the comment"
-                @click="toggleComment(transaction.txId)"
+              <tr
+                class="transaction-row"
+                @click="openSheet(transaction)"
               >
-                ⓘ
-              </button>
+                <td>{{ transaction.date }}</td>
+                <td>{{ transactionTypeLabel(transaction.type) }}</td>
+                <td class="name">{{ securityLabel(transaction.securityId) }}</td>
+                <td>
+                  {{ partyLabel(transaction.partyId) }}
+                  <template v-if="transaction.toPartyId !== null">
+                    → {{ partyLabel(transaction.toPartyId) }}
+                  </template>
+                </td>
+                <td class="number">{{ quantityText(transaction) }}</td>
+                <td class="number">{{ priceText(transaction) }}</td>
+                <td class="number">
+                  {{ formatTradeValue(transaction.fxRate) }}
+                </td>
+                <td
+                  class="number"
+                  :title="costsText(transaction) ? costsTitle(transaction) : undefined"
+                >
+                  {{ costsText(transaction) }}
+                </td>
+                <td class="number">
+                  <span
+                    v-if="transaction.cashAmount !== null"
+                    :class="cashClass(transaction.cashAmount)"
+                  >
+                    {{ transaction.cashCurrency }}
+                    {{ formatAmount(transaction.cashAmount, { showPlus: true }) }}
+                  </span>
 
-              <StatusPill
-                v-if="isPending(transaction.txId)"
-                tone="warning"
+                  <span
+                    v-if="transaction.counterAmount !== null"
+                    class="secondary gain"
+                  >
+                    {{ transaction.counterCurrency }}
+                    {{ formatAmount(transaction.counterAmount, { showPlus: true }) }}
+                  </span>
+                </td>
+                <td class="number">
+                  <span
+                    v-for="line in balancesOf(transaction)"
+                    :key="line.currency"
+                    class="balance-line"
+                    :class="{ loss: line.amount < 0 }"
+                  >
+                    {{ line.currency }} {{ formatAmount(line.amount) }}
+                  </span>
+                </td>
+                <td
+                  class="actions"
+                  @click.stop
+                >
+                  <button
+                    v-if="transaction.comment"
+                    type="button"
+                    class="comment-button"
+                    :title="transaction.comment"
+                    aria-label="Show the comment"
+                    @click="toggleComment(transaction.txId)"
+                  >
+                    ⓘ
+                  </button>
+
+                  <StatusPill
+                    v-if="isPending(transaction.txId)"
+                    tone="warning"
+                  >
+                    Pending
+                  </StatusPill>
+                </td>
+              </tr>
+
+              <tr
+                v-if="expandedComment === transaction.txId"
+                class="comment-row"
               >
-                Pending
-              </StatusPill>
-            </td>
-          </tr>
-
-          <tr
-            v-if="expandedComment === transaction.txId"
-            class="comment-row"
-          >
-            <td colspan="11">{{ transaction.comment }}</td>
-          </tr>
-        </tbody>
+                <td colspan="11">{{ transaction.comment }}</td>
+              </tr>
+            </tbody>
+          </template>
+        </template>
       </table>
     </div>
   </section>
@@ -679,20 +712,11 @@ function toggleComment(
   font-size: 1rem;
 }
 
-.filters {
+.header-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
-}
-
-.filters select {
-  padding: 5px 8px;
-
-  border: 1px solid var(--input-border);
-  border-radius: 8px;
-
-  font-size: var(--font-size-sm);
 }
 
 .message {
@@ -731,6 +755,33 @@ td {
 th {
   color: var(--text-soft);
   font-weight: 600;
+}
+
+.group-header {
+  cursor: pointer;
+}
+
+.group-header td {
+  padding: 6px 8px;
+
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  font-style: italic;
+  font-weight: 600;
+}
+
+.group-header:hover {
+  background: var(--primary-soft);
+}
+
+.group-toggle {
+  margin-right: 6px;
+  font-style: normal;
+}
+
+.group-count {
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 .transaction-row {
