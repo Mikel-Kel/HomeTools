@@ -15,6 +15,10 @@ import {
    - Parties génériques, réservées et dossiers d'archives
      écartés ; noms de moins de trois lettres ou chiffres
      écartés (« C&A »).
+   - Nom de plusieurs mots : son dernier mot peut être le
+     début d'un mot du texte, car les alias tirés des relevés
+     bancaires sont coupés (« Dr. Jean Exemp » trouve
+     « Dr Jean Exemple ») ; un nom d'un seul mot reste entier.
    - Classement : nom le plus long d'abord, puis partie la
      plus utilisée dans les archives.
 
@@ -73,9 +77,15 @@ export function matchPartiesInText(
       const words =
         normalizeWords(name);
 
+      /* Texte normalisé : après le nom, la suite du mot puis une espace. */
+      const found =
+        words.includes(" ")
+          ? haystack.includes(` ${words}`)
+          : haystack.includes(` ${words} `);
+
       if (
         words.replace(/ /g, "").length >= MIN_NAME_LENGTH &&
-        haystack.includes(` ${words} `)
+        found
       ) {
         longest =
           Math.max(longest, words.length);
