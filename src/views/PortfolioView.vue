@@ -277,6 +277,7 @@ function warningText(
     <TransactionsPanel
       v-if="tab === 'transactions'"
       :securities="portfolio.securities"
+      :positions="portfolio.positions"
     />
 
     <PositionDetail

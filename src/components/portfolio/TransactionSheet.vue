@@ -23,6 +23,7 @@ import {
   transactionDeleteSuffix,
   transactionEventSuffix,
   transactionTypeLabel,
+  type PortfolioPosition,
   type PortfolioSecurity,
   type PortfolioTransaction,
   type PortfolioTransactionType,
@@ -46,6 +47,12 @@ import {
   transactionToForm,
 } from "@/services/portfolio/transactionForm";
 
+import {
+  proposeTransaction,
+  type ProposedField,
+  type ProposedValues,
+} from "@/services/portfolio/transactionProposals";
+
 import { formatAmount } from "@/utils/amountFormat";
 
 /* =========================
@@ -62,6 +69,10 @@ import { formatAmount } from "@/utils/amountFormat";
      n'a pas été saisi à la main (« Use net » le reprend).
    - Nouvelle saisie : type, dépositaire et titre de la
      précédente sont repris, pour enchaîner un historique.
+   - Nouvelle saisie : valeurs proposées d'après le journal
+     et les positions, selon le type (transactionProposals.ts),
+     dans les champs vides ou encore pré-remplis seulement ;
+     leur origine est indiquée sous les champs.
    - Suppression (transaction existante, après confirmation)
      par TRANSACTION_DELETED : le Mac rejoue le journal et
      peut refuser (quantité devenue négative).
@@ -75,6 +86,10 @@ const props = defineProps<{
   /* Dépositaires déjà présents dans le journal : proposés en tête. */
   usedPartyIds: number[];
   currencies: string[];
+
+  /* Journal et positions, pour les propositions d'une nouvelle saisie. */
+  history: PortfolioTransaction[];
+  positions: PortfolioPosition[];
 }>();
 
 const emit = defineEmits<{
@@ -328,6 +343,162 @@ const showUseNet =
     net.value !== null &&
     parseDecimal(form.cashAmount, 2) !== net.value
   );
+
+/* =========================
+   Propositions (nouvelle saisie)
+========================= */
+
+const proposal =
+  computed(() =>
+    isNew
+      ? proposeTransaction(
+          {
+            type: form.type,
+            partyId: form.partyId,
+            securityId: form.securityId,
+          },
+          props.history,
+          props.positions
+        )
+      : null
+  );
+
+/* Valeurs de départ et dernières valeurs proposées : remplaçables, contrairement à une saisie. */
+const initialValues =
+  { ...form };
+
+const proposed: ProposedValues =
+  {};
+
+/* Champs vidés quand la proposition ne les donne plus. */
+const CLEARABLE: readonly ProposedField[] =
+  ["quantity", "grossAmount", "taxes", "cashAmount", "comment"];
+
+function isReplaceable(
+  field: ProposedField
+): boolean {
+  const value =
+    form[field];
+
+  if (value === proposed[field]) {
+    return true;
+  }
+
+  switch (field) {
+    case "partyId":
+    case "securityId":
+      return value === null;
+
+    case "cashCurrency":
+      return !cashCurrencyChosen.value;
+
+    default:
+      return value === "" || value === initialValues[field];
+  }
+}
+
+function setValue(
+  field: ProposedField,
+  value: ProposedValues[ProposedField]
+) {
+  if (form[field] === value) {
+    return;
+  }
+
+  Object.assign(form, { [field]: value });
+
+  if (field === "partyId") {
+    partyText.value = partyName(value as number | null);
+  }
+
+  if (field === "cashCurrency") {
+    if (value === security.value?.currency) {
+      cashCurrencyChosen.value = false;
+    } else {
+      onCashCurrencyChange();
+    }
+  }
+}
+
+watch(
+  proposal,
+  next => {
+    if (!next) {
+      return;
+    }
+
+    for (const field of Object.keys(proposed) as ProposedField[]) {
+      if (field in next.values || form[field] !== proposed[field]) {
+        continue;
+      }
+
+      if (CLEARABLE.includes(field)) {
+        setValue(field, "");
+      } else if (field === "cashCurrency" && security.value) {
+        setValue(field, security.value.currency);
+      }
+
+      delete proposed[field];
+    }
+
+    for (const [field, value] of Object.entries(next.values) as [ProposedField, ProposedValues[ProposedField]][]) {
+      if (isReplaceable(field)) {
+        setValue(field, value);
+        Object.assign(proposed, { [field]: value });
+      }
+    }
+  },
+  { immediate: true }
+);
+
+/* Dividende : l'impôt proposé suit le brut saisi, au taux du dernier dividende. */
+watch(
+  () => form.grossAmount,
+  gross => {
+    const rate =
+      proposal.value?.taxRate;
+
+    const amount =
+      parseDecimal(gross, 2);
+
+    if (
+      form.type !== "DIVIDEND" ||
+      rate == null ||
+      form.taxes !== proposed.taxes ||
+      amount === null ||
+      Number.isNaN(amount)
+    ) {
+      return;
+    }
+
+    const taxes =
+      amount * rate === 0 ? "" : (amount * rate).toFixed(2);
+
+    form.taxes = taxes;
+    proposed.taxes = taxes;
+  }
+);
+
+const proposalNote =
+  computed(() => {
+    const current =
+      proposal.value;
+
+    if (!current) {
+      return "";
+    }
+
+    return [
+      current.source
+        ? `Proposed from the ${transactionTypeLabel(current.source.type)} of ${current.source.date}`
+        : "",
+      current.heldAt
+        ? `quantity held at ${current.heldAt}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  });
 
 /* =========================
    Libellés
@@ -636,6 +807,7 @@ const isBusy =
           v-model="form.fees"
           type="text"
           inputmode="decimal"
+          :placeholder="proposal?.feesHint ? `Last: ${proposal.feesHint}` : ''"
           :disabled="isBusy"
         />
       </label>
@@ -763,6 +935,13 @@ const isBusy =
         </label>
       </template>
     </div>
+
+    <p
+      v-if="proposalNote"
+      class="note"
+    >
+      {{ proposalNote }}
+    </p>
 
     <p
       v-if="form.type === 'SPLIT' && security?.seriesSplitAdjusted"

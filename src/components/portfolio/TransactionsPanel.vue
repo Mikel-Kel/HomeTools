@@ -33,6 +33,7 @@ import {
   transactionDeleteSuffix,
   transactionEventSuffix,
   transactionTypeLabel,
+  type PortfolioPosition,
   type PortfolioSecurity,
   type PortfolioTransaction,
 } from "@/contracts/portfolio";
@@ -72,6 +73,9 @@ const ALL = "";
 
 const props = defineProps<{
   securities: PortfolioSecurity[];
+
+  /* Positions publiées : quantités proposées pour une vente ou un transfert. */
+  positions: PortfolioPosition[];
 }>();
 
 const transactionsFile =
@@ -620,6 +624,8 @@ function toggleComment(
     :parties="custodians"
     :used-party-ids="usedPartyIds"
     :currencies="currencies"
+    :history="transactions"
+    :positions="positions"
     @close="closeSheet"
   />
 </template>

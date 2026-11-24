@@ -163,7 +163,8 @@ export function parseDecimal(
     : Number.NaN;
 }
 
-function decimalText(
+/* Nombre en texte de saisie : point décimal, sans zéros inutiles. */
+export function decimalText(
   value: number | null
 ): string {
   if (value === null) {
