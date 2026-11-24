@@ -350,6 +350,14 @@ function cashClass(
 const editing =
   ref<PortfolioTransaction | null | undefined>(undefined);
 
+/* Nouvelle transaction copiée d'une autre (Duplicate). */
+const template =
+  ref<PortfolioTransaction | null>(null);
+
+/* Change à chaque ouverture : une copie remplace la fiche ouverte. */
+const sheetKey =
+  ref(0);
+
 const marketNeeded =
   ref(false);
 
@@ -394,11 +402,22 @@ function openSheet(
   }
 
   marketNeeded.value = true;
+  template.value = null;
   editing.value = transaction;
+  sheetKey.value++;
+}
+
+function duplicate(
+  transaction: PortfolioTransaction
+) {
+  template.value = transaction;
+  editing.value = null;
+  sheetKey.value++;
 }
 
 async function closeSheet() {
   editing.value = undefined;
+  template.value = null;
 
   await events.check().catch(
     err =>
@@ -619,7 +638,9 @@ function toggleComment(
 
   <TransactionSheet
     v-if="editing !== undefined"
+    :key="sheetKey"
     :transaction="editing"
+    :template="template"
     :securities="securities"
     :parties="custodians"
     :used-party-ids="usedPartyIds"
@@ -627,6 +648,7 @@ function toggleComment(
     :history="transactions"
     :positions="positions"
     @close="closeSheet"
+    @duplicate="duplicate"
   />
 </template>
 

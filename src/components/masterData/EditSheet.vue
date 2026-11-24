@@ -21,8 +21,8 @@ import {
 
    En-tête, fermeture (✕, Échap, clic hors de la fiche),
    pied avec le suivi de la demande envoyée au Mac et les
-   boutons (Delete, à gauche, si canDelete). Le contenu de
-   la fiche va dans le slot.
+   boutons (Delete, à gauche, si canDelete, puis le slot
+   actions). Le contenu de la fiche va dans le slot.
 
    Le parent garde la saisie et l'envoi : il fournit la
    demande (useEventRequest), l'éventuel motif de blocage et
@@ -156,6 +156,8 @@ onBeforeUnmount(() => {
       >
         Delete
       </PillButton>
+
+      <slot name="actions" />
 
       <span
         class="request-message"

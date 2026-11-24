@@ -17,6 +17,7 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
 import type { Party } from "@/contracts/parties";
 
 import {
+  compareReplayOrder,
   PORTFOLIO_EVENT_TRIGRAM,
   PORTFOLIO_EVENT_VERSION,
   TRANSACTION_TYPES,
@@ -73,6 +74,11 @@ import { formatAmount } from "@/utils/amountFormat";
      et les positions, selon le type (transactionProposals.ts),
      dans les champs vides ou encore pré-remplis seulement ;
      leur origine est indiquée sous les champs.
+   - Duplicate (transaction existante, sans modification en
+     cours) : nouvelle saisie avec les mêmes valeurs, datée
+     du jour, sans propositions.
+   - Commentaire : pastilles des commentaires déjà saisis
+     pour ce type, ce titre ou à défaut ce dépositaire.
    - Suppression (transaction existante, après confirmation)
      par TRANSACTION_DELETED : le Mac rejoue le journal et
      peut refuser (quantité devenue négative).
@@ -80,6 +86,10 @@ import { formatAmount } from "@/utils/amountFormat";
 
 const props = defineProps<{
   transaction: PortfolioTransaction | null;
+
+  /* Nouvelle saisie : transaction dont les valeurs sont reprises (Duplicate). */
+  template?: PortfolioTransaction | null;
+
   securities: PortfolioSecurity[];
   parties: Party[];
 
@@ -94,6 +104,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
+  duplicate: [transaction: PortfolioTransaction];
 }>();
 
 const NO_ANSWER_DELAY_MS =
@@ -127,6 +138,14 @@ function today(): string {
 function initialForm() {
   if (props.transaction) {
     return transactionToForm(props.transaction);
+  }
+
+  if (props.template) {
+    return {
+      ...transactionToForm(props.template),
+      txId: null,
+      date: today(),
+    };
   }
 
   const form =
@@ -268,12 +287,16 @@ const hasNet =
     form.type === "BUY" || form.type === "SELL" || form.type === "DIVIDEND"
   );
 
+/* Transaction dont viennent les valeurs de départ. */
+const copied =
+  props.transaction ?? props.template ?? null;
+
 /* Devise de règlement suit le titre tant qu'elle n'a pas été choisie. */
 const cashCurrencyChosen =
   ref(
-    !isNew &&
-    props.transaction!.cashCurrency !== null &&
-    props.transaction!.cashCurrency !== security.value?.currency
+    !!copied &&
+    copied.cashCurrency !== null &&
+    copied.cashCurrency !== security.value?.currency
   );
 
 watch(
@@ -299,7 +322,7 @@ const net =
 /* Le montant suit le net tant qu'il n'a pas été saisi à la main. */
 const cashFollowsNet =
   ref(
-    isNew ||
+    !copied ||
     (net.value !== null && parseDecimal(form.cashAmount, 2) === net.value)
   );
 
@@ -350,7 +373,7 @@ const showUseNet =
 
 const proposal =
   computed(() =>
-    isNew
+    isNew && !props.template
       ? proposeTransaction(
           {
             type: form.type,
@@ -498,6 +521,36 @@ const proposalNote =
     ]
       .filter(Boolean)
       .join(" · ");
+  });
+
+/* =========================
+   Commentaires déjà saisis
+========================= */
+
+const COMMENT_SUGGESTIONS =
+  5;
+
+/* Même type, puis même titre, sinon même dépositaire ; du plus récent au plus ancien. */
+const commentSuggestions =
+  computed(() => {
+    const sameContext = (transaction: PortfolioTransaction) =>
+      form.securityId !== null
+        ? transaction.securityId === form.securityId
+        : form.partyId !== null && transaction.partyId === form.partyId;
+
+    return [
+      ...new Set(
+        props.history
+          .filter(transaction =>
+            transaction.type === form.type &&
+            transaction.txId !== form.txId &&
+            !!transaction.comment &&
+            sameContext(transaction)
+          )
+          .sort((a, b) => compareReplayOrder(b, a))
+          .map(transaction => transaction.comment as string)
+      ),
+    ].slice(0, COMMENT_SUGGESTIONS);
   });
 
 /* =========================
@@ -683,6 +736,19 @@ const isBusy =
     @delete="remove"
     @close="emit('close')"
   >
+    <template
+      v-if="!isNew"
+      #actions
+    >
+      <PillButton
+        :disabled="changed || isBusy"
+        title="New transaction with these values, dated today"
+        @click="emit('duplicate', props.transaction!)"
+      >
+        Duplicate
+      </PillButton>
+    </template>
+
     <div class="grid">
       <label class="field">
         <h3>Type</h3>
@@ -960,6 +1026,23 @@ const isBusy =
         :disabled="isBusy"
       />
     </label>
+
+    <div
+      v-if="commentSuggestions.length"
+      class="comment-suggestions"
+    >
+      <button
+        v-for="text in commentSuggestions"
+        :key="text"
+        type="button"
+        class="comment-suggestion"
+        :class="{ active: text === form.comment.trim() }"
+        :disabled="isBusy"
+        @click="form.comment = text"
+      >
+        {{ text }}
+      </button>
+    </div>
   </EditSheet>
 </template>
 
@@ -978,5 +1061,43 @@ const isBusy =
 
 .use-net {
   align-self: flex-start;
+}
+
+.comment-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  margin-top: -6px;
+}
+
+.comment-suggestion {
+  max-width: 100%;
+  padding: 3px 10px;
+
+  border: 1px solid var(--border);
+  border-radius: 999px;
+
+  background: var(--surface);
+  color: var(--text);
+
+  font: inherit;
+  font-size: var(--font-size-sm);
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  cursor: pointer;
+}
+
+.comment-suggestion:hover {
+  background: var(--primary-soft);
+}
+
+.comment-suggestion.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 </style>

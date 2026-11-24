@@ -194,7 +194,9 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   `transactions.json`). Le Mac rejoue le journal et publie tous les calculs : aucun calcul de position ni de P&L dans la
   PWA. Saisies par événements `PWA-PFL_…_<S|T><id ou NEW>.json` (`_DEL` pour une suppression), refus affichés tels quels.
   Composants dans `src/components/portfolio/` ; champs par type, contrôles et charge utile de `TRANSACTION_SAVED` dans
-  `src/services/portfolio/transactionForm.ts` (le Mac reste juge). Détail d'une position (`PositionDetail.vue`) : effet
+  `src/services/portfolio/transactionForm.ts` (le Mac reste juge). Nouvelle saisie : propositions par type tirées du
+  journal et des positions publiées (`transactionProposals.ts`, jamais cours ni change), « Duplicate » depuis une
+  transaction existante, pastilles des commentaires déjà saisis. Détail d'une position (`PositionDetail.vue`) : effet
   cours + effet change = P&L latent, courbe de `market-history.json` avec repères `markers` de `LineChart` (entrées et
   sorties à `adjustedPrice`).
 
