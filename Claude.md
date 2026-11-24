@@ -189,9 +189,12 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   dans `photo` de `WINE_SAVED` (création, héritage par `copyFrom`) ; nouvelle image = nouvelle clé.
 
 - Portfolio (page « Portfolio », `PortfolioView.vue`, onglets Positions et Transactions ; titres dans
-  Master data, section « Portfolio », `PortfolioSection.vue` et `SecuritySheet.vue`) : contrat
-  `../Backend/docs/portfolio-contract.md` (lecteur `src/contracts/portfolio.ts`, exports `portfolio/portfolio.json` et
-  `transactions.json`). Le Mac rejoue le journal et publie tous les calculs : aucun calcul de position ni de P&L dans la
+  Master data, section « Portfolio », `PortfolioSection.vue` et `SecuritySheet.vue`, avec leurs types, obligatoires,
+  `SecurityTypesPanel.vue` et `SecurityTypeSheet.vue`, événements `…_Y<id|NEW>.json`) : contrat
+  `../Backend/docs/portfolio-contract.md` en version 1.1 (lecteur `src/contracts/portfolio.ts`, exports
+  `portfolio/portfolio.json` et `transactions.json`). Positions dans l'ordre des types, regroupées en option (« By type », somme des valeurs
+  et poids publiés, seule addition faite par la PWA) ; journal filtré (`useTransactionFilters`) et groupé par trimestre (liquidités
+  nettes, solde de fin de trimestre). Le Mac rejoue le journal et publie tous les calculs : aucun calcul de position ni de P&L dans la
   PWA. Saisies par événements `PWA-PFL_…_<S|T><id ou NEW>.json` (`_DEL` pour une suppression), refus affichés tels quels.
   Composants dans `src/components/portfolio/` ; champs par type, contrôles et charge utile de `TRANSACTION_SAVED` dans
   `src/services/portfolio/transactionForm.ts` (le Mac reste juge). Nouvelle saisie : propositions par type tirées du

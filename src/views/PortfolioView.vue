@@ -44,9 +44,12 @@ import {
 
    En-tête : répartition (PortfolioPie, total au centre), P&L
    latent, puis réalisé, revenus et frais dans un tableau.
-   Avertissements, positions consolidées (détail par
-   dépositaire quand il y en a plusieurs), liquidités et
-   positions soldées. La date du cours est affichée, car les
+   Positions consolidées (détail par dépositaire quand il y
+   en a plusieurs), dans l'ordre des types de titres publié ;
+   en option (« By type », gardée en session), un en-tête par
+   type avec la somme des valeurs et des poids (seul calcul de
+   la page : une addition de montants publiés) ; liquidités, positions soldées, puis
+   avertissements. La date du cours est affichée, car les
    titres n'ont pas tous la même dernière date. Un clic sur
    une position ouvre son détail (PositionDetail) ; les cours
    sont chargés à la première ouverture et gardés (fichier
@@ -159,6 +162,99 @@ function securityLabel(
     ? ""
     : securityById.value.get(securityId)?.label ?? `Security ${securityId}`;
 }
+
+/* =========================
+   Positions par type de titre
+========================= */
+
+interface PositionGroup {
+  key: string;
+  label: string;
+  positions: PortfolioPosition[];
+  valueChf: number;
+  weight: number;
+}
+
+/* Types dans l'ordre publié, puis titres sans type ; un seul groupe sans titre typé (fichier antérieur aux types). */
+const positionGroups =
+  computed<PositionGroup[]>(() => {
+    const value =
+      portfolio.value;
+
+    if (!value) {
+      return [];
+    }
+
+    const groups =
+      new Map<number | null, PortfolioPosition[]>();
+
+    for (const position of value.positions) {
+      const typeId =
+        securityById.value.get(position.securityId)?.securityTypeId ?? null;
+
+      groups.set(typeId, [...(groups.get(typeId) ?? []), position]);
+    }
+
+    const ordered: [number | null, string][] = [
+      ...value.securityTypes.map(
+        type => [type.securityTypeId, type.label] as [number, string]
+      ),
+      ...[...groups.keys()]
+        .filter(
+          typeId =>
+            typeId !== null &&
+            !value.securityTypes.some(type => type.securityTypeId === typeId)
+        )
+        .map(typeId => [typeId, `Type ${typeId}`] as [number, string]),
+      [null, "No type"],
+    ];
+
+    return ordered
+      .filter(([typeId]) => groups.has(typeId))
+      .map(([typeId, label]) => {
+        const positions =
+          groups.get(typeId)!;
+
+        return {
+          key: String(typeId),
+          label,
+          positions,
+          valueChf: Math.round(positions.reduce((sum, position) => sum + position.valueChf * 100, 0)) / 100,
+          weight: positions.reduce((sum, position) => sum + position.weight, 0),
+        };
+      });
+  });
+
+type PositionsLayout = "list" | "byType";
+
+const layoutOptions: { value: PositionsLayout; label: string }[] = [
+  { value: "list", label: "List" },
+  { value: "byType", label: "By type" },
+];
+
+const positionsLayout =
+  usePersistentRef<PositionsLayout>("portfolio.positions.layout", "list");
+
+/* En-têtes de type seulement en option, et si au moins un titre est typé. */
+const showTypeHeaders =
+  computed(() =>
+    positionsLayout.value === "byType" &&
+    positionGroups.value.some(group => group.key !== "null")
+  );
+
+/* Liste simple : un seul groupe, toujours dans l'ordre des types. */
+const displayedGroups =
+  computed<PositionGroup[]>(() =>
+    showTypeHeaders.value
+      ? positionGroups.value
+      : [{
+          key: "all",
+          label: "",
+          positions: positionGroups.value.flatMap(group => group.positions),
+          valueChf: 0,
+          weight: 0,
+        }]
+  );
 
 function currencyOf(
   position: PortfolioPosition
@@ -366,7 +462,15 @@ function warningText(
         v-if="portfolio.positions.length"
         class="panel"
       >
-        <h2>Positions</h2>
+        <div class="panel-header">
+          <h2>Positions</h2>
+
+          <SegmentedControl
+            v-if="portfolio.securityTypes.length"
+            v-model="positionsLayout"
+            :options="layoutOptions"
+          />
+        </div>
 
         <div class="table-scroll">
           <table>
@@ -381,64 +485,80 @@ function warningText(
               </tr>
             </thead>
 
-            <tbody
-              v-for="position in portfolio.positions"
-              :key="position.securityId"
-              class="selectable"
-              @click="selectedId = position.securityId"
+            <template
+              v-for="group in displayedGroups"
+              :key="group.key"
             >
-              <tr>
-                <td>
-                  <span class="name">{{ securityLabel(position.securityId) }}</span>
-                  <span
-                    v-if="position.byCustodian.length === 1"
-                    class="secondary"
-                  >
-                    {{ position.byCustodian[0].partyName }}
-                  </span>
-                </td>
-                <td class="number">{{ formatQuantity(position.quantity) }}</td>
-                <td class="number">
-                  {{ currencyOf(position) }} {{ formatQuote(position.price) }}
-                  <span
-                    class="secondary"
-                    :title="position.priceSource === 'transaction' ? 'Last transaction price' : 'Last market price'"
-                  >
-                    {{ position.priceDate }}{{ position.priceSource === "transaction" ? " · trade" : "" }}
-                  </span>
-                </td>
-                <td
-                  class="number"
-                  :class="amountClass(position.unrealizedCcy)"
-                >
-                  {{ currencyOf(position) }}
-                  {{ formatAmount(position.unrealizedCcy, { showPlus: true }) }}
-                </td>
-                <td class="number">{{ formatAmount(position.valueChf) }}</td>
-                <td class="number">{{ formatWeight(position.weight) }}</td>
-              </tr>
+              <tbody v-if="showTypeHeaders">
+                <tr class="type-row">
+                  <td colspan="4">
+                    {{ group.label }}
+                    <span class="type-count">({{ group.positions.length }})</span>
+                  </td>
+                  <td class="number">{{ formatAmount(group.valueChf) }}</td>
+                  <td class="number">{{ formatWeight(group.weight) }}</td>
+                </tr>
+              </tbody>
 
-              <template v-if="position.byCustodian.length > 1">
-                <tr
-                  v-for="holding in position.byCustodian"
-                  :key="holding.partyId"
-                  class="custodian-row"
-                >
-                  <td>{{ holding.partyName }}</td>
-                  <td class="number">{{ formatQuantity(holding.quantity) }}</td>
-                  <td />
+              <tbody
+                v-for="position in group.positions"
+                :key="position.securityId"
+                class="selectable"
+                @click="selectedId = position.securityId"
+              >
+                <tr>
+                  <td>
+                    <span class="name">{{ securityLabel(position.securityId) }}</span>
+                    <span
+                      v-if="position.byCustodian.length === 1"
+                      class="secondary"
+                    >
+                      {{ position.byCustodian[0].partyName }}
+                    </span>
+                  </td>
+                  <td class="number">{{ formatQuantity(position.quantity) }}</td>
+                  <td class="number">
+                    {{ currencyOf(position) }} {{ formatQuote(position.price) }}
+                    <span
+                      class="secondary"
+                      :title="position.priceSource === 'transaction' ? 'Last transaction price' : 'Last market price'"
+                    >
+                      {{ position.priceDate }}{{ position.priceSource === "transaction" ? " · trade" : "" }}
+                    </span>
+                  </td>
                   <td
                     class="number"
-                    :class="amountClass(holding.unrealizedCcy)"
+                    :class="amountClass(position.unrealizedCcy)"
                   >
                     {{ currencyOf(position) }}
-                    {{ formatAmount(holding.unrealizedCcy, { showPlus: true }) }}
+                    {{ formatAmount(position.unrealizedCcy, { showPlus: true }) }}
                   </td>
-                  <td class="number">{{ formatAmount(holding.valueChf) }}</td>
-                  <td class="number">{{ formatWeight(holding.weight) }}</td>
+                  <td class="number">{{ formatAmount(position.valueChf) }}</td>
+                  <td class="number">{{ formatWeight(position.weight) }}</td>
                 </tr>
-              </template>
-            </tbody>
+
+                <template v-if="position.byCustodian.length > 1">
+                  <tr
+                    v-for="holding in position.byCustodian"
+                    :key="holding.partyId"
+                    class="custodian-row"
+                  >
+                    <td>{{ holding.partyName }}</td>
+                    <td class="number">{{ formatQuantity(holding.quantity) }}</td>
+                    <td />
+                    <td
+                      class="number"
+                      :class="amountClass(holding.unrealizedCcy)"
+                    >
+                      {{ currencyOf(position) }}
+                      {{ formatAmount(holding.unrealizedCcy, { showPlus: true }) }}
+                    </td>
+                    <td class="number">{{ formatAmount(holding.valueChf) }}</td>
+                    <td class="number">{{ formatWeight(holding.weight) }}</td>
+                  </tr>
+                </template>
+              </tbody>
+            </template>
           </table>
         </div>
       </section>
@@ -720,6 +840,20 @@ function warningText(
   font-size: 1rem;
 }
 
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+
+  margin-bottom: 8px;
+}
+
+.panel-header h2 {
+  margin: 0;
+}
+
 .table-scroll {
   overflow-x: auto;
 }
@@ -769,6 +903,18 @@ th {
 
   color: var(--text-muted);
   font-size: var(--font-size-xs);
+  font-weight: 400;
+}
+
+.type-row td {
+  padding-top: 10px;
+
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.type-count {
+  color: var(--text-muted);
   font-weight: 400;
 }
 

@@ -17,6 +17,7 @@ import {
   type PortfolioMarketChoices,
   type PortfolioSecurity,
   type PortfolioSecuritySave,
+  type PortfolioSecurityType,
 } from "@/contracts/portfolio";
 
 import {
@@ -35,6 +36,8 @@ import { formatQuote } from "@/utils/amountFormat";
    exemple une devise changée alors que le titre a des
    transactions.
 
+   - Type : obligatoire, choisi parmi les types de Master data
+     (ordre publié par le Mac).
    - Série de cours : groupe Stocks de market-history.json,
      ou aucune (dernier prix du journal).
    - « Adjusted for splits » : à cocher pour une série Yahoo
@@ -44,6 +47,7 @@ import { formatQuote } from "@/utils/amountFormat";
 const props = defineProps<{
   security: PortfolioSecurity | null;
   securities: PortfolioSecurity[];
+  securityTypes: PortfolioSecurityType[];
   currencyLocked: boolean;
   choices: PortfolioMarketChoices;
 }>();
@@ -64,8 +68,15 @@ const ISIN_PATTERN =
 const isNew =
   props.security === null;
 
-const original: Omit<PortfolioSecuritySave, "securityId"> = {
+/* Saisie : type encore à choisir (null) pour un titre nouveau ou antérieur aux types. */
+type SecurityDraft =
+  Omit<PortfolioSecuritySave, "securityTypeId"> & {
+    securityTypeId: number | null;
+  };
+
+const original: Omit<SecurityDraft, "securityId"> = {
   label: props.security?.label ?? "",
+  securityTypeId: props.security?.securityTypeId ?? null,
   isin: props.security?.isin ?? null,
   currency: props.security?.currency ?? "CHF",
   priceIndicatorType: props.security?.priceIndicatorType ?? null,
@@ -76,6 +87,9 @@ const original: Omit<PortfolioSecuritySave, "securityId"> = {
 
 const label =
   ref(original.label);
+
+const securityTypeId =
+  ref<number | null>(original.securityTypeId);
 
 const isin =
   ref(original.isin ?? "");
@@ -145,10 +159,28 @@ watch(
   }
 );
 
+/* Type déjà enregistré, gardé même s'il n'est plus publié. */
+const typeOptions =
+  computed(() =>
+    original.securityTypeId === null ||
+    props.securityTypes.some(type => type.securityTypeId === original.securityTypeId)
+      ? props.securityTypes
+      : [
+          ...props.securityTypes,
+          {
+            securityTypeId: original.securityTypeId,
+            label: `Type ${original.securityTypeId}`,
+            sortOrder: 0,
+            securityCount: 0,
+          },
+        ]
+  );
+
 const payload =
-  computed<PortfolioSecuritySave>(() => ({
+  computed<SecurityDraft>(() => ({
     securityId: props.security?.securityId ?? null,
     label: label.value.trim().replace(/\s+/g, " "),
+    securityTypeId: securityTypeId.value,
     isin: isin.value.replace(/\s+/g, "").toUpperCase() || null,
     currency: currency.value,
     priceIndicatorType: priceIndicatorType.value,
@@ -164,6 +196,7 @@ const changed =
 
     return (
       value.label !== original.label ||
+      value.securityTypeId !== original.securityTypeId ||
       value.isin !== original.isin ||
       value.currency !== original.currency ||
       value.priceIndicatorType !== original.priceIndicatorType ||
@@ -183,6 +216,12 @@ const formError =
 
     if (value.label.length > LABEL_MAX_LENGTH) {
       return `At most ${LABEL_MAX_LENGTH} characters.`;
+    }
+
+    if (value.securityTypeId === null) {
+      return props.securityTypes.length
+        ? "The type is required."
+        : "Create a security type first, in the Types list.";
     }
 
     const others =
@@ -232,16 +271,24 @@ const canSave =
   );
 
 async function save() {
-  if (!canSave.value) {
+  const typeId =
+    payload.value.securityTypeId;
+
+  if (!canSave.value || typeId === null) {
     return;
   }
+
+  const saved: PortfolioSecuritySave = {
+    ...payload.value,
+    securityTypeId: typeId,
+  };
 
   await saveRequest.send(
     {
       version: PORTFOLIO_EVENT_VERSION,
       eventType: "SECURITY_SAVED",
       timestamp: new Date().toISOString(),
-      payload: payload.value,
+      payload: saved,
     },
     fileSuffix
   );
@@ -313,6 +360,30 @@ const subtitle =
         :maxlength="LABEL_MAX_LENGTH"
         :disabled="saveRequest.inProgress.value"
       />
+    </label>
+
+    <label class="field">
+      <h3>Type</h3>
+
+      <select
+        v-model="securityTypeId"
+        :disabled="saveRequest.inProgress.value"
+      >
+        <option
+          :value="null"
+          disabled
+        >
+          Choose a type
+        </option>
+
+        <option
+          v-for="type in typeOptions"
+          :key="type.securityTypeId"
+          :value="type.securityTypeId"
+        >
+          {{ type.label }}
+        </option>
+      </select>
     </label>
 
     <div class="columns">

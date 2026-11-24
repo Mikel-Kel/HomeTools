@@ -26,6 +26,12 @@ import {
    soldées, liquidités par dépositaire et devise,
    avertissements. Listes vides sans transaction.
 
+   Types de titres (version 1.1, ajouts) : securityTypes,
+   triés par sortOrder puis libellé, avec leur nombre de
+   titres ; securityTypeId de chaque titre. Un fichier
+   antérieur donne une liste vide et un type à null. La
+   répartition des positions par type est faite par la PWA.
+
    - Change : CHF pour 1 unité de devise ; pour le CHF, fx = 1,
      fxDate et fxSource à null.
    - priceSource, fxSource : market (dernière valeur de la
@@ -45,10 +51,18 @@ import {
    Saisies par événements (§ 7) :
      events/PWA-PFL_<AAAAMMJJHHMMSS>_S<securityId|NEW>.json
        { "version": 1, "eventType": "SECURITY_SAVED",
-         "payload": { "securityId" | null, "label", "isin",
+         "payload": { "securityId" | null, "label",
+                      "securityTypeId", "isin",
                       "currency", "priceIndicatorType",
                       "quoteFactor", "seriesSplitAdjusted",
                       "active" } }
+     events/PWA-PFL_<AAAAMMJJHHMMSS>_Y<securityTypeId|NEW>.json
+       { "version": 1, "eventType": "SECURITY_TYPE_SAVED",
+         "payload": { "securityTypeId" | null, "label",
+                      "sortOrder"? } }
+     events/PWA-PFL_<AAAAMMJJHHMMSS>_Y<securityTypeId>_DEL.json
+       { "version": 1, "eventType": "SECURITY_TYPE_DELETED",
+         "payload": { "securityTypeId" } }
      events/PWA-PFL_<AAAAMMJJHHMMSS>_T<txId>_DEL.json
        { "version": 1, "eventType": "TRANSACTION_DELETED",
          "payload": { "txId" } }
@@ -92,9 +106,21 @@ export interface PortfolioTotals {
   feesChf: number;
 }
 
+export interface PortfolioSecurityType {
+  securityTypeId: number;
+  label: string;
+  sortOrder: number;
+
+  /* Nombre de titres du type : un type utilisé ne peut pas être supprimé. */
+  securityCount: number;
+}
+
 export interface PortfolioSecurity {
   securityId: number;
   label: string;
+
+  /* null : fichier antérieur aux types. */
+  securityTypeId: number | null;
   isin: string | null;
   currency: string;
   priceIndicatorType: number | null;
@@ -163,6 +189,7 @@ export interface PortfolioWarning {
 export interface Portfolio {
   generatedAt: string;
   totals: PortfolioTotals;
+  securityTypes: PortfolioSecurityType[];
   securities: PortfolioSecurity[];
   positions: PortfolioPosition[];
   closedPositions: PortfolioClosedPosition[];
@@ -258,7 +285,34 @@ export function transactionDeleteSuffix(
 }
 
 export type PortfolioSecuritySave =
-  Omit<PortfolioSecurity, "securityId"> & { securityId: number | null };
+  Omit<PortfolioSecurity, "securityId" | "securityTypeId"> & {
+    securityId: number | null;
+    securityTypeId: number;
+  };
+
+/* Libellé : 50 caractères au plus ; ordre : 0 à 9999. */
+export const SECURITY_TYPE_LABEL_MAX = 50;
+export const SECURITY_TYPE_SORT_MAX = 9999;
+
+export interface PortfolioSecurityTypeSave {
+  securityTypeId: number | null;
+  label: string;
+
+  /* Absent d'une création : plus grand + 10. */
+  sortOrder?: number;
+}
+
+export function securityTypeEventSuffix(
+  securityTypeId: number | null
+): string {
+  return `Y${securityTypeId ?? "NEW"}`;
+}
+
+export function securityTypeDeleteSuffix(
+  securityTypeId: number
+): string {
+  return `${securityTypeEventSuffix(securityTypeId)}_DEL`;
+}
 
 export function securityEventSuffix(
   securityId: number | null
@@ -351,6 +405,20 @@ function readTotals(
   };
 }
 
+function readSecurityType(
+  value: unknown
+): PortfolioSecurityType {
+  const row =
+    asObject(value) ?? {};
+
+  return {
+    securityTypeId: requiredId(row, "securityTypeId"),
+    label: asString(row.label),
+    sortOrder: asNumber(row.sortOrder),
+    securityCount: asNumber(asObject(row.usage)?.securities),
+  };
+}
+
 function readSecurity(
   value: unknown
 ): PortfolioSecurity {
@@ -360,6 +428,7 @@ function readSecurity(
   return {
     securityId: requiredId(row, "securityId"),
     label: asString(row.label),
+    securityTypeId: asNullableNumber(row.securityTypeId),
     isin: asNullableString(row.isin),
     currency: asString(row.currency),
     priceIndicatorType: asNullableNumber(row.priceIndicatorType),
@@ -482,6 +551,7 @@ export function readPortfolio(
   return {
     generatedAt: asString(root.generatedAt),
     totals: readTotals(root.totals),
+    securityTypes: asArray(root.securityTypes).map(readSecurityType),
     securities: asArray(root.securities).map(readSecurity),
     positions: asArray(root.positions).map(readPosition),
     closedPositions: asArray(root.closedPositions).map(readClosedPosition),

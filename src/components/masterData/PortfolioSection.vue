@@ -5,10 +5,13 @@ import {
 } from "vue";
 
 import SecuritySheet from "@/components/masterData/SecuritySheet.vue";
+import SecurityTypesPanel from "@/components/masterData/SecurityTypesPanel.vue";
 import PillButton from "@/components/ui/PillButton.vue";
+import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 import StatusPill from "@/components/ui/StatusPill.vue";
 
 import { useEventRequest } from "@/composables/useEventRequest";
+import { usePersistentRef } from "@/composables/usePersistentRef";
 import { useRemoteJson } from "@/composables/useRemoteJson";
 
 import {
@@ -31,7 +34,8 @@ import { eventFilePattern } from "@/services/events/eventFiles";
    Section « Portfolio » de la page Master data
 
    Titres du portefeuille : liste et saisie (SecuritySheet),
-   à créer avant la première transaction. Les séries de cours
+   à créer avant la première transaction ; leurs types
+   (SecurityTypesPanel), à créer avant le premier titre. Les séries de cours
    et les devises proposées viennent de market-history.json,
    chargé à l'ouverture de la section seulement (fichier
    volumineux).
@@ -46,6 +50,36 @@ const NO_ANSWER_DELAY_MS =
 const props = defineProps<{
   portfolio: Portfolio;
 }>();
+
+type PortfolioFamily =
+  | "securities"
+  | "types";
+
+const familyOptions: {
+  value: PortfolioFamily;
+  label: string;
+}[] = [
+  { value: "securities", label: "Securities" },
+  { value: "types", label: "Types" },
+];
+
+const family =
+  usePersistentRef<PortfolioFamily>("masterData.portfolio.family", "securities");
+
+const typeLabels =
+  computed(() =>
+    new Map(
+      props.portfolio.securityTypes.map(type => [type.securityTypeId, type.label])
+    )
+  );
+
+function typeLabel(
+  security: PortfolioSecurity
+): string {
+  return security.securityTypeId === null
+    ? ""
+    : typeLabels.value.get(security.securityTypeId) ?? `Type ${security.securityTypeId}`;
+}
 
 const marketFile =
   useRemoteJson({
@@ -146,9 +180,27 @@ async function closeSheet() {
 </script>
 
 <template>
-  <section class="panel">
+  <SecurityTypesPanel
+    v-if="family === 'types'"
+    :types="portfolio.securityTypes"
+  >
+    <template #title>
+      <SegmentedControl
+        v-model="family"
+        :options="familyOptions"
+      />
+    </template>
+  </SecurityTypesPanel>
+
+  <section
+    v-else
+    class="panel"
+  >
     <div class="panel-header">
-      <h2>Securities</h2>
+      <SegmentedControl
+        v-model="family"
+        :options="familyOptions"
+      />
 
       <div class="panel-actions">
         <StatusPill
@@ -189,6 +241,7 @@ async function closeSheet() {
         <thead>
           <tr>
             <th>Security</th>
+            <th>Type</th>
             <th>ISIN</th>
             <th>Currency</th>
             <th>Price series</th>
@@ -205,6 +258,9 @@ async function closeSheet() {
             @click="editing = security"
           >
             <td class="name">{{ security.label }}</td>
+            <td :class="{ missing: security.securityTypeId === null }">
+              {{ typeLabel(security) || "None" }}
+            </td>
             <td>{{ security.isin ?? "" }}</td>
             <td>{{ security.currency }}</td>
             <td>{{ seriesLabel(security) }}</td>
@@ -234,6 +290,7 @@ async function closeSheet() {
     v-if="editing !== undefined"
     :security="editing"
     :securities="portfolio.securities"
+    :security-types="portfolio.securityTypes"
     :currency-locked="!!editing && tradedIds.has(editing.securityId)"
     :choices="choices"
     @close="closeSheet"
@@ -261,11 +318,6 @@ async function closeSheet() {
   margin-bottom: 8px;
 }
 
-.panel-header h2 {
-  margin: 0;
-
-  font-size: 1rem;
-}
 
 .panel-actions {
   display: flex;
@@ -327,6 +379,10 @@ tr.inactive td {
 
 .name {
   font-weight: 600;
+}
+
+td.missing {
+  color: var(--warning);
 }
 
 .status {

@@ -11,9 +11,11 @@ import { formatInteger } from "@/utils/amountFormat";
 /* =========================
    Répartition du portefeuille
 
-   Anneau des valeurs en CHF publiées par le Mac : une tranche
-   par position (les cinq plus grandes, le reste regroupé dans
-   « Other securities »), puis les liquidités. Couleurs dans
+   Anneau des valeurs en CHF publiées par le Mac : les
+   liquidités d'abord, puis une tranche par position (les cinq
+   plus grandes, le reste regroupé à la fin dans « Other
+   securities »), dans l'ordre des types de titres (sortOrder
+   publié), puis par valeur décroissante dans un même type. Couleurs dans
    l'ordre des séries du thème, attribuées par titre (ordre des
    identifiants), pour qu'une tranche garde sa couleur quand les
    valeurs changent. Liquidités et regroupement en gris.
@@ -80,27 +82,64 @@ const items =
           .map(security => [security.securityId, security.label])
       );
 
+    /* Rang du type d'un titre : ordre publié, titres sans type à la fin. */
+    const typeRanks =
+      new Map(
+        portfolio.securityTypes
+          .map((type, index) => [type.securityTypeId, index])
+      );
+
+    const typeRank =
+      new Map(
+        portfolio.securities
+          .map(security => [
+            security.securityId,
+            typeRanks.get(security.securityTypeId ?? -1) ?? typeRanks.size,
+          ])
+      );
+
     const byValue =
       [...portfolio.positions]
         .sort((a, b) => b.valueChf - a.valueChf);
 
     const shown =
-      byValue.slice(0, MAX_SLICES);
+      byValue
+        .slice(0, MAX_SLICES)
+        .sort(
+          (a, b) =>
+            (typeRank.get(a.securityId) ?? typeRanks.size) -
+              (typeRank.get(b.securityId) ?? typeRanks.size) ||
+            b.valueChf - a.valueChf
+        );
 
     const colorOrder =
       shown
         .map(position => position.securityId)
         .sort((a, b) => a - b);
 
-    const result: PieItem[] =
-      shown.map(position => ({
+    const result: PieItem[] = [];
+
+    if (portfolio.cash.length) {
+      result.push({
+        key: "CASH",
+        label: "Cash",
+        valueChf: portfolio.totals.cashChf,
+        weight: portfolio.cash.reduce((sum, line) => sum + line.weight, 0),
+        color: NEUTRAL_COLOR,
+        securityId: null,
+      });
+    }
+
+    result.push(
+      ...shown.map(position => ({
         key: `S${position.securityId}`,
         label: labels.get(position.securityId) ?? `Security ${position.securityId}`,
         valueChf: position.valueChf,
         weight: position.weight,
         color: SERIES_COLORS[colorOrder.indexOf(position.securityId)],
         securityId: position.securityId,
-      }));
+      }))
+    );
 
     const others =
       byValue.slice(MAX_SLICES);
@@ -112,17 +151,6 @@ const items =
         valueChf: others.reduce((sum, position) => sum + position.valueChf, 0),
         weight: others.reduce((sum, position) => sum + position.weight, 0),
         color: OTHER_COLOR,
-        securityId: null,
-      });
-    }
-
-    if (portfolio.cash.length) {
-      result.push({
-        key: "CASH",
-        label: "Cash",
-        valueChf: portfolio.totals.cashChf,
-        weight: portfolio.cash.reduce((sum, line) => sum + line.weight, 0),
-        color: NEUTRAL_COLOR,
         securityId: null,
       });
     }
