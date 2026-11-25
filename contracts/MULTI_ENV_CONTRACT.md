@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.6.1** — 2026-11-19
+**Version : 1.7.0** — 2026-11-25
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -74,7 +74,7 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
               "endpoint": "<URL https>", "awsProfile": "<profil AWS CLI>" },
       "events": {},
       "localArchive": { "root": "<chemin absolu>" },
-      "capabilities": { "localArchive": false, "card24": false, "wineCellar": false },
+      "capabilities": { "localArchive": false, "card24": false, "wineCellar": false, "mobileExpense": false },
       "jobs": ["<nom de job>"]
     }
   }
@@ -103,6 +103,7 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 | `localArchive` | Autorise `/api/local/read` sur `localArchive.root` (copie locale du magasin `archives`, §6). `/api/local/open` exige en plus que l'appareil appelant soit le serveur (`isServer: true`). |
 | `card24` | Autorise le job Card24 et les vues de suivi associées. |
 | `wineCellar` | Active la cave à vins : page de la PWA, export `wine/cellar.json` par le housekeeping et événements `WIN` (contrat du backend `docs/wine-cellar-contract.md`). |
+| `mobileExpense` | Active la saisie des dépenses depuis l'iPhone : exports `mobile/mobile.json` et `settings/bankingCards.json`, événements `MEX`, case « Mobile » des sous-catégories et cartes dans Master data (contrat du backend `docs/mobile-expense-contract.md`). |
 
 ---
 
@@ -138,7 +139,7 @@ Premier appel de la PWA, avant toute autre requête.
   "device": "iPad Michel",
   "kind": "ios",
   "isServer": false,
-  "capabilities": { "localArchive": true, "card24": true, "wineCellar": true }
+  "capabilities": { "localArchive": true, "card24": true, "wineCellar": true, "mobileExpense": true }
 }
 ```
 
@@ -293,3 +294,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.5.1 | 2026-11-09 | §6 : fin de la transition, `hometools` écrit aussi d'abord dans le magasin `archives` et sa copie locale en est alimentée ; la publication disque → magasin est retirée. Publié en PATCH : bascule annoncée en 1.5.0, sans changement d'interface |
 | 1.6.0 | 2026-11-14 | §3.4 : capacité `wineCellar` (cave à vins), `false` par défaut ; schéma et exemples complétés. Évolution MINOR : nouvelle capacité avec défaut `false`, aucun comportement existant ne change |
 | 1.6.1 | 2026-11-19 | §6 : toutes les clés du magasin sont en NFC (anciennes clés NFD de `hometools` renommées le 2026-11-19), signalées par la réconciliation sinon. Publié en PATCH : aucun changement d'interface, le proxy essaie toujours les deux formes |
+| 1.7.0 | 2026-11-25 | §3.4 : capacité `mobileExpense` (saisie des dépenses depuis l'iPhone), `false` par défaut ; schéma et exemples complétés. Évolution MINOR : nouvelle capacité avec défaut `false`, aucun comportement existant ne change |
