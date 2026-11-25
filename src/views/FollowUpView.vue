@@ -7,6 +7,7 @@ import {
 
 import { useRouter } from "vue-router";
 
+import AppIcon from "@/components/AppIcon.vue";
 import PageHeader from "@/components/PageHeader.vue";
 import FollowUpBar from "@/components/followup/FollowUpBar.vue";
 import CategorySheet from "@/components/followup/CategorySheet.vue";
@@ -71,6 +72,13 @@ interface FollowUpItem {
 
 const router =
   useRouter();
+
+/* Budget : hors du menu, ouvert par l'icône de l'en-tête. */
+async function openBudget() {
+  await router.push({
+    name: "budget",
+  });
+}
 
 const {
   storageReady,
@@ -1695,7 +1703,17 @@ watch(
     <PageHeader
       title="Follow-up"
       icon="followup"
-    />
+    >
+      <template #actions>
+        <AppIcon
+          name="budget"
+          :size="32"
+          class="header-icon"
+          title="Budget"
+          @click="openBudget"
+        />
+      </template>
+    </PageHeader>
 
     <!-- =========================
          STICKY STACK
@@ -2476,6 +2494,10 @@ watch(
 /* =========================================================
    7. STATUS & STATES
 ========================================================= */
+
+.header-icon {
+  cursor: pointer;
+}
 
 .allocated-good {
   color:

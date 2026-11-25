@@ -355,6 +355,12 @@ function totalFor(
    Navigation
 ========================= */
 
+async function openBudget() {
+  await router.push({
+    name: "budget",
+  });
+}
+
 async function openLedger() {
   await router.push({
     name: "ledger",
@@ -788,6 +794,14 @@ onBeforeUnmount(() => {
       <div class="header-actions">
         <div class="header-group">
           <AppIcon
+            name="budget"
+            :size="32"
+            class="header-icon"
+            title="Budget"
+            @click="openBudget"
+          />
+
+          <AppIcon
             name="book"
             :size="32"
             class="header-icon"
@@ -995,6 +1009,7 @@ onBeforeUnmount(() => {
 .header-group {
   display: flex;
   align-items: center;
+  gap: 12px;
   cursor: pointer;
   transition: opacity 0.15s ease;
 }

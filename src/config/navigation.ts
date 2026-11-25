@@ -3,7 +3,9 @@
 
    Liste unique, partagée par le menu de l'accueil et la
    barre de navigation des autres pages : une nouvelle page
-   s'ajoute ici. Une page liée à une capacité de
+   s'ajoute ici. Pages hors liste, ouvertes par une icône
+   d'en-tête : Ledger (Spending) et Budget (Spending et
+   Follow-up), rattachées à une entrée par related. Une page liée à une capacité de
    l'environnement n'apparaît qu'avec elle (la route est
    aussi refusée sans elle : meta.capability).
 ========================= */
@@ -41,10 +43,9 @@ export function isNavigationItemActive(
 
 export const NAVIGATION_ITEMS: NavigationItem[] = [
   { path: "/spending", label: "Spending", icon: "creditcard", related: ["/allocation", "/ledger"] },
-  { path: "/follow-up", label: "Follow-up", icon: "followup" },
+  { path: "/follow-up", label: "Follow-up", icon: "followup", related: ["/budget"] },
   { path: "/documentsArchive", label: "Documents", icon: "bookshelf" },
   { path: "/portfolio", label: "Portfolio", icon: "portfolio" },
-  { path: "/budget", label: "Budget", icon: "budget" },
   { path: "/indicators", label: "Indicators", icon: "indicators" },
   { path: "/wine-cellar", label: "Wine cellar", icon: "wine", capability: "wineCellar" },
   { path: "/master-data", label: "Master data", icon: "process", groupStart: true },
