@@ -96,12 +96,12 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
    modifications envoyées au Mac par événements, données
    relues dès que le backend republie leur export.
    - Parties : existantes, à identifier, types de partie ;
+   - Cards : cartes bancaires proposées à l'iPhone, avec la
+     capacité mobileExpense seulement ;
    - Spending : catégories, tags, types d'opération et
      règles d'allocation (libellés des parties) ;
    - Documents : dossiers Tourism et Various, tags ;
    - Portfolio : titres du portefeuille ;
-   - Cards : cartes bancaires proposées à l'iPhone, avec la
-     capacité mobileExpense seulement ;
    - Wine cellar : données de base de la cave, avec la
      capacité wineCellar seulement.
 ========================= */
@@ -119,12 +119,12 @@ const sectionOptions: {
   label: string;
 }[] = [
   { value: "parties", label: "Parties" },
-  { value: "spending", label: "Spending" },
-  { value: "documents", label: "Documents" },
-  { value: "portfolio", label: "Portfolio" },
   ...(hasCapability("mobileExpense")
     ? [{ value: "cards" as const, label: "Cards" }]
     : []),
+  { value: "spending", label: "Spending" },
+  { value: "documents", label: "Documents" },
+  { value: "portfolio", label: "Portfolio" },
   ...(hasCapability("wineCellar")
     ? [{ value: "wine" as const, label: "Wine cellar" }]
     : []),
