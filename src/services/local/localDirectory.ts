@@ -20,6 +20,13 @@ const HANDLE_NAME = "local-root";
 /* Clé d'avant le contrat, migrée sous ht:hometools:. */
 const LEGACY_KEY = HANDLE_NAME;
 
+/*
+  Chrome peut ne jamais répondre à queryPermission (accès au
+  dossier resté coincé) : au-delà de ce délai, le démarrage
+  continue sans dossier, qui est alors redemandé.
+*/
+const PERMISSION_TIMEOUT_MS = 5000;
+
 /* =========================================================
    Accessors
 ========================================================= */
@@ -62,6 +69,30 @@ export async function pickLocalDirectory(): Promise<FileSystemDirectoryHandle> {
    Restore directory at startup
 ========================================================= */
 
+function queryPermissionWithTimeout(
+  handle: FileSystemDirectoryHandle
+): Promise<string> {
+
+  return new Promise((resolve, reject) => {
+
+    const timer = window.setTimeout(
+      () => reject(new Error(
+        `Folder permission did not answer within ${PERMISSION_TIMEOUT_MS / 1000} s: choose the folder again`
+      )),
+      PERMISSION_TIMEOUT_MS
+    );
+
+    (handle as any).queryPermission({ mode: "readwrite" })
+      .then(
+        (permission: string) => resolve(permission),
+        (err: unknown) => reject(err)
+      )
+      .finally(() => window.clearTimeout(timer));
+
+  });
+
+}
+
 export async function restoreLocalDirectory(): Promise<FileSystemDirectoryHandle | null> {
 
   const key = envStorageKey(HANDLE_NAME);
@@ -81,9 +112,7 @@ export async function restoreLocalDirectory(): Promise<FileSystemDirectoryHandle
   if (!handle) return null;
 
   const permission =
-    await (handle as any).queryPermission({
-      mode: "readwrite",
-    });
+    await queryPermissionWithTimeout(handle);
 
   if (permission === "granted") {
 
