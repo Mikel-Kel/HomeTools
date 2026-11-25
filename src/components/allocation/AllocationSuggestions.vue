@@ -17,14 +17,16 @@ import type { AllocationSuggestion } from "@/contracts/spending";
    premier. Placées sous le commentaire, pour ne pas déplacer
    le formulaire : la source de la suggestion appliquée,
    discrète et entre parenthèses, puis « Other suggestions »,
-   les autres candidats ; un appui signale apply.
+   les autres candidats ; un appui signale apply. Aucune
+   suggestion appliquée (« Same as last » choisi) : pas de
+   source, tous les candidats proposés.
 ========================= */
 
 const props =
   withDefaults(
     defineProps<{
       suggestions: AllocationSuggestion[];
-      applied: AllocationSuggestion;
+      applied: AllocationSuggestion | null;
 
       /* Date de valeur : date d'allocation affichée seulement si elle diffère. */
       valueDate: string;
@@ -155,6 +157,7 @@ function suggestionDetail(
 
 <template>
   <p
+    v-if="applied"
     class="suggestion-source"
     :title="sourceTitle(applied)"
   >

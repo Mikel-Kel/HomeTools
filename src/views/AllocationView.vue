@@ -16,6 +16,7 @@ import DateChip from "@/components/DateChip.vue";
 import RememberRule from "@/components/allocation/RememberRule.vue";
 import AllocationSuggestions from "@/components/allocation/AllocationSuggestions.vue";
 import AllocationLines from "@/components/allocation/AllocationLines.vue";
+import LastAllocationOption from "@/components/allocation/LastAllocationOption.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 
@@ -25,6 +26,10 @@ import { useMovementLabel } from "@/composables/spending/useMovementLabel";
 import { useAllocation } from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
+import {
+  useLastAllocation,
+  type LastAllocation,
+} from "@/composables/allocations/useLastAllocation";
 import { useAmountInput } from "@/composables/useAmountInput";
 import { useRemoteJson } from "@/composables/useRemoteJson";
 
@@ -518,6 +523,9 @@ onMounted(async () => {
 
   await allocation.value.loadDraft();
 
+  /* En arrière-plan : la page n'attend pas la lecture des drafts. */
+  void lastAllocation.load(record.value.id);
+
   if (
     allocation.value.allocations.value.length === 0 &&
     record.value
@@ -703,10 +711,61 @@ function applySuggestion(
 
 const showSuggestions =
   computed(() =>
-    appliedSuggestion.value !== null &&
+    (recordSafe.value.suggestions?.length ?? 0) > 0 &&
     allocations.value.length === 0 &&
     editingAllocationId.value === null
   );
+
+/* =========================
+   Same as last
+
+   Dernière allocation saisie, tirée des drafts du stockage
+   (useLastAllocation) : catégorie, sous-catégorie, tag et
+   commentaire tel quel ; montant, partie et date
+   d'allocation inchangés. Proposée, comme les suggestions,
+   tant qu'aucune allocation n'est enregistrée, et seulement
+   si sa catégorie convient au mouvement (nature, sous-
+   catégorie active). Choisie, elle remplace la suggestion
+   appliquée, qui revient dans la liste.
+========================= */
+
+const lastAllocation =
+  useLastAllocation();
+
+const lastOption =
+  computed(() => {
+    const last =
+      lastAllocation.last.value;
+
+    if (
+      !last ||
+      allocations.value.length > 0 ||
+      editingAllocationId.value !== null ||
+      !categories.value.some(category => category.id === last.categoryID) ||
+      !categoriesStore
+        .getActiveSubcategories(last.categoryID)
+        .some(subCategory => subCategory.id === last.subCategoryID)
+    ) {
+      return null;
+    }
+
+    return last;
+  });
+
+function applyLast(
+  last: LastAllocation
+) {
+  if (!allocation.value) {
+    return;
+  }
+
+  allocation.value.categoryID.value = last.categoryID;
+  allocation.value.subCategoryID.value = last.subCategoryID;
+  allocation.value.allocatedTagID.value = last.allocatedTagID;
+  allocation.value.comment.value = last.comment;
+
+  appliedSuggestion.value = null;
+}
 
 /* =========================
    Remember
@@ -1129,12 +1188,19 @@ function onEditAllocation(
       />
 
       <AllocationSuggestions
-        v-if="showSuggestions && appliedSuggestion"
+        v-if="showSuggestions"
         :suggestions="recordSafe.suggestions"
         :applied="appliedSuggestion"
         :value-date="recordSafe.date"
         :disabled="isLocked"
         @apply="applySuggestion"
+      />
+
+      <LastAllocationOption
+        v-if="lastOption"
+        :last="lastOption"
+        :disabled="isLocked"
+        @apply="applyLast"
       />
     </section>
 
