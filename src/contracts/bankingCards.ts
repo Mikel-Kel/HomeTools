@@ -20,9 +20,11 @@ import {
        "accounts": [ { "accountId": 3, "label": "Example Card",
                        "kind": "credit", "currency": "CHF",
                        "active": true } ],
+       "owners": [ "alex" ],
        "cards": [ { "cardId": 9, "internalId": "**0000",
                     "holder": "Alex", "accountId": 3,
                     "currency": "EUR", "mobileLabel": "Card EUR",
+                    "mobileOwner": "alex",
                     "usage": { "movements12m": 120,
                                "lastMovement": "2026-11-28" } } ] }
 
@@ -30,8 +32,15 @@ import {
    d'abord (ordre conservé). currency null : devise du compte ;
    mobileLabel null : carte non proposée sur l'iPhone.
 
+   Cartes nominatives (contrat 0.3, multi-environnements
+   1.8.0) : owners = propriétaires des appareils de
+   l'environnement, seuls choix possibles (absent = liste
+   vide) ; mobileOwner = propriétaire de la carte, qui n'est
+   proposée qu'à ses appareils (absent = null). Un
+   propriétaire retiré d'owners reste porté par ses cartes.
+
    Saisie par événement PWA-MEX_<AAAAMMJJHHMMSS>_C<cardId>.json,
-   MOBILE_CARD_SAVED ; les trois champs sont toujours envoyés.
+   MOBILE_CARD_SAVED ; les quatre champs sont toujours envoyés.
 
    Devises acceptées par le Mac : CHF et celles de
    settings/exchangeRates.json (clés de rates).
@@ -70,6 +79,7 @@ export interface BankingCard {
   accountId: number | null;
   currency: string | null;
   mobileLabel: string | null;
+  mobileOwner: string | null;
   movements12m: number;
   lastMovement: string | null;
 }
@@ -77,6 +87,7 @@ export interface BankingCard {
 export interface BankingCards {
   generatedAt: string;
   accounts: BankingAccount[];
+  owners: string[];
   cards: BankingCard[];
 }
 
@@ -86,6 +97,9 @@ export interface BankingCardSave {
   accountId: number | null;
   currency: string | null;
   mobileLabel: string | null;
+
+  /* null : aucun propriétaire. */
+  mobileOwner: string | null;
 }
 
 function objects(
@@ -135,6 +149,14 @@ export function readBankingCards(
         active: asBoolean(account.active),
       })),
 
+    owners: [
+      ...new Set(
+        asArray(file.owners)
+          .map(owner => asString(owner).trim())
+          .filter(Boolean)
+      ),
+    ],
+
     cards: objects(file.cards)
       .map(card => {
         const usage =
@@ -147,6 +169,7 @@ export function readBankingCards(
           accountId: asNullableNumber(card.accountId),
           currency: nullableString(card.currency),
           mobileLabel: nullableString(card.mobileLabel),
+          mobileOwner: nullableString(card.mobileOwner),
           movements12m: asNumber(usage?.movements12m),
           lastMovement: nullableString(usage?.lastMovement),
         };

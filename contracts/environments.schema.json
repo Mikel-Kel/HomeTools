@@ -24,7 +24,8 @@
           "env": { "$ref": "#/$defs/envId" },
           "device": { "type": "string", "minLength": 1 },
           "kind": { "enum": ["mac", "ios"] },
-          "isServer": { "type": "boolean", "default": false }
+          "isServer": { "type": "boolean", "default": false },
+          "owner": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,29}$" }
         }
       }
     },

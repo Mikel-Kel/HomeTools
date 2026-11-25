@@ -25,8 +25,9 @@ import { formatDate } from "@/utils/dateFormat";
 /* =========================
    Section « Cards » de la page Master data
 
-   Cartes bancaires (capacité mobileExpense) : compte, devise
-   et libellé mobile, qui propose la carte sur l'iPhone ;
+   Cartes bancaires (capacité mobileExpense) : compte, devise,
+   libellé mobile, qui propose la carte sur l'iPhone, et
+   propriétaire, dont seuls les iPhone la proposent ;
    saisie par CardSheet. Ordre publié par le Mac (dernier
    mouvement le plus récent d'abord) ; les cartes sans
    mouvement depuis 12 mois sont repliées sous « Older
@@ -178,6 +179,7 @@ async function closeSheet() {
             <th>Account</th>
             <th>Currency</th>
             <th>iPhone label</th>
+            <th>Owner</th>
             <th class="number">Movements (12 m)</th>
             <th>Last movement</th>
             <th />
@@ -206,6 +208,9 @@ async function closeSheet() {
               </span>
             </td>
             <td>{{ card.mobileLabel ?? "" }}</td>
+            <td :class="{ missing: card.mobileOwner && !data.owners.includes(card.mobileOwner) }">
+              {{ card.mobileOwner ?? "" }}
+            </td>
             <td class="number">{{ card.movements12m }}</td>
             <td>{{ formatDate(card.lastMovement) }}</td>
             <td class="status">
@@ -234,6 +239,7 @@ async function closeSheet() {
     :card="editing"
     :cards="data.cards"
     :accounts="data.accounts"
+    :owners="data.owners"
     :currencies="currencies"
     @close="closeSheet"
   />

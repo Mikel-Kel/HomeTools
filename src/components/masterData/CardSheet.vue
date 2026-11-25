@@ -38,6 +38,10 @@ import { waitingElsewhereMessage } from "@/services/events/requestMessages";
    - Libellé mobile : 30 caractères au plus, unique sans tenir
      compte de la casse ; renseigné, il propose la carte sur
      l'iPhone et exige un compte ; vide, il la retire.
+   - Propriétaire : « None » ou l'un des owners publiés ; la
+     carte n'est proposée qu'aux iPhone de ce propriétaire.
+     Un propriétaire absent d'owners reste affiché et choisi
+     tant qu'on ne le change pas (le Mac l'accepte inchangé).
 ========================= */
 
 const props = defineProps<{
@@ -47,6 +51,9 @@ const props = defineProps<{
   cards: BankingCard[];
 
   accounts: BankingAccount[];
+
+  /* Propriétaires des appareils de l'environnement. */
+  owners: string[];
 
   /* Devises acceptées par le Mac. */
   currencies: string[];
@@ -63,6 +70,7 @@ const original = {
   accountId: props.card.accountId,
   currency: props.card.currency,
   mobileLabel: props.card.mobileLabel ?? "",
+  mobileOwner: props.card.mobileOwner,
 };
 
 const accountId =
@@ -73,6 +81,15 @@ const currency =
 
 const mobileLabel =
   ref(original.mobileLabel);
+
+const mobileOwner =
+  ref<string | null>(original.mobileOwner);
+
+/* Propriétaire actuel absent d'owners : gardé dans la liste, marqué. */
+const unknownOwner =
+  original.mobileOwner && !props.owners.includes(original.mobileOwner)
+    ? original.mobileOwner
+    : null;
 
 const trimmedLabel =
   computed(() =>
@@ -106,7 +123,8 @@ const changed =
   computed(() =>
     accountId.value !== original.accountId ||
     currency.value !== original.currency ||
-    trimmedLabel.value !== original.mobileLabel
+    trimmedLabel.value !== original.mobileLabel ||
+    mobileOwner.value !== original.mobileOwner
   );
 
 const formError =
@@ -153,6 +171,7 @@ const payload =
     accountId: accountId.value,
     currency: currency.value,
     mobileLabel: trimmedLabel.value || null,
+    mobileOwner: mobileOwner.value,
   }));
 
 const saveRequest =
@@ -279,21 +298,64 @@ const subtitle =
       </select>
     </label>
 
-    <label class="field">
-      <h3>iPhone label</h3>
+    <div class="columns">
+      <label class="field">
+        <h3>iPhone label</h3>
 
-      <input
-        v-model="mobileLabel"
-        type="text"
-        :maxlength="MOBILE_LABEL_MAX + 10"
-        placeholder="Not offered on iPhone"
-        :disabled="saveRequest.inProgress.value"
-        @keydown.enter="save"
-      />
-    </label>
+        <input
+          v-model="mobileLabel"
+          type="text"
+          :maxlength="MOBILE_LABEL_MAX + 10"
+          placeholder="Not offered on iPhone"
+          :disabled="saveRequest.inProgress.value"
+          @keydown.enter="save"
+        />
+      </label>
+
+      <label class="field">
+        <h3>Owner</h3>
+
+        <select
+          v-model="mobileOwner"
+          :disabled="saveRequest.inProgress.value"
+        >
+          <option :value="null">None</option>
+
+          <option
+            v-if="unknownOwner"
+            :value="unknownOwner"
+          >
+            {{ unknownOwner }} (not a device owner)
+          </option>
+
+          <option
+            v-for="owner in owners"
+            :key="owner"
+            :value="owner"
+          >
+            {{ owner }}
+          </option>
+        </select>
+      </label>
+    </div>
 
     <p class="note">
       A label offers the card on the iPhone; an empty label removes it (entries already made are kept).
+      The card is offered only on the iPhones of its owner.
     </p>
   </EditSheet>
 </template>
+
+<style scoped>
+.columns {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 0.75rem;
+}
+
+.columns input,
+.columns select {
+  width: 100%;
+  min-width: 0;
+}
+</style>

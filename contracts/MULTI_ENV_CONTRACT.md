@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.7.0** — 2026-11-25
+**Version : 1.8.0** — 2026-11-25
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -26,6 +26,7 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 |---|---|
 | **Environnement** (`envId`) | Univers de production isolé : données, BdD, buckets, dossiers, événements, diagnostics. Format : `^[a-z][a-z0-9-]{1,31}$`. Valeurs v1 : `hometools`, `fantoine`. |
 | **Appareil** | Machine membre du tailnet, identifiée par son IP Tailscale (`100.x.y.z`). Un appareil appartient à exactement un environnement. |
+| **Propriétaire** (`owner`) | Personne à qui appartient un appareil. Identifiant stable, propre à l'environnement, format `^[a-z][a-z0-9-]{1,29}$`. Plusieurs appareils peuvent avoir le même propriétaire ; il ne change pas quand un appareil est remplacé. |
 | **Serveur** | L'appareil qui héberge proxy, BdD et scripts (airmike). |
 | **Profil** | Description d'un environnement dans `environments.json` (§3). |
 | **Capacité** | Droit fonctionnel booléen attaché à un environnement (§3.4). |
@@ -61,7 +62,7 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 {
   "contractVersion": "1.0.0",
   "identities": {
-    "<IP Tailscale>": { "env": "<envId>", "device": "<nom lisible>", "kind": "mac|ios", "isServer": false }
+    "<IP Tailscale>": { "env": "<envId>", "device": "<nom lisible>", "kind": "mac|ios", "isServer": false, "owner": "<propriétaire>" }
   },
   "environments": {
     "<envId>": {
@@ -86,6 +87,7 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 | Champ | Règle |
 |---|---|
 | `identities` | Clé = IP Tailscale IPv4. `env` doit exister dans `environments`. Exactement **un** appareil a `isServer: true`. |
+| `identities.<IP>.owner` | Facultatif. Propriétaire de l'appareil (§1). Sert à proposer à un appareil ce qui appartient à son propriétaire (ex. les cartes nominatives de la saisie mobile, contrat du backend `docs/mobile-expense-contract.md`). Les propriétaires d'un environnement sont les valeurs de `owner` de ses appareils : il n'existe pas de liste séparée. Ce n'est pas un droit d'accès : tous les appareils d'un environnement lisent les mêmes données. |
 | `enabled` | `false` : l'environnement est refusé partout (proxy et scripts), sans suppression de données. |
 | `baseDir` | Racine des fichiers de l'environnement : `logs/`, `diagnostics/`, `AppParameters.json`, etc. Pour `hometools` : valeur actuelle, inchangée. |
 | `appParameters` | Relatif à `baseDir`. Contenu métier inchangé par ce contrat. |
@@ -136,14 +138,16 @@ Premier appel de la PWA, avant toute autre requête.
   "contractVersion": "1.0.0",
   "env": "hometools",
   "label": "HomeTools",
-  "device": "iPad Michel",
+  "device": "iPhone Alex",
   "kind": "ios",
   "isServer": false,
+  "owner": "alex",
   "capabilities": { "localArchive": true, "card24": true, "wineCellar": true, "mobileExpense": true }
 }
 ```
 
 - `capabilities` contient **toutes** les capacités connues du contrat, avec leur valeur explicite.
+- `owner` : propriétaire de l'appareil appelant (§3.3), `null` s'il n'est pas déclaré. Toujours présent.
 - Ne renvoie jamais de chemins, buckets, schémas ou autres identifiants internes.
 
 ### 5.3 Endpoints existants
@@ -252,7 +256,7 @@ Script bibliothèque unique, chargé par `load script`. Handlers minimaux :
 
 - **Un seul protocole.** PWA et WebApp passent toutes deux par l'URL `ts.net` et le proxy, y compris la WebApp sur le serveur. Aucun accès direct à `localhost`.
 - **Démarrage.** `/api/whoami` est appelé en premier. En cas d'erreur, un écran bloquant affiche le code et le message (§5.4).
-- **Store d'environnement.** Il contient `env`, `label`, `device`, `kind`, `isServer` et `capabilities`. Le libellé de l'environnement est visible en permanence dans l'interface.
+- **Store d'environnement.** Il contient `env`, `label`, `device`, `kind`, `isServer`, `owner` et `capabilities`. Le libellé de l'environnement est visible en permanence dans l'interface.
 - **Aucune notion d'environnement dans les requêtes** (I1). Les URLs, clés et noms de fichiers restent relatifs.
 - **Stockage navigateur.** Toutes les clés localStorage et IndexedDB sont préfixées `ht:<envId>:`. Migration unique des clés existantes vers `ht:hometools:` au premier démarrage sous contrat 1.x.
 - **Coffre de secrets.** Un coffre par environnement (clé de stockage préfixée) ; chiffrement inchangé.
@@ -295,3 +299,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.6.0 | 2026-11-14 | §3.4 : capacité `wineCellar` (cave à vins), `false` par défaut ; schéma et exemples complétés. Évolution MINOR : nouvelle capacité avec défaut `false`, aucun comportement existant ne change |
 | 1.6.1 | 2026-11-19 | §6 : toutes les clés du magasin sont en NFC (anciennes clés NFD de `hometools` renommées le 2026-11-19), signalées par la réconciliation sinon. Publié en PATCH : aucun changement d'interface, le proxy essaie toujours les deux formes |
 | 1.7.0 | 2026-11-25 | §3.4 : capacité `mobileExpense` (saisie des dépenses depuis l'iPhone), `false` par défaut ; schéma et exemples complétés. Évolution MINOR : nouvelle capacité avec défaut `false`, aucun comportement existant ne change |
+| 1.8.0 | 2026-11-25 | §1, §3.2, §3.3 : `owner` facultatif pour chaque appareil de `identities` (propriétaire, identifiant stable) ; §5.2 et §10 : `owner` renvoyé par `/api/whoami` (`null` s'il est absent) et gardé dans le store d'environnement ; schéma et exemples complétés. Évolution MINOR : nouveau champ facultatif, aucun comportement existant ne change |

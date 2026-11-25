@@ -2,7 +2,8 @@
   "contractVersion": "1.2.0",
   "identities": {
     "100.64.0.1":     { "env": "hometools", "device": "airmike",       "kind": "mac", "isServer": true },
-    "100.64.0.2":     { "env": "hometools", "device": "iPad Michel",   "kind": "ios" }
+    "100.64.0.2":     { "env": "hometools", "device": "iPad Michel",   "kind": "ios" },
+    "100.64.0.3":     { "env": "hometools", "device": "iPhone Alex",   "kind": "ios", "owner": "alex" }
   },
   "environments": {
     "hometools": {
