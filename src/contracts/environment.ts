@@ -16,7 +16,7 @@ import {
 
 /* Version du contrat implémentée par la PWA. */
 export const CONTRACT_VERSION =
-  "1.6.0";
+  "1.7.0";
 
 export const WHOAMI_PATH =
   "/api/whoami";
@@ -47,6 +47,9 @@ export interface Capabilities {
 
   /* Cave à vins (depuis 1.6.0). */
   wineCellar: boolean;
+
+  /* Saisie des dépenses depuis l'iPhone (depuis 1.7.0). */
+  mobileExpense: boolean;
 }
 
 export interface EnvironmentInfo {
@@ -134,6 +137,9 @@ export function readWhoami(
 
       wineCellar:
         asBoolean(capabilities?.wineCellar),
+
+      mobileExpense:
+        asBoolean(capabilities?.mobileExpense),
     },
   };
 }

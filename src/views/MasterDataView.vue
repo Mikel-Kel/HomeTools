@@ -12,6 +12,7 @@ import SpendingSection from "@/components/masterData/SpendingSection.vue";
 import DocumentsSection from "@/components/masterData/DocumentsSection.vue";
 import WineSection from "@/components/masterData/WineSection.vue";
 import PortfolioSection from "@/components/masterData/PortfolioSection.vue";
+import CardsSection from "@/components/masterData/CardsSection.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useCategories } from "@/composables/useCategories";
@@ -68,6 +69,16 @@ import {
   readPortfolio,
 } from "@/contracts/portfolio";
 
+import {
+  BANKING_CARDS_FILE,
+  BANKING_CARDS_FOLDER,
+  BASE_CURRENCY,
+  EXCHANGE_RATES_FILE,
+  EXCHANGE_RATES_FOLDER,
+  readBankingCards,
+  readExchangeCurrencies,
+} from "@/contracts/bankingCards";
+
 import { hasCapability } from "@/services/environment/environmentState";
 
 import {
@@ -89,6 +100,8 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
      règles d'allocation (libellés des parties) ;
    - Documents : dossiers Tourism et Various, tags ;
    - Portfolio : titres du portefeuille ;
+   - Cards : cartes bancaires proposées à l'iPhone, avec la
+     capacité mobileExpense seulement ;
    - Wine cellar : données de base de la cave, avec la
      capacité wineCellar seulement.
 ========================= */
@@ -98,6 +111,7 @@ type MasterDataSection =
   | "spending"
   | "documents"
   | "portfolio"
+  | "cards"
   | "wine";
 
 const sectionOptions: {
@@ -108,6 +122,9 @@ const sectionOptions: {
   { value: "spending", label: "Spending" },
   { value: "documents", label: "Documents" },
   { value: "portfolio", label: "Portfolio" },
+  ...(hasCapability("mobileExpense")
+    ? [{ value: "cards" as const, label: "Cards" }]
+    : []),
   ...(hasCapability("wineCellar")
     ? [{ value: "wine" as const, label: "Wine cellar" }]
     : []),
@@ -332,6 +349,44 @@ const portfolioFile =
     read: readPortfolio,
   });
 
+/*
+  Cartes (section « Cards ») et devises acceptées par le Mac :
+  chargées à la première ouverture de la section. Fichier
+  des cours absent : CHF seulement.
+*/
+const cardsWanted =
+  ref(false);
+
+watch(
+  section,
+
+  value => {
+    if (value === "cards") {
+      cardsWanted.value = true;
+    }
+  },
+
+  {
+    immediate: true,
+  }
+);
+
+const cardsFile =
+  useRemoteJson({
+    folder: BANKING_CARDS_FOLDER,
+    file: () => (cardsWanted.value ? BANKING_CARDS_FILE : null),
+    read: readBankingCards,
+  });
+
+const ratesFile =
+  useRemoteJson({
+    folder: EXCHANGE_RATES_FOLDER,
+    file: () => (cardsWanted.value ? EXCHANGE_RATES_FILE : null),
+    read: readExchangeCurrencies,
+    optional: true,
+    watchRemote: false,
+  });
+
 const tagsFile =
   useRemoteJson({
     folder: ALLOCATION_TAGS_FOLDER,
@@ -413,7 +468,9 @@ const current =
             ? cellarFile
             : section.value === "portfolio"
               ? portfolioFile
-              : partiesFile
+              : section.value === "cards"
+                ? cardsFile
+                : partiesFile
   );
 </script>
 
@@ -472,6 +529,12 @@ const current =
       <PortfolioSection
         v-else-if="section === 'portfolio' && portfolioFile.data.value"
         :portfolio="portfolioFile.data.value"
+      />
+
+      <CardsSection
+        v-else-if="section === 'cards' && cardsFile.data.value"
+        :data="cardsFile.data.value"
+        :currencies="ratesFile.data.value ?? [BASE_CURRENCY]"
       />
 
       <WineSection

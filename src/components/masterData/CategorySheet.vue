@@ -22,7 +22,10 @@ import type {
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
-import { deviceName } from "@/services/environment/environmentState";
+import {
+  deviceName,
+  hasCapability,
+} from "@/services/environment/environmentState";
 
 import {
   AGGREGATES_REBUILT_BY_SERVER,
@@ -43,9 +46,14 @@ import {
      events/PWA-CAT_<AAAAMMJJHHMMSS>_S<SubCategoryID|NEW>.json
        { "eventType": "SUBCATEGORY_SAVED",
          "payload": { "subCategoryId" | null, "categoryId",
-                      "label", "status", "source" } }
+                      "label", "status", "mobileEntry"?,
+                      "source" } }
    puis se ferme une fois la demande traitée (categories.json
    republié).
+
+   mobileEntry (« Offered on iPhone ») n'est envoyé qu'avec la
+   capacité mobileExpense : absent, le Mac garde la valeur
+   (../Backend/docs/mobile-expense-contract.md, § 3.3).
 ========================= */
 
 const props = defineProps<
@@ -99,6 +107,10 @@ const isCategory =
 const isNew =
   props.item === null;
 
+const mobileEnabled =
+  props.kind === "subcategory" &&
+  hasCapability("mobileExpense");
+
 /* Longueurs des colonnes MySQL. */
 const maxLength =
   isCategory ? 255 : 50;
@@ -144,6 +156,11 @@ const original = {
     props.kind === "subcategory" && props.item
       ? props.item.status
       : "A" as SubCategoryStatus,
+
+  mobileEntry:
+    props.kind === "subcategory" && props.item
+      ? props.item.mobileEntry
+      : false,
 };
 
 const label =
@@ -158,6 +175,9 @@ const displayScope =
 const status =
   ref<SubCategoryStatus>(original.status);
 
+const mobileEntry =
+  ref(original.mobileEntry);
+
 const trimmedLabel =
   computed(() =>
     label.value.trim().replace(/\s+/g, " ")
@@ -168,7 +188,8 @@ const changed =
     trimmedLabel.value !== original.label ||
     nature.value !== original.nature ||
     displayScope.value !== original.displayScope ||
-    status.value !== original.status
+    status.value !== original.status ||
+    mobileEntry.value !== original.mobileEntry
   );
 
 /*
@@ -265,6 +286,7 @@ async function save() {
             categoryId: props.category.id,
             label: trimmedLabel.value,
             status: status.value,
+            ...(mobileEnabled ? { mobileEntry: mobileEntry.value } : {}),
             source: deviceName(),
           },
         };
@@ -457,6 +479,28 @@ onBeforeUnmount(() => {
       </p>
     </template>
 
+    <div
+      v-if="mobileEnabled"
+      class="field"
+    >
+      <label class="check">
+        <input
+          v-model="mobileEntry"
+          type="checkbox"
+          :disabled="saveRequest.inProgress.value"
+        />
+
+        <h3>Offered on iPhone</h3>
+      </label>
+
+      <p
+        v-if="mobileEntry && status === 'C'"
+        class="note"
+      >
+        Closed: the iPhone offers only active sub-categories.
+      </p>
+    </div>
+
     <!-- Actions -->
 
     <footer class="sheet-footer">
@@ -595,6 +639,20 @@ h3 {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  cursor: pointer;
+}
+
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
 }
 
 .note {

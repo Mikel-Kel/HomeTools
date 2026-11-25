@@ -192,6 +192,14 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   le bon sens, 1600 px et 1 Mo au plus), envoyée en base64 dans `WINE_PHOTO_SAVED` / `WINE_PHOTO_DELETED` (fiche) ou
   dans `photo` de `WINE_SAVED` (création, héritage par `copyFrom`) ; nouvelle image = nouvelle clé.
 
+- Saisie des dépenses depuis l'iPhone (app séparée, capacité `mobileExpense`, contrat multi-environnements 1.7.0) :
+  contrat `../Backend/docs/mobile-expense-contract.md`. HomeTools ne saisit rien ; il gère seulement, avec la capacité,
+  la case « Offered on iPhone » des sous-catégories (`mobileEntry` de `categories.json`, envoyé dans `SUBCATEGORY_SAVED`
+  seulement avec la capacité, marque « iPhone » dans la liste) et la section « Cards » de Master data
+  (`CardsSection.vue`, `CardSheet.vue`, lecteur `src/contracts/bankingCards.ts`, export `settings/bankingCards.json`,
+  devises de `exchangeRates.json`, événement `PWA-MEX_…_C<cardId>.json` `MOBILE_CARD_SAVED`). Lot M3 à venir : source
+  `mobile` dans Allocation.
+
 - Portfolio (page « Portfolio », `PortfolioView.vue`, onglets Positions et Transactions ; titres dans
   Master data, section « Portfolio », `PortfolioSection.vue` et `SecuritySheet.vue`, avec leurs types, obligatoires,
   `SecurityTypesPanel.vue` et `SecurityTypeSheet.vue`, événements `…_Y<id|NEW>.json`) : contrat

@@ -17,6 +17,8 @@ import type {
 } from "@/contracts/categories";
 import { usePersistentRef } from "@/composables/usePersistentRef";
 
+import { hasCapability } from "@/services/environment/environmentState";
+
 /* =========================
    Section « Categories » de la page Master data
 
@@ -25,7 +27,9 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
    clôturées masquées par défaut. Création et modification
    par fiche (CategorySheet), ordre par OrderEditor. Le
    titre du panneau des catégories (slot « title ») est
-   fourni par la section.
+   fourni par la section. Avec la capacité mobileExpense,
+   marque « iPhone » sur les sous-catégories proposées sur
+   l'iPhone.
 ========================= */
 
 const props = defineProps<{
@@ -37,6 +41,9 @@ const NATURE_LABELS: Record<CategoryNature, string> = {
   E: "Expense",
   "-": "Neutral",
 };
+
+const mobileEnabled =
+  hasCapability("mobileExpense");
 
 const selectedId =
   usePersistentRef<number | null>("masterData.categories.selectedId", null);
@@ -262,6 +269,13 @@ function activeCount(
             <span class="item-label">{{ sub.label }}</span>
 
             <span class="item-meta">
+              <StatusPill
+                v-if="mobileEnabled && sub.mobileEntry"
+                tone="primary"
+              >
+                iPhone
+              </StatusPill>
+
               <StatusPill
                 v-if="sub.status === 'C'"
                 dashed
