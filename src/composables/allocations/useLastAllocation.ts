@@ -13,11 +13,14 @@ import {
 } from "@/contracts/read";
 
 /* =========================
-   Dernière allocation saisie (« Same as last »)
+   Dernières allocations saisies (« Same as last »)
 
-   Tirée du stockage, quel que soit l'appareil : le draft le
-   plus récent de allocations/drafts/ (savedAt écrit par la
-   PWA), hors celui du mouvement ouvert, et sa dernière ligne.
+   Tirées du stockage, quel que soit l'appareil : les lignes
+   des drafts de allocations/drafts/ (savedAt écrit par la
+   PWA), hors celui du mouvement ouvert, de la plus récente à
+   la plus ancienne (drafts par savedAt, lignes d'un draft de
+   la dernière à la première). Une ligne identique à une plus
+   récente pour les caractéristiques reprises est écartée.
    Les drafts disparaissent à la release : rien à proposer
    ensuite jusqu'à la prochaine allocation.
 
@@ -36,43 +39,64 @@ export interface LastAllocation {
   comment: string;
 }
 
-/* Dernière ligne d'un draft, ou null s'il n'en a pas de complète. */
-function readLastLine(
+/* Lignes complètes d'un draft, de la dernière à la première. */
+function readLines(
   raw: unknown
-): LastAllocation | null {
+): LastAllocation[] {
   const draft =
     asObject(raw);
 
   if (!draft) {
-    return null;
+    return [];
   }
 
-  const line =
-    asObject(asArray(draft.allocations).at(-1));
+  const spendingId =
+    asString(draft.spendingId);
 
-  const categoryID =
-    asNullableNumber(line?.categoryID);
+  const savedAt =
+    asString(draft.savedAt);
 
-  const subCategoryID =
-    asNullableNumber(line?.subCategoryID);
+  return asArray(draft.allocations)
+    .map(asObject)
+    .reverse()
+    .flatMap(line => {
+      const categoryID =
+        asNullableNumber(line?.categoryID);
 
-  if (!line || categoryID === null || subCategoryID === null) {
-    return null;
-  }
+      const subCategoryID =
+        asNullableNumber(line?.subCategoryID);
 
-  return {
-    spendingId: asString(draft.spendingId),
-    savedAt: asString(draft.savedAt),
-    categoryID,
-    subCategoryID,
-    allocatedTagID: asNullableNumber(line.allocatedTagID) || null,
-    comment: asString(line.comment),
-  };
+      if (!line || categoryID === null || subCategoryID === null) {
+        return [];
+      }
+
+      return [{
+        spendingId,
+        savedAt,
+        categoryID,
+        subCategoryID,
+        allocatedTagID: asNullableNumber(line.allocatedTagID) || null,
+        comment: asString(line.comment),
+      }];
+    });
+}
+
+/* Clé des caractéristiques reprises. */
+function characteristicsKey(
+  line: LastAllocation
+): string {
+  return JSON.stringify([
+    line.categoryID,
+    line.subCategoryID,
+    line.allocatedTagID,
+    line.comment,
+  ]);
 }
 
 export function useLastAllocation() {
-  const last =
-    ref<LastAllocation | null>(null);
+  /* Allocations distinctes, de la plus récente à la plus ancienne. */
+  const recent =
+    ref<LastAllocation[]>([]);
 
   /* Lecture de tous les drafts sauf celui du mouvement ouvert ; un draft illisible est ignoré. */
   async function load(
@@ -87,32 +111,43 @@ export function useLastAllocation() {
               file.name !== `${currentSpendingId}.json`
           );
 
-      const lines =
+      const drafts =
         await Promise.all(
           files.map(file =>
             loadJSONFromFolder(DRAFTS_FOLDER, file.name)
-              .then(readLastLine)
-              .catch(() => null)
+              .then(readLines)
+              .catch(() => [])
           )
         );
 
-      last.value =
-        lines
-          .filter((line): line is LastAllocation => line !== null && !!line.savedAt)
-          .reduce<LastAllocation | null>(
-            (newest, line) =>
-              !newest || line.savedAt > newest.savedAt ? line : newest,
-            null
-          );
+      const seen =
+        new Set<string>();
+
+      recent.value =
+        drafts
+          .filter(lines => lines.length > 0 && !!lines[0].savedAt)
+          .sort((a, b) => b[0].savedAt.localeCompare(a[0].savedAt))
+          .flat()
+          .filter(line => {
+            const key =
+              characteristicsKey(line);
+
+            if (seen.has(key)) {
+              return false;
+            }
+
+            seen.add(key);
+            return true;
+          });
 
     } catch (err) {
-      console.warn("Unable to read the last allocation", err);
-      last.value = null;
+      console.warn("Unable to read the last allocations", err);
+      recent.value = [];
     }
   }
 
   return {
-    last,
+    recent,
     load,
   };
 }

@@ -15,6 +15,7 @@ import ChipSelector from "@/components/ChipSelector.vue";
 import DateChip from "@/components/DateChip.vue";
 import RememberRule from "@/components/allocation/RememberRule.vue";
 import AllocationSuggestions from "@/components/allocation/AllocationSuggestions.vue";
+import SuggestionSource from "@/components/allocation/SuggestionSource.vue";
 import AllocationLines from "@/components/allocation/AllocationLines.vue";
 import LastAllocationOption from "@/components/allocation/LastAllocationOption.vue";
 
@@ -719,38 +720,52 @@ const showSuggestions =
 /* =========================
    Same as last
 
-   Dernière allocation saisie, tirée des drafts du stockage
-   (useLastAllocation) : catégorie, sous-catégorie, tag et
-   commentaire tel quel ; montant, partie et date
-   d'allocation inchangés. Proposée, comme les suggestions,
-   tant qu'aucune allocation n'est enregistrée, et seulement
-   si sa catégorie convient au mouvement (nature, sous-
-   catégorie active). Choisie, elle remplace la suggestion
-   appliquée, qui revient dans la liste.
+   Les deux dernières allocations distinctes, tirées des
+   drafts du stockage (useLastAllocation) : catégorie,
+   sous-catégorie, tag et commentaire tel quel ; montant,
+   partie et date d'allocation inchangés. Proposées, comme
+   les suggestions, tant qu'aucune allocation n'est
+   enregistrée, et seulement si leur catégorie convient au
+   mouvement (nature, sous-catégorie active). Choisie, l'une
+   remplace la suggestion appliquée, qui revient dans la liste.
 ========================= */
+
+const MAX_LAST_OPTIONS = 2;
 
 const lastAllocation =
   useLastAllocation();
 
-const lastOption =
-  computed(() => {
-    const last =
-      lastAllocation.last.value;
+function fitsMovement(
+  last: LastAllocation
+): boolean {
+  return (
+    categories.value.some(category => category.id === last.categoryID) &&
+    categoriesStore
+      .getActiveSubcategories(last.categoryID)
+      .some(subCategory => subCategory.id === last.subCategoryID)
+  );
+}
 
-    if (
-      !last ||
-      allocations.value.length > 0 ||
-      editingAllocationId.value !== null ||
-      !categories.value.some(category => category.id === last.categoryID) ||
-      !categoriesStore
-        .getActiveSubcategories(last.categoryID)
-        .some(subCategory => subCategory.id === last.subCategoryID)
-    ) {
-      return null;
-    }
+const lastOptions =
+  computed<LastAllocation[]>(() =>
+    allocations.value.length > 0 || editingAllocationId.value !== null
+      ? []
+      : lastAllocation.recent.value
+          .filter(fitsMovement)
+          .slice(0, MAX_LAST_OPTIONS)
+  );
 
-    return last;
-  });
+/* Panneau affiché s'il a au moins une proposition. */
+const hasProposals =
+  computed(() =>
+    lastOptions.value.length > 0 ||
+    (
+      showSuggestions.value &&
+      recordSafe.value.suggestions.some(
+        suggestion => suggestion !== appliedSuggestion.value
+      )
+    )
+  );
 
 function applyLast(
   last: LastAllocation
@@ -1187,21 +1202,34 @@ function onEditAllocation(
         :disabled="isLocked"
       />
 
-      <AllocationSuggestions
-        v-if="showSuggestions"
-        :suggestions="recordSafe.suggestions"
+      <SuggestionSource
+        v-if="showSuggestions && appliedSuggestion"
         :applied="appliedSuggestion"
-        :value-date="recordSafe.date"
-        :disabled="isLocked"
-        @apply="applySuggestion"
       />
 
-      <LastAllocationOption
-        v-if="lastOption"
-        :last="lastOption"
-        :disabled="isLocked"
-        @apply="applyLast"
-      />
+      <!-- Propositions : autres suggestions et dernières allocations, à part du formulaire. -->
+      <div
+        v-if="hasProposals"
+        class="proposals"
+      >
+        <AllocationSuggestions
+          v-if="showSuggestions"
+          :suggestions="recordSafe.suggestions"
+          :applied="appliedSuggestion"
+          :value-date="recordSafe.date"
+          :disabled="isLocked"
+          @apply="applySuggestion"
+        />
+
+        <LastAllocationOption
+          v-for="(last, index) in lastOptions"
+          :key="index"
+          :last="last"
+          :rank="index"
+          :disabled="isLocked"
+          @apply="applyLast"
+        />
+      </div>
     </section>
 
     <div class="allocation-separator"></div>
@@ -1383,6 +1411,27 @@ function onEditAllocation(
 :deep(.field-long) {
   width: var(--long-w) !important;
   max-width: var(--long-w) !important;
+}
+
+/* =========================================================
+   Proposals
+========================================================= */
+
+.proposals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 664px;
+  margin-top: 0.75rem;
+  padding: 10px 12px;
+
+  border: 1px solid var(--proposals-border);
+  border-radius: 10px;
+
+  background: var(--proposals-bg);
 }
 
 /* =========================================================

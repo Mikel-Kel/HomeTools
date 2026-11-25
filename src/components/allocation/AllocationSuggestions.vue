@@ -9,17 +9,21 @@ import { formatDate } from "@/utils/dateFormat";
 
 import type { AllocationSuggestion } from "@/contracts/spending";
 
+import {
+  sourceLabel,
+  sourceTitle,
+} from "@/components/allocation/suggestionSource";
+
 /* =========================
    Suggestions d'allocation d'un mouvement
 
    Candidats de spending.json (contrat des règles
    d'allocation, § 12 et § 19), la suggestion principale en
-   premier. Placées sous le commentaire, pour ne pas déplacer
-   le formulaire : la source de la suggestion appliquée,
-   discrète et entre parenthèses, puis « Other suggestions »,
-   les autres candidats ; un appui signale apply. Aucune
-   suggestion appliquée (« Same as last » choisi) : pas de
-   source, tous les candidats proposés.
+   premier : « Other suggestions », les candidats autres que
+   la suggestion appliquée (tous si « Same as last » a été
+   choisi) ; un appui signale apply. Placées dans le
+   panneau des propositions, sous le formulaire ; la source
+   de la suggestion appliquée : SuggestionSource.vue.
 ========================= */
 
 const props =
@@ -54,66 +58,6 @@ const others =
       suggestion => suggestion !== props.applied
     )
   );
-
-function sourceLabel(
-  suggestion: AllocationSuggestion
-): string {
-  switch (suggestion.source) {
-    case "rule":
-      return "Rule";
-
-    case "learn-party":
-    case "learn-text":
-      return suggestion.recent === null
-        ? "Learned"
-        : `Learned ${suggestion.recent}/10`;
-
-    case "party":
-      return "Party";
-
-    case "bank":
-      return "Bank";
-  }
-}
-
-function sourceTitle(
-  suggestion: AllocationSuggestion
-): string {
-  switch (suggestion.source) {
-    case "rule":
-      return suggestion.ruleId === null
-        ? "Allocation rule"
-        : `Allocation rule ${suggestion.ruleId}`;
-
-    case "learn-party":
-      return "Learned from the past allocations of this party";
-
-    case "learn-text":
-      return "Learned from the past allocations of similar bank texts";
-
-    case "party":
-      return "Party of the movement, no rule nor history";
-
-    case "bank":
-      return "Party of the bank, no rule nor history";
-  }
-}
-
-/* Source sous le commentaire : « Learned 3/10 · for <partie> ». */
-function sourceText(
-  suggestion: AllocationSuggestion
-): string {
-  return [
-    suggestion.contradicted
-      ? `${sourceLabel(suggestion)}, contradicted by history`
-      : sourceLabel(suggestion),
-    suggestion.allocPartyName
-      ? `for ${suggestion.allocPartyName}`
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
 
 /* Catégorie › sous-catégorie, ou « Party only » pour une règle sans sous-catégorie. */
 function suggestionCategory(
@@ -156,14 +100,6 @@ function suggestionDetail(
 </script>
 
 <template>
-  <p
-    v-if="applied"
-    class="suggestion-source"
-    :title="sourceTitle(applied)"
-  >
-    ({{ sourceText(applied) }})
-  </p>
-
   <div
     v-if="others.length"
     class="suggestions"
@@ -199,15 +135,6 @@ function suggestionDetail(
 </template>
 
 <style scoped>
-/* Collée au commentaire, malgré l'espacement du formulaire. */
-.suggestion-source {
-  margin: -0.4rem 0 0;
-
-  color: var(--text-soft);
-  font-size: var(--font-size-sm);
-  font-style: italic;
-}
-
 .suggestions {
   display: flex;
   flex-direction: column;

@@ -170,8 +170,8 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   `allocation_suggest.py` (le Mac reste juge). « Remember » dans `AllocationView.vue` (allocation sur une seule
   ligne) : `RULE_SAVED` avec `fromAllocation` par `useRememberRequest` (persistKey), statut repris et affiché par
   `SpendingView.vue` ; règle par texte quand le mouvement n'a pas de partie ou une partie générique.
-  « Same as last » (`LastAllocationOption.vue`, `useLastAllocation`) : dernière ligne du draft le plus récent de
-  `allocations/drafts/` (`savedAt`), hors mouvement ouvert ; reprend catégorie, sous-catégorie, tag et commentaire,
+  « Same as last » (`LastAllocationOption.vue`, `useLastAllocation`) : les deux dernières lignes distinctes (mêmes
+  caractéristiques reprises = doublon) des drafts de `allocations/drafts/` (`savedAt`), hors mouvement ouvert ; reprend catégorie, sous-catégorie, tag et commentaire,
   jamais montant, partie ni date ; rien à proposer après une release.
   Lot 4 : alias suggérés (`suggestedParty`) dans Master data › Parties › To identify ; règles à revoir (`review`,
   filtre « To review », « Apply » de l'allocation de l'historique) et suppression groupée (`RULES_DELETED`,

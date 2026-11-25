@@ -8,18 +8,22 @@ import { useAllocationLabels } from "@/composables/allocations/useAllocationLabe
 import type { LastAllocation } from "@/composables/allocations/useLastAllocation";
 
 /* =========================
-   « Same as last »
+   « Same as last » / « Same as previous »
 
-   Dernière allocation saisie (useLastAllocation), proposée
-   sous les suggestions, même présentation : catégorie ›
-   sous-catégorie, puis commentaire et tag ; un appui signale
-   apply.
+   Une des dernières allocations saisies (useLastAllocation),
+   proposée sous les suggestions, même présentation :
+   catégorie › sous-catégorie, puis commentaire et tag ; un
+   appui signale apply.
 ========================= */
 
 const props =
   withDefaults(
     defineProps<{
       last: LastAllocation;
+
+      /* Rang : 0 la dernière, 1 la précédente. */
+      rank: number;
+
       disabled?: boolean;
     }>(),
     {
@@ -60,7 +64,7 @@ const detail =
     type="button"
     class="last-option"
     :disabled="disabled"
-    title="Category, sub-category, tag and comment of the last allocation entered"
+    :title="`Category, sub-category, tag and comment of the ${rank === 0 ? 'last' : 'previous'} allocation entered`"
     @click="emit('apply', last)"
   >
     <span class="option-text">
@@ -75,7 +79,7 @@ const detail =
     </span>
 
     <StatusPill tone="neutral">
-      Same as last
+      {{ rank === 0 ? "Same as last" : "Same as previous" }}
     </StatusPill>
   </button>
 </template>

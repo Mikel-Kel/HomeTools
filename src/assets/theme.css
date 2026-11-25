@@ -64,6 +64,10 @@
   --primary: #1e40af;
   --primary-soft: #eef2ff;
 
+  /* Panneau des propositions (Allocation) : pastel, distinct du formulaire et du survol. */
+  --proposals-bg: #f6f1fb;
+  --proposals-border: #e4d8f2;
+
   /* =====================================================
      STATUS
   ===================================================== */
@@ -235,6 +239,9 @@ textarea {
   ===================================================== */
   --primary: #93c5fd;
   --primary-soft: #1e293b;
+
+  --proposals-bg: #221d33;
+  --proposals-border: #3a3150;
 
   /* =====================================================
      STATUS
