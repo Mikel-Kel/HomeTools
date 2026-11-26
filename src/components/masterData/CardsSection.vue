@@ -23,12 +23,14 @@ import { eventFilePattern } from "@/services/events/eventFiles";
 import { formatDate } from "@/utils/dateFormat";
 
 /* =========================
-   Section « Cards » de la page Master data
+   Cartes de la section « iPhone » de la page Master data
 
    Cartes bancaires (capacité mobileExpense) : compte, devise,
-   libellé mobile, qui propose la carte sur l'iPhone, et
-   propriétaire, dont seuls les iPhone la proposent ;
-   saisie par CardSheet. Ordre publié par le Mac (dernier
+   libellé mobile, qui propose la carte sur l'iPhone,
+   propriétaire, dont seuls les iPhone la proposent (retiré
+   d'owners : signalé), et couleur (pastille) ; saisie par
+   CardSheet. Le titre du panneau (slot « title ») est
+   fourni par la section. Ordre publié par le Mac (dernier
    mouvement le plus récent d'abord) ; les cartes sans
    mouvement depuis 12 mois sont repliées sous « Older
    cards ».
@@ -78,6 +80,12 @@ const offeredCount =
   computed(() =>
     props.data.cards.filter(card => card.mobileLabel).length
   );
+
+function ownerRemoved(
+  card: BankingCard
+): boolean {
+  return !!card.mobileOwner && !props.data.owners.includes(card.mobileOwner);
+}
 
 function accountLabel(
   card: BankingCard
@@ -143,7 +151,7 @@ async function closeSheet() {
 <template>
   <section class="panel">
     <div class="panel-header">
-      <h2>Cards</h2>
+      <slot name="title" />
 
       <div class="panel-actions">
         <span class="summary">
@@ -207,9 +215,21 @@ async function closeSheet() {
                 (default)
               </span>
             </td>
-            <td>{{ card.mobileLabel ?? "" }}</td>
-            <td :class="{ missing: card.mobileOwner && !data.owners.includes(card.mobileOwner) }">
+            <td>
+              <span class="label-cell">
+                <span
+                  v-if="card.mobileColor"
+                  class="swatch"
+                  :style="{ background: card.mobileColor }"
+                  :title="card.mobileColor"
+                />
+
+                {{ card.mobileLabel ?? "" }}
+              </span>
+            </td>
+            <td :class="{ missing: ownerRemoved(card) }">
               {{ card.mobileOwner ?? "" }}
+              <template v-if="ownerRemoved(card)">(removed)</template>
             </td>
             <td class="number">{{ card.movements12m }}</td>
             <td>{{ formatDate(card.lastMovement) }}</td>
@@ -264,12 +284,6 @@ async function closeSheet() {
   gap: 0.5rem 1rem;
 
   margin-bottom: 8px;
-}
-
-.panel-header h2 {
-  margin: 0;
-
-  font-size: var(--font-size-lg);
 }
 
 .panel-actions {
@@ -337,6 +351,22 @@ tr.older td {
 
 .name {
   font-weight: 600;
+}
+
+.label-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  display: inline-block;
+
+  width: 12px;
+  height: 12px;
+
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
 td.missing {

@@ -194,14 +194,18 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 
 - Saisie des dépenses depuis l'iPhone (app séparée `../iHomeTools`, capacité `mobileExpense`, contrat multi-environnements
   1.8.0, `owner` de l'appareil lu par `readWhoami`, même code que dans iHomeTools) :
-  contrat `../Backend/docs/mobile-expense-contract.md`. HomeTools ne saisit rien ; il gère seulement, avec la capacité,
-  la case « Offered on iPhone » des sous-catégories (`mobileEntry` de `categories.json`, envoyé dans `SUBCATEGORY_SAVED`
-  seulement avec la capacité, marque « iPhone » dans la liste) et la section « Cards » de Master data
-  (`CardsSection.vue`, `CardSheet.vue`, lecteur `src/contracts/bankingCards.ts`, export `settings/bankingCards.json`,
-  devises de `exchangeRates.json`, événement `PWA-MEX_…_C<cardId>.json` `MOBILE_CARD_SAVED`). Cartes nominatives
-  (contrat 0.3) : propriétaire choisi parmi `owners` (« None » = `null`, toujours envoyé dans `mobileOwner`), colonne
-  Owner ; un propriétaire absent d'`owners` reste affiché tant qu'on ne le change pas. Lot M3 à venir : source
-  `mobile` dans Allocation.
+  contrat `../Backend/docs/mobile-expense-contract.md` en version 0.4. HomeTools ne saisit rien ; il gère seulement,
+  avec la capacité, la section « iPhone » de Master data (`IPhoneSection.vue`, sous-menus Cards et Sub-categories,
+  lecteur `src/contracts/bankingCards.ts`, export `settings/bankingCards.json`, devises de `exchangeRates.json`).
+  - Cards (`CardsSection.vue`, `CardSheet.vue`) : compte, devise, libellé, propriétaire et couleur, les cinq champs
+    toujours envoyés dans `MOBILE_CARD_SAVED` (`PWA-MEX_…_C<cardId>.json`, `null` = aucun). Propriétaire choisi parmi
+    `owners`, jamais déduit du porteur ; un propriétaire retiré reste affiché « (removed) » sur sa carte, jamais
+    proposé ailleurs. Libellé unique par propriétaire (les cartes sans propriétaire entre elles). Couleur `#RRGGBB`.
+  - Sub-categories (`OwnerSubCategoriesSection.vue`, `OwnerSubCategoriesSheet.vue`) : `ownerSubCategories`, un bloc
+    par propriétaire ; `MOBILE_OWNER_SAVED` (`PWA-MEX_…_O<owner>.json`) envoie la liste complète, qui remplace
+    l'ancienne. Seules les actives s'ajoutent, une clôturée déjà attribuée reste (« Closed ») ; propriétaire retiré :
+    « Clear » seulement (liste vide). La case `mobileEntry` des sous-catégories (0.3) est abandonnée.
+  Lot M3 à venir : source `mobile` dans Allocation.
 
 - Portfolio (page « Portfolio », `PortfolioView.vue`, onglets Positions et Transactions ; titres dans
   Master data, section « Portfolio », `PortfolioSection.vue` et `SecuritySheet.vue`, avec leurs types, obligatoires,

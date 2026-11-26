@@ -6,6 +6,7 @@ import {
 } from "vue";
 
 import EditSheet from "@/components/masterData/EditSheet.vue";
+import PillButton from "@/components/ui/PillButton.vue";
 
 import { useEventRequest } from "@/composables/useEventRequest";
 
@@ -14,6 +15,7 @@ import {
   MOBILE_EXPENSE_EVENT_TRIGRAM,
   MOBILE_EXPENSE_EVENT_VERSION,
   MOBILE_LABEL_MAX,
+  normalizeColor,
   type BankingAccount,
   type BankingCard,
   type BankingCardSave,
@@ -26,8 +28,8 @@ import { waitingElsewhereMessage } from "@/services/events/requestMessages";
 /* =========================
    Fiche carte bancaire (Master data › Cards)
 
-   Compte, devise et libellé mobile d'une carte existante,
-   par MOBILE_CARD_SAVED (../Backend/docs/mobile-expense-contract.md,
+   Compte, devise, libellé mobile, propriétaire et couleur
+   d'une carte existante, par MOBILE_CARD_SAVED (../Backend/docs/mobile-expense-contract.md,
    § 3.4). Porteur et numéro servent à l'import : non
    modifiables. Le Mac reste juge : son refus est affiché tel
    quel.
@@ -35,13 +37,17 @@ import { waitingElsewhereMessage } from "@/services/events/requestMessages";
    - Compte : seuls les comptes actifs se choisissent ; celui
      d'une ancienne carte reste affiché.
    - Devise : vide = devise du compte.
-   - Libellé mobile : 30 caractères au plus, unique sans tenir
-     compte de la casse ; renseigné, il propose la carte sur
-     l'iPhone et exige un compte ; vide, il la retire.
+   - Libellé mobile : 30 caractères au plus, unique parmi les
+     cartes du propriétaire choisi (les cartes sans
+     propriétaire entre elles), sans tenir compte de la casse ;
+     renseigné, il propose la carte sur l'iPhone et exige un
+     compte ; vide, il la retire.
    - Propriétaire : « None » ou l'un des owners publiés ; la
      carte n'est proposée qu'aux iPhone de ce propriétaire.
-     Un propriétaire absent d'owners reste affiché et choisi
-     tant qu'on ne le change pas (le Mac l'accepte inchangé).
+     Un propriétaire retiré d'owners reste affiché et choisi
+     tant qu'on ne le change pas (le Mac l'accepte inchangé) ;
+     il n'est jamais proposé pour une autre carte.
+   - Couleur : #RRGGBB ou « None » (null).
 ========================= */
 
 const props = defineProps<{
@@ -66,11 +72,16 @@ const emit = defineEmits<{
 const NO_ANSWER_DELAY_MS =
   2 * 60 * 1000;
 
+/* Valeur du sélecteur tant qu'aucune couleur n'est choisie. */
+const PICKER_DEFAULT =
+  "#808080";
+
 const original = {
   accountId: props.card.accountId,
   currency: props.card.currency,
   mobileLabel: props.card.mobileLabel ?? "",
   mobileOwner: props.card.mobileOwner,
+  mobileColor: props.card.mobileColor,
 };
 
 const accountId =
@@ -85,8 +96,19 @@ const mobileLabel =
 const mobileOwner =
   ref<string | null>(original.mobileOwner);
 
-/* Propriétaire actuel absent d'owners : gardé dans la liste, marqué. */
-const unknownOwner =
+const mobileColor =
+  ref<string | null>(original.mobileColor);
+
+/* Le sélecteur natif rend des minuscules : rangé en majuscules. */
+function pickColor(
+  event: Event
+) {
+  mobileColor.value =
+    normalizeColor((event.target as HTMLInputElement).value);
+}
+
+/* Propriétaire actuel retiré d'owners : gardé dans la liste, marqué. */
+const removedOwner =
   original.mobileOwner && !props.owners.includes(original.mobileOwner)
     ? original.mobileOwner
     : null;
@@ -124,7 +146,8 @@ const changed =
     accountId.value !== original.accountId ||
     currency.value !== original.currency ||
     trimmedLabel.value !== original.mobileLabel ||
-    mobileOwner.value !== original.mobileOwner
+    mobileOwner.value !== original.mobileOwner ||
+    mobileColor.value !== original.mobileColor
   );
 
 const formError =
@@ -152,10 +175,13 @@ const formError =
       props.cards.some(
         other =>
           other.cardId !== props.card.cardId &&
+          other.mobileOwner === mobileOwner.value &&
           other.mobileLabel?.toLowerCase() === key
       )
     ) {
-      return "Already used by another card.";
+      return mobileOwner.value
+        ? `Already used by another card of ${mobileOwner.value}.`
+        : "Already used by another card without owner.";
     }
 
     if (accountId.value === null) {
@@ -172,6 +198,7 @@ const payload =
     currency: currency.value,
     mobileLabel: trimmedLabel.value || null,
     mobileOwner: mobileOwner.value,
+    mobileColor: mobileColor.value,
   }));
 
 const saveRequest =
@@ -298,20 +325,20 @@ const subtitle =
       </select>
     </label>
 
+    <label class="field">
+      <h3>iPhone label</h3>
+
+      <input
+        v-model="mobileLabel"
+        type="text"
+        :maxlength="MOBILE_LABEL_MAX + 10"
+        placeholder="Not offered on iPhone"
+        :disabled="saveRequest.inProgress.value"
+        @keydown.enter="save"
+      />
+    </label>
+
     <div class="columns">
-      <label class="field">
-        <h3>iPhone label</h3>
-
-        <input
-          v-model="mobileLabel"
-          type="text"
-          :maxlength="MOBILE_LABEL_MAX + 10"
-          placeholder="Not offered on iPhone"
-          :disabled="saveRequest.inProgress.value"
-          @keydown.enter="save"
-        />
-      </label>
-
       <label class="field">
         <h3>Owner</h3>
 
@@ -322,10 +349,10 @@ const subtitle =
           <option :value="null">None</option>
 
           <option
-            v-if="unknownOwner"
-            :value="unknownOwner"
+            v-if="removedOwner"
+            :value="removedOwner"
           >
-            {{ unknownOwner }} (not a device owner)
+            {{ removedOwner }} (removed)
           </option>
 
           <option
@@ -337,11 +364,35 @@ const subtitle =
           </option>
         </select>
       </label>
+
+      <div class="field">
+        <h3>Color</h3>
+
+        <div class="color-row">
+          <input
+            type="color"
+            class="color-input"
+            :class="{ unset: mobileColor === null }"
+            :value="(mobileColor ?? PICKER_DEFAULT).toLowerCase()"
+            aria-label="Card color"
+            :disabled="saveRequest.inProgress.value"
+            @input="pickColor"
+          />
+
+          <PillButton
+            :active="mobileColor === null"
+            :disabled="saveRequest.inProgress.value"
+            @click="mobileColor = null"
+          >
+            None
+          </PillButton>
+        </div>
+      </div>
     </div>
 
     <p class="note">
       A label offers the card on the iPhone; an empty label removes it (entries already made are kept).
-      The card is offered only on the iPhones of its owner.
+      The card is offered only on the iPhones of its owner, in its color.
     </p>
   </EditSheet>
 </template>
@@ -349,13 +400,30 @@ const subtitle =
 <style scoped>
 .columns {
   display: grid;
-  grid-template-columns: 3fr 2fr;
+  grid-template-columns: 1fr auto;
   gap: 0.75rem;
 }
 
-.columns input,
 .columns select {
   width: 100%;
   min-width: 0;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.color-input {
+  width: 4rem;
+  height: 38px;
+  padding: 2px 4px;
+
+  cursor: pointer;
+}
+
+.color-input.unset {
+  opacity: 0.35;
 }
 </style>

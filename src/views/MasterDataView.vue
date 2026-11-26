@@ -12,7 +12,7 @@ import SpendingSection from "@/components/masterData/SpendingSection.vue";
 import DocumentsSection from "@/components/masterData/DocumentsSection.vue";
 import WineSection from "@/components/masterData/WineSection.vue";
 import PortfolioSection from "@/components/masterData/PortfolioSection.vue";
-import CardsSection from "@/components/masterData/CardsSection.vue";
+import IPhoneSection from "@/components/masterData/IPhoneSection.vue";
 
 import { useRemoteJson } from "@/composables/useRemoteJson";
 import { useCategories } from "@/composables/useCategories";
@@ -96,8 +96,9 @@ import { usePersistentRef } from "@/composables/usePersistentRef";
    modifications envoyées au Mac par événements, données
    relues dès que le backend republie leur export.
    - Parties : existantes, à identifier, types de partie ;
-   - Cards : cartes bancaires proposées à l'iPhone, avec la
-     capacité mobileExpense seulement ;
+   - iPhone : cartes bancaires et sous-catégories proposées à
+     l'iPhone de chaque propriétaire, avec la capacité
+     mobileExpense seulement ;
    - Spending : catégories, tags, types d'opération et
      règles d'allocation (libellés des parties) ;
    - Documents : dossiers Tourism et Various, tags ;
@@ -111,7 +112,7 @@ type MasterDataSection =
   | "spending"
   | "documents"
   | "portfolio"
-  | "cards"
+  | "iphone"
   | "wine";
 
 const sectionOptions: {
@@ -120,7 +121,7 @@ const sectionOptions: {
 }[] = [
   { value: "parties", label: "Parties" },
   ...(hasCapability("mobileExpense")
-    ? [{ value: "cards" as const, label: "Cards" }]
+    ? [{ value: "iphone" as const, label: "iPhone" }]
     : []),
   { value: "spending", label: "Spending" },
   { value: "documents", label: "Documents" },
@@ -350,7 +351,8 @@ const portfolioFile =
   });
 
 /*
-  Cartes (section « Cards ») et devises acceptées par le Mac :
+  Cartes et sous-catégories des propriétaires (section
+  « iPhone ») et devises acceptées par le Mac :
   chargées à la première ouverture de la section. Fichier
   des cours absent : CHF seulement.
 */
@@ -361,7 +363,7 @@ watch(
   section,
 
   value => {
-    if (value === "cards") {
+    if (value === "iphone") {
       cardsWanted.value = true;
     }
   },
@@ -468,7 +470,7 @@ const current =
             ? cellarFile
             : section.value === "portfolio"
               ? portfolioFile
-              : section.value === "cards"
+              : section.value === "iphone"
                 ? cardsFile
                 : partiesFile
   );
@@ -531,9 +533,10 @@ const current =
         :portfolio="portfolioFile.data.value"
       />
 
-      <CardsSection
-        v-else-if="section === 'cards' && cardsFile.data.value"
+      <IPhoneSection
+        v-else-if="section === 'iphone' && cardsFile.data.value && categoriesFile.data.value"
         :data="cardsFile.data.value"
+        :categories="categoriesFile.data.value"
         :currencies="ratesFile.data.value ?? [BASE_CURRENCY]"
       />
 

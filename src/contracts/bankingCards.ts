@@ -20,11 +20,14 @@ import {
        "accounts": [ { "accountId": 3, "label": "Example Card",
                        "kind": "credit", "currency": "CHF",
                        "active": true } ],
-       "owners": [ "alex" ],
+       "owners": [ "alex", "sam" ],
+       "ownerSubCategories": [ { "owner": "alex",
+                                 "subCategoryIds": [ 3, 5 ] } ],
        "cards": [ { "cardId": 9, "internalId": "**0000",
                     "holder": "Alex", "accountId": 3,
                     "currency": "EUR", "mobileLabel": "Card EUR",
                     "mobileOwner": "alex",
+                    "mobileColor": "#1E88E5",
                     "usage": { "movements12m": 120,
                                "lastMovement": "2026-11-28" } } ] }
 
@@ -39,8 +42,20 @@ import {
    proposée qu'à ses appareils (absent = null). Un
    propriétaire retiré d'owners reste porté par ses cartes.
 
-   Saisie par événement PWA-MEX_<AAAAMMJJHHMMSS>_C<cardId>.json,
-   MOBILE_CARD_SAVED ; les quatre champs sont toujours envoyés.
+   Contrat 0.4 : mobileColor = couleur de la carte sur
+   l'iPhone, #RRGGBB en majuscules (absente ou invalide =
+   null) ; libellé unique par propriétaire (les cartes sans
+   propriétaire entre elles). ownerSubCategories (§ 3.3) =
+   sous-catégories proposées à chaque propriétaire, un
+   élément par propriétaire d'owners, plus les propriétaires
+   retirés qui en ont encore, sous-catégories clôturées
+   comprises.
+
+   Saisies par événements PWA-MEX_<AAAAMMJJHHMMSS>_… :
+   - _C<cardId>.json, MOBILE_CARD_SAVED : les cinq champs
+     toujours envoyés ;
+   - _O<owner>.json, MOBILE_OWNER_SAVED : liste complète des
+     sous-catégories du propriétaire, qui remplace l'ancienne.
 
    Devises acceptées par le Mac : CHF et celles de
    settings/exchangeRates.json (clés de rates).
@@ -80,14 +95,21 @@ export interface BankingCard {
   currency: string | null;
   mobileLabel: string | null;
   mobileOwner: string | null;
+  mobileColor: string | null;
   movements12m: number;
   lastMovement: string | null;
+}
+
+export interface OwnerSubCategories {
+  owner: string;
+  subCategoryIds: number[];
 }
 
 export interface BankingCards {
   generatedAt: string;
   accounts: BankingAccount[];
   owners: string[];
+  ownerSubCategories: OwnerSubCategories[];
   cards: BankingCard[];
 }
 
@@ -100,6 +122,30 @@ export interface BankingCardSave {
 
   /* null : aucun propriétaire. */
   mobileOwner: string | null;
+
+  /* #RRGGBB ; null : aucune couleur. */
+  mobileColor: string | null;
+}
+
+/* Charge utile de MOBILE_OWNER_SAVED (sans source). */
+export interface OwnerSubCategoriesSave {
+  owner: string;
+  subCategoryIds: number[];
+}
+
+const COLOR_PATTERN =
+  /^#[0-9A-F]{6}$/;
+
+/* #RRGGBB en majuscules ; null si absente ou invalide. */
+export function normalizeColor(
+  value: unknown
+): string | null {
+  const color =
+    asString(value).trim().toUpperCase();
+
+  return COLOR_PATTERN.test(color)
+    ? color
+    : null;
 }
 
 function objects(
@@ -157,6 +203,19 @@ export function readBankingCards(
       ),
     ],
 
+    ownerSubCategories: objects(file.ownerSubCategories)
+      .map(item => ({
+        owner: asString(item.owner).trim(),
+        subCategoryIds: [
+          ...new Set(
+            asArray(item.subCategoryIds)
+              .map(id => asNumber(id))
+              .filter(id => Number.isInteger(id) && id > 0)
+          ),
+        ],
+      }))
+      .filter(item => item.owner),
+
     cards: objects(file.cards)
       .map(card => {
         const usage =
@@ -170,6 +229,7 @@ export function readBankingCards(
           currency: nullableString(card.currency),
           mobileLabel: nullableString(card.mobileLabel),
           mobileOwner: nullableString(card.mobileOwner),
+          mobileColor: normalizeColor(card.mobileColor),
           movements12m: asNumber(usage?.movements12m),
           lastMovement: nullableString(usage?.lastMovement),
         };
@@ -196,4 +256,11 @@ export function cardEventSuffix(
   cardId: number
 ): string {
   return `C${cardId}`;
+}
+
+/* Propriétaire tel quel (contrat § 3.4). */
+export function ownerEventSuffix(
+  owner: string
+): string {
+  return `O${owner}`;
 }

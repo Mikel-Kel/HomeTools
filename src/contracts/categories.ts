@@ -1,6 +1,5 @@
 import {
   asArray,
-  asBoolean,
   asNumber,
   asObject,
   asString,
@@ -21,14 +20,10 @@ import {
                          "subcategories": [ { "id": 15,
                                               "label": "Maladie",
                                               "seq": 910,
-                                              "status": "A",
-                                              "mobileEntry": false } ] } ] }
+                                              "status": "A" } ] } ] }
 
    Toutes les catégories (même sans sous-catégorie) et toutes
-   les sous-catégories (même clôturées). mobileEntry : la
-   sous-catégorie est proposée sur l'iPhone si elle est
-   active (../Backend/docs/mobile-expense-contract.md, § 3.3) ;
-   absent = false.
+   les sous-catégories (même clôturées).
 ========================= */
 
 export const CATEGORIES_FOLDER = "settings";
@@ -54,7 +49,6 @@ export interface SubCategory {
   seq: number;
   label: string;
   status: SubCategoryStatus;
-  mobileEntry: boolean;
 }
 
 export interface Category {
@@ -130,7 +124,6 @@ export function readCategories(
               label: asString(sub.label),
               status:
                 (sub.status === "C" ? "C" : "A") as SubCategoryStatus,
-              mobileEntry: asBoolean(sub.mobileEntry),
             })
           )
           .sort(bySeq),
