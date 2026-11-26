@@ -248,6 +248,10 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
 - Frais transactionnels du Portfolio (à faire plus tard) : `totals.feesChf` ne cumule que les transactions `FEE`
   (« Other fees » dans l'en-tête), les frais d'achat et de vente étant dans le prix de revient. Évolution possible du
   contrat `portfolio-contract.md` : un total en CHF de ces frais publié par le Mac (aucun calcul dans la PWA).
+- Écart au budget dans Follow-up (à faire plus tard, comme iHomeTools) : par sous-catégorie, delta budget − consommé
+  (réel + non confirmé), affiché « N left » ou « N over » ; vert sous (100 − p) % du budget, orange de (100 − p) % à
+  100 %, rouge au-delà ; aucune couleur sans budget. `p` = `followUp.warningPercent` d'`AppParameters.json` (10 par
+  défaut ou si invalide). Seule soustraction admise : le delta d'une ligne, jamais de total.
 - Changer `PROXY_API_KEY` (`proxy.env`) une fois tous les appareils passés à la version avec coffre : l'ancienne clé
   figure dans les bundles déjà publiés sur `gh-pages`.
 
