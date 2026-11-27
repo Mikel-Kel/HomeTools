@@ -442,6 +442,21 @@ export function useAllocation(
         : null;
   }
 
+  /*
+    Partie choisie hors des candidats (partie créée depuis
+    le commerçant d'une saisie de l'iPhone) : enregistrée
+    tout de suite dans le draft s'il existe.
+  */
+  async function setParty(partyID: number) {
+    return runExclusive(async () => {
+      allocPartyID.value = partyID;
+
+      if (allocations.value.length) {
+        await persistDraft();
+      }
+    });
+  }
+
   function cancelEdit() {
     editingAllocationId.value = null;
 
@@ -532,6 +547,7 @@ export function useAllocation(
     replaceAllocation,
     editAllocation,
     applySuggestion,
+    setParty,
     cancelEdit,
     removeAllocation
   };

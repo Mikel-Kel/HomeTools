@@ -65,7 +65,11 @@ import {
    suggestion principale ; sous-catégorie et commentaire de la
    saisie, tag 0, allocDate = date du paiement ;
    mobileExpenseId = identifiant de la saisie (null pour les
-   autres sources).
+   autres sources). mobilePartyName (contrat 0.9, § 7.3) :
+   commerçant tapé sur l'iPhone sans partie correspondante
+   (partie du candidat = celle de la suggestion habituelle) ;
+   null s'il n'y en a pas ou qu'il désigne une partie, alors
+   celle du candidat.
 
    Un mouvement sans fitid, compte, partie, date ou montant
    rend le fichier invalide.
@@ -111,6 +115,7 @@ export interface AllocationSuggestion {
 
   /* Source mobile : saisie de l'iPhone liée au mouvement. */
   mobileExpenseId: string | null;
+  mobilePartyName: string | null;
 }
 
 export interface SpendingFile {
@@ -151,6 +156,10 @@ function readSuggestion(
     mobileExpenseId:
       source === "mobile"
         ? asString(row.mobileExpenseId).trim() || null
+        : null,
+    mobilePartyName:
+      source === "mobile"
+        ? asString(row.mobilePartyName).trim() || null
         : null,
   };
 }

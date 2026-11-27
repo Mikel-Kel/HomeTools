@@ -210,6 +210,9 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
     la saisie lus dans `mobile/mobile.json`, `src/contracts/mobileExpense.ts`) et « Not this expense » :
     `MOBILE_EXPENSE_UNLINKED` (`PWA-MEX_…_<id>_UNL.json`), puis relecture de `spending.json` (candidats gardés dans
     la vue, le mouvement du store n'est pas remplacé).
+    Commerçant tapé sans partie correspondante (contrat 0.9, `mobilePartyName`) : ligne « Merchant » du bandeau et
+    « Create party » (`PartySheet`, nom prérempli par `initialLabel`, aucun alias) ; la nouvelle partie (identifiant
+    absent à l'ouverture de la fiche) devient celle de l'allocation (`setParty` de `useAllocation`, draft réenregistré).
 
 - Portfolio (page « Portfolio », `PortfolioView.vue`, onglets Positions et Transactions ; titres dans
   Master data, section « Portfolio », `PortfolioSection.vue` et `SecuritySheet.vue`, avec leurs types, obligatoires,

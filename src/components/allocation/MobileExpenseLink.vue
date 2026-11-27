@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import {
   computed,
+  ref,
   watch,
 } from "vue";
 
+import PartySheet from "@/components/masterData/PartySheet.vue";
 import PillButton from "@/components/ui/PillButton.vue";
 
 import { useEventRequest } from "@/composables/useEventRequest";
+import { useParties } from "@/composables/useParties";
 import { useRemoteJson } from "@/composables/useRemoteJson";
 
 import {
@@ -20,6 +23,12 @@ import {
   readMobileEntries,
   unlinkEventSuffix,
 } from "@/contracts/mobileExpense";
+
+import {
+  PARTIES_FILE,
+  PARTIES_FOLDER,
+  readParties,
+} from "@/contracts/parties";
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
@@ -50,21 +59,33 @@ import { formatDate } from "@/utils/dateFormat";
    mouvement ne lui est plus proposé. Le Mac republie
    spending.json avant son statut : la vue le relit sur
    l'événement unlinked. Refus affichés tels quels.
+
+   Commerçant tapé sur l'iPhone sans partie correspondante
+   (partyName, contrat 0.9, § 7.3) : « Create party » ouvre la
+   fiche de création (PARTY_SAVED, nom prérempli, aucun
+   alias). Une fois parties.json republié, la nouvelle partie
+   (identifiant absent à l'ouverture de la fiche) est
+   transmise par partyCreated et devient celle de
+   l'allocation. Le candidat garde son commerçant jusqu'à la
+   republication suivante de spending.json.
 ========================= */
 
 const props =
   withDefaults(
     defineProps<{
       expenseId: string;
+      partyName?: string | null;
       disabled?: boolean;
     }>(),
     {
+      partyName: null,
       disabled: false,
     }
   );
 
 const emit = defineEmits<{
   unlinked: [];
+  partyCreated: [partyId: number];
 }>();
 
 const NO_ANSWER_DELAY_MS =
@@ -184,6 +205,90 @@ const messageIsError =
   computed(() =>
     unlinkRequest.request.value?.phase === "error"
   );
+
+/* =========================
+   Création de la partie du commerçant
+========================= */
+
+/* parties.json lu au premier « Create party » seulement. */
+const partiesNeeded =
+  ref(false);
+
+const partiesFile =
+  useRemoteJson({
+    folder: PARTIES_FOLDER,
+    file: () => (partiesNeeded.value ? PARTIES_FILE : null),
+    read: readParties,
+  });
+
+const partiesStore =
+  useParties();
+
+const sheetOpen =
+  ref(false);
+
+/* Identifiants des parties à l'ouverture de la fiche (null : pas encore lus). */
+let knownPartyIds: Set<number> | null =
+  null;
+
+function rememberKnownParties() {
+  const data =
+    partiesFile.data.value;
+
+  if (sheetOpen.value && data && knownPartyIds === null) {
+    knownPartyIds =
+      new Set(data.parties.map(party => party.id));
+  }
+}
+
+/* Nom de la partie créée ici, une fois adoptée. */
+const createdLabel =
+  ref<string | null>(null);
+
+const partyError =
+  ref("");
+
+function openPartySheet() {
+  if (props.disabled) {
+    return;
+  }
+
+  partyError.value = "";
+  knownPartyIds = null;
+  partiesNeeded.value = true;
+  sheetOpen.value = true;
+  rememberKnownParties();
+}
+
+watch(
+  () => partiesFile.data.value,
+  rememberKnownParties
+);
+
+async function onPartySaved() {
+  await partiesFile.reload();
+
+  const data =
+    partiesFile.data.value;
+
+  const known =
+    knownPartyIds;
+
+  const created =
+    data?.parties
+      .filter(party => known !== null && !known.has(party.id))
+      .sort((a, b) => b.id - a.id)[0];
+
+  if (!data || !created) {
+    partyError.value =
+      "Party saved, but not found yet: choose it from a suggestion.";
+    return;
+  }
+
+  partiesStore.set(data.parties);
+  createdLabel.value = created.label;
+  emit("partyCreated", created.id);
+}
 </script>
 
 <template>
@@ -199,6 +304,27 @@ const messageIsError =
       </span>
 
       <span
+        v-if="createdLabel"
+        class="link-details"
+      >
+        Party {{ createdLabel }} created, used for this allocation
+      </span>
+
+      <span
+        v-else-if="partyName"
+        class="link-details"
+      >
+        Merchant: {{ partyName }} — not a party yet
+      </span>
+
+      <span
+        v-if="partyError"
+        class="link-message error"
+      >
+        {{ partyError }}
+      </span>
+
+      <span
         v-if="message"
         class="link-message"
         :class="{ error: messageIsError }"
@@ -207,13 +333,32 @@ const messageIsError =
       </span>
     </p>
 
-    <PillButton
-      :disabled="disabled || unlinkRequest.inProgress.value"
-      @click="unlink"
-    >
-      Not this expense
-    </PillButton>
+    <span class="link-actions">
+      <PillButton
+        v-if="partyName && !createdLabel"
+        :disabled="disabled"
+        @click="openPartySheet"
+      >
+        Create party
+      </PillButton>
+
+      <PillButton
+        :disabled="disabled || unlinkRequest.inProgress.value"
+        @click="unlink"
+      >
+        Not this expense
+      </PillButton>
+    </span>
   </div>
+
+  <PartySheet
+    v-if="sheetOpen && partiesFile.data.value && partyName"
+    :party="null"
+    :data="partiesFile.data.value"
+    :initial-label="partyName"
+    @saved="onPartySaved"
+    @close="sheetOpen = false"
+  />
 </template>
 
 <style scoped>
@@ -247,6 +392,12 @@ const messageIsError =
 .link-title {
   font-size: var(--font-size-sm);
   font-weight: 600;
+}
+
+.link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .link-details,

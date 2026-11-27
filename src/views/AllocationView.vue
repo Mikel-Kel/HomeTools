@@ -757,6 +757,28 @@ const mobileExpenseId =
       : null
   );
 
+/* Commerçant tapé sur l'iPhone sans partie correspondante (contrat 0.9). */
+const mobilePartyName =
+  computed(() =>
+    mobileExpenseId.value
+      ? suggestions.value.find(
+          suggestion =>
+            suggestion.mobileExpenseId === mobileExpenseId.value
+        )?.mobilePartyName ?? null
+      : null
+  );
+
+/* Partie créée depuis le bandeau : elle devient celle de l'allocation. */
+async function onMobilePartyCreated(
+  partyId: number
+) {
+  if (!allocation.value || isLocked.value) {
+    return;
+  }
+
+  await allocation.value.setParty(partyId);
+}
+
 async function onMobileUnlinked() {
   const unlinkedId =
     mobileExpenseId.value;
@@ -1290,8 +1312,10 @@ function onEditAllocation(
         v-if="mobileExpenseId"
         :key="mobileExpenseId"
         :expense-id="mobileExpenseId"
+        :party-name="mobilePartyName"
         :disabled="isLocked"
         @unlinked="onMobileUnlinked"
+        @party-created="onMobilePartyCreated"
       />
 
       <!-- Propositions : autres suggestions et dernières allocations, à part du formulaire. -->

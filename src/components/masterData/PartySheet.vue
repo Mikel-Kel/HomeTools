@@ -55,6 +55,8 @@ import {
 
    initialAlias (écran « To identify ») : alias prérempli
    dans la saisie, modifiable, ajouté à l'enregistrement.
+   initialLabel (création depuis le commerçant d'une saisie
+   de l'iPhone) : nom prérempli, modifiable.
    Le message du statut (« …, 14 movements identified »)
    est transmis par « saved » avant la fermeture.
 ========================= */
@@ -68,6 +70,9 @@ const props = defineProps<{
 
   /* Alias proposé dans la saisie. */
   initialAlias?: string;
+
+  /* Nom proposé à la création. */
+  initialLabel?: string;
 }>();
 
 const emit = defineEmits<{
@@ -104,7 +109,7 @@ const original = {
 };
 
 const label =
-  ref(original.label);
+  ref(isNew ? props.initialLabel ?? "" : original.label);
 
 const typeId =
   ref(original.typeId);
