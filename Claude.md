@@ -115,6 +115,11 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   ou `pending: true` sur la ligne dans `allocations/budget/FollowUpDetails-<année>.json` (traité, en attente de ré-allocation).
   Le backend publie `FollowUpDetails` avant de retirer le REA de `events/`. Les allocations d'un mouvement en attente sont
   conservées jusqu'à la release qui les remplace.
+  Draft d'une ré-allocation (`mode: "UPDATE"`) : jamais supprimé automatiquement (gardé vide quand la dernière ligne
+  est retirée) ; seuls la release et « Cancel reallocation » d'`AllocationView.vue` le ferment. L'annulation retire
+  le draft (`discardReallocation` de `useAllocation`) puis émet `REALLOCATION_CANCELLED` (même nom `PWA-REA_…_<FITID>.json`,
+  « Pending » dans le suivi comme une demande) ; le Mac garde les allocations actuelles. Commentaire d'allocation :
+  50 caractères au plus (`COMMENT_MAX_LENGTH`, sinon la release échoue à l'import).
 - `events/control/` : en Object Storage, toute écriture sous `events/`, `allocations/drafts/` ou `allocations/released/` émet
   un événement `STORAGE_PULL_REQUESTED` pour que le Mac rapatrie les fichiers (`src/services/s3/storagePullRequest.ts`).
   Le champ `paths` y est un alias de compatibilité de `downloadPaths`.

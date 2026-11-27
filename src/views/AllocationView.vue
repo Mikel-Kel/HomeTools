@@ -19,13 +19,17 @@ import SuggestionSource from "@/components/allocation/SuggestionSource.vue";
 import AllocationLines from "@/components/allocation/AllocationLines.vue";
 import LastAllocationOption from "@/components/allocation/LastAllocationOption.vue";
 import MobileExpenseLink from "@/components/allocation/MobileExpenseLink.vue";
+import PillButton from "@/components/ui/PillButton.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 
 import { useAppBootstrap } from "@/composables/useAppBootstrap";
 import { useSpending } from "@/composables/spending/useSpending";
 import { useMovementLabel } from "@/composables/spending/useMovementLabel";
-import { useAllocation } from "@/composables/allocations/useAllocation";
+import {
+  COMMENT_MAX_LENGTH,
+  useAllocation,
+} from "@/composables/allocations/useAllocation";
 import { useCategories } from "@/composables/useCategories";
 import { useAllocationTags } from "@/composables/allocations/useAllocationTags";
 import {
@@ -34,11 +38,19 @@ import {
 } from "@/composables/allocations/useLastAllocation";
 import { useAmountInput } from "@/composables/useAmountInput";
 import { useRemoteJson } from "@/composables/useRemoteJson";
+import { useEventRequest } from "@/composables/useEventRequest";
 
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount } from "@/utils/amountFormat";
 
 import { hasCapability } from "@/services/environment/environmentState";
+import { confirmDialog } from "@/services/dialog/appDialog";
+
+import {
+  pendingMessage,
+  processingMessage,
+  REJECTED_BY_SERVER,
+} from "@/services/events/requestMessages";
 
 import type {
   SpendingRecord,
@@ -412,6 +424,27 @@ const isLocked =
     );
   });
 
+/* =========================
+   Commentaire (mvtallocation.Comment)
+
+   50 caractères au plus : une release plus longue échoue à
+   l'import. La saisie est limitée ; un commentaire repris
+   d'une suggestion ou de « Same as last », ou une ligne
+   déjà dans le draft, est signalé et bloque l'ajout.
+========================= */
+
+const commentTooLong =
+  computed(() =>
+    comment.value.trim().length > COMMENT_MAX_LENGTH
+  );
+
+const longCommentLines =
+  computed(() =>
+    allocations.value.filter(
+      line => line.comment.trim().length > COMMENT_MAX_LENGTH
+    ).length
+  );
+
 /*
   Échec de la dernière sauvegarde automatique du draft.
 */
@@ -420,6 +453,118 @@ const saveError =
     allocation.value
       ?.saveError.value ??
     null
+  );
+
+/* =========================
+   Annulation d'une ré-allocation
+
+   Draft UPDATE seulement (créé par REALLOCATION_REQUEST
+   depuis le suivi) : après confirmation, le draft est retiré
+   du stockage, puis REALLOCATION_CANCELLED est émis
+   (events/PWA-REA_<AAAAMMJJHHMMSS>_<FITID>.json). Le Mac ferme
+   le mouvement en gardant ses allocations actuelles ; son
+   statut est affiché tel quel, puis retour à la vue
+   d'origine. Jamais émis à la suppression automatique d'un
+   draft.
+========================= */
+
+const NO_ANSWER_DELAY_MS =
+  2 * 60 * 1000;
+
+const isReallocation =
+  computed(() =>
+    allocation.value
+      ?.isReallocation.value ??
+    false
+  );
+
+const cancelRequest =
+  useEventRequest({
+    trigram: "REA",
+    noAnswerDelayMs: NO_ANSWER_DELAY_MS,
+  });
+
+async function onCancelReallocation() {
+  if (
+    !allocation.value ||
+    !record.value ||
+    isLocked.value ||
+    !isReallocation.value
+  ) {
+    return;
+  }
+
+  const confirmed =
+    await confirmDialog({
+      title: "Cancel reallocation?",
+      message:
+        "Keep the current allocations and close this reallocation? This draft is deleted.",
+      confirmLabel: "Cancel reallocation",
+      destructive: true,
+    });
+
+  if (!confirmed) {
+    return;
+  }
+
+  const fitid =
+    record.value.id;
+
+  if (!(await allocation.value.discardReallocation())) {
+    return;
+  }
+
+  await cancelRequest.send(
+    {
+      eventType: "REALLOCATION_CANCELLED",
+      version: 1,
+      timestamp: new Date().toISOString(),
+      allocationMetadata: {
+        allocationId: fitid,
+      },
+    },
+    fitid
+  );
+}
+
+watch(
+  () => cancelRequest.request.value?.phase,
+
+  async phase => {
+    if (phase === "completed") {
+      await router.push({
+        name: returnRouteName.value,
+      });
+    }
+  }
+);
+
+const cancelMessage =
+  computed(() => {
+    const current =
+      cancelRequest.request.value;
+
+    switch (current?.phase) {
+      case "requested":
+        return pendingMessage("Sent", cancelRequest.noAnswerYet.value);
+
+      case "started":
+        return processingMessage("Cancelling");
+
+      case "completed":
+        return current.message || "Reallocation cancelled";
+
+      case "error":
+        return current.message || REJECTED_BY_SERVER;
+
+      default:
+        return "";
+    }
+  });
+
+const cancelMessageIsError =
+  computed(() =>
+    cancelRequest.request.value?.phase === "error"
   );
 
 /* =========================
@@ -1239,7 +1384,9 @@ function onEditAllocation(
           type="text"
           autocomplete="off"
           class="field field-long"
+          :class="{ invalid: commentTooLong }"
           placeholder="(optional comment)"
+          :maxlength="COMMENT_MAX_LENGTH"
           :disabled="
             isLocked ||
             !categoryID ||
@@ -1255,7 +1402,8 @@ function onEditAllocation(
             isLocked ||
             !categoryID ||
             !subCategoryID ||
-            amount === 0
+            amount === 0 ||
+            commentTooLong
           "
           aria-label="Add allocation"
           :title="
@@ -1279,7 +1427,8 @@ function onEditAllocation(
             isLocked ||
             !categoryID ||
             !subCategoryID ||
-            amount === 0
+            amount === 0 ||
+            commentTooLong
           "
           aria-label="Replace the edited allocation"
           title="Replace the edited allocation"
@@ -1291,6 +1440,13 @@ function onEditAllocation(
           />
         </button>
       </div>
+
+      <p
+        v-if="commentTooLong"
+        class="comment-error"
+      >
+        At most {{ COMMENT_MAX_LENGTH }} characters ({{ comment.trim().length }}): shorten the comment.
+      </p>
 
       <RememberRule
         ref="rememberRule"
@@ -1359,6 +1515,39 @@ function onEditAllocation(
         @edit="onEditAllocation"
         @remove="onRemoveAllocation"
       />
+
+      <p
+        v-if="longCommentLines"
+        class="lines-error"
+      >
+        {{ longCommentLines }} line{{ longCommentLines === 1 ? "" : "s" }} with a comment over
+        {{ COMMENT_MAX_LENGTH }} characters: edit {{ longCommentLines === 1 ? "it" : "them" }}, the release would fail.
+      </p>
+
+      <div
+        v-if="isReallocation || cancelMessage"
+        class="reallocation"
+      >
+        <p class="reallocation-text">
+          <span>Reallocation: the current allocations stay until this draft is released.</span>
+
+          <span
+            v-if="cancelMessage"
+            class="reallocation-message"
+            :class="{ error: cancelMessageIsError }"
+          >
+            {{ cancelMessage }}
+          </span>
+        </p>
+
+        <PillButton
+          v-if="isReallocation"
+          :disabled="isLocked"
+          @click="onCancelReallocation"
+        >
+          Cancel reallocation
+        </PillButton>
+      </div>
     </section>
 
     <!-- =========================
@@ -1611,6 +1800,49 @@ function onEditAllocation(
 
   color: var(--negative);
   font-size: var(--font-size-sm);
+}
+
+.comment-error {
+  margin: -0.4rem 0 0;
+
+  color: var(--negative);
+  font-size: var(--font-size-sm);
+}
+
+.lines-error {
+  margin: 0.5rem 0 0;
+
+  color: var(--negative);
+  font-size: var(--font-size-sm);
+}
+
+.comment-row .field-long.invalid {
+  border-color: var(--negative);
+}
+
+.reallocation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+
+  margin-top: 0.75rem;
+}
+
+.reallocation-text {
+  display: flex;
+  flex-direction: column;
+
+  min-width: 0;
+  margin: 0;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.reallocation-message.error {
+  color: var(--negative);
 }
 
 /* =========================================================
