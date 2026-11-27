@@ -18,6 +18,7 @@ import AllocationSuggestions from "@/components/allocation/AllocationSuggestions
 import SuggestionSource from "@/components/allocation/SuggestionSource.vue";
 import AllocationLines from "@/components/allocation/AllocationLines.vue";
 import LastAllocationOption from "@/components/allocation/LastAllocationOption.vue";
+import MobileExpenseLink from "@/components/allocation/MobileExpenseLink.vue";
 
 import { useStorageAccess } from "@/composables/useStorageAccess";
 
@@ -36,6 +37,8 @@ import { useRemoteJson } from "@/composables/useRemoteJson";
 
 import { formatDate } from "@/utils/dateFormat";
 import { formatAmount } from "@/utils/amountFormat";
+
+import { hasCapability } from "@/services/environment/environmentState";
 
 import type {
   SpendingRecord,
@@ -685,10 +688,24 @@ const currencyAmount =
    pour tout le draft). Mouvement sans candidats :
    comportement d'avant (catégorie, sous-catégorie et
    commentaire suggérés).
+
+   Candidats relus après « Not this expense » : gardés ici,
+   le mouvement du store reste le même (un nouveau mouvement
+   recréerait l'allocation et son draft).
 ========================= */
 
 const appliedSuggestion =
   ref<AllocationSuggestion | null>(null);
+
+const refreshedSuggestions =
+  ref<AllocationSuggestion[] | null>(null);
+
+const suggestions =
+  computed<AllocationSuggestion[]>(() =>
+    refreshedSuggestions.value ??
+    recordSafe.value.suggestions ??
+    []
+  );
 
 function applySuggestion(
   suggestion: AllocationSuggestion
@@ -712,10 +729,72 @@ function applySuggestion(
 
 const showSuggestions =
   computed(() =>
-    (recordSafe.value.suggestions?.length ?? 0) > 0 &&
+    suggestions.value.length > 0 &&
     allocations.value.length === 0 &&
     editingAllocationId.value === null
   );
+
+/* =========================
+   Saisie de l'iPhone
+
+   Candidat mobile (capacité mobileExpense,
+   ../Backend/docs/mobile-expense-contract.md, § 7) : bandeau
+   MobileExpenseLink.vue, affiché tant que le mouvement est
+   lié, même après des allocations. Liaison défaite : le Mac
+   a republié spending.json, relu ici ; la suggestion
+   principale suivante remplace le candidat mobile s'il était
+   appliqué et qu'aucune allocation n'est enregistrée.
+========================= */
+
+const mobileExpenseId =
+  computed(() =>
+    hasCapability("mobileExpense")
+      ? suggestions.value.find(
+          suggestion =>
+            suggestion.source === "mobile" &&
+            suggestion.mobileExpenseId
+        )?.mobileExpenseId ?? null
+      : null
+  );
+
+async function onMobileUnlinked() {
+  const unlinkedId =
+    mobileExpenseId.value;
+
+  if (spendingNeeded.value) {
+    await spendingFile.reload();
+  } else {
+    spendingNeeded.value = true;
+    await spendingFileSettled();
+  }
+
+  const fresh =
+    spendingFile.data.value?.records.find(
+      item => item.id === props.id
+    )?.suggestions ?? suggestions.value;
+
+  refreshedSuggestions.value =
+    fresh.filter(
+      suggestion =>
+        suggestion.source !== "mobile" ||
+        suggestion.mobileExpenseId !== unlinkedId
+    );
+
+  if (
+    appliedSuggestion.value?.source === "mobile" &&
+    allocations.value.length === 0 &&
+    editingAllocationId.value === null
+  ) {
+    const [principal] =
+      refreshedSuggestions.value;
+
+    if (principal) {
+      applySuggestion(principal);
+    } else {
+      appliedSuggestion.value = null;
+    }
+  }
+}
 
 /* =========================
    Same as last
@@ -761,7 +840,7 @@ const hasProposals =
     lastOptions.value.length > 0 ||
     (
       showSuggestions.value &&
-      recordSafe.value.suggestions.some(
+      suggestions.value.some(
         suggestion => suggestion !== appliedSuggestion.value
       )
     )
@@ -1207,6 +1286,14 @@ function onEditAllocation(
         :applied="appliedSuggestion"
       />
 
+      <MobileExpenseLink
+        v-if="mobileExpenseId"
+        :key="mobileExpenseId"
+        :expense-id="mobileExpenseId"
+        :disabled="isLocked"
+        @unlinked="onMobileUnlinked"
+      />
+
       <!-- Propositions : autres suggestions et dernières allocations, à part du formulaire. -->
       <div
         v-if="hasProposals"
@@ -1214,7 +1301,7 @@ function onEditAllocation(
       >
         <AllocationSuggestions
           v-if="showSuggestions"
-          :suggestions="recordSafe.suggestions"
+          :suggestions="suggestions"
           :applied="appliedSuggestion"
           :value-date="recordSafe.date"
           :disabled="isLocked"

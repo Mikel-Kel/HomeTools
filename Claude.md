@@ -205,7 +205,11 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
     par propriétaire ; `MOBILE_OWNER_SAVED` (`PWA-MEX_…_O<owner>.json`) envoie la liste complète, qui remplace
     l'ancienne. Seules les actives s'ajoutent, une clôturée déjà attribuée reste (« Closed ») ; propriétaire retiré :
     « Clear » seulement (liste vide). La case `mobileEntry` des sous-catégories (0.3) est abandonnée.
-  Lot M3 à venir : source `mobile` dans Allocation.
+  - Liaison (lot M3, contrat 0.6, § 7) : candidat `source: "mobile"` en tête des suggestions de `spending.json`
+    (`mobileExpenseId`, pastille « iPhone »). Allocation affiche alors le bandeau `MobileExpenseLink.vue` (détails de
+    la saisie lus dans `mobile/mobile.json`, `src/contracts/mobileExpense.ts`) et « Not this expense » :
+    `MOBILE_EXPENSE_UNLINKED` (`PWA-MEX_…_<id>_UNL.json`), puis relecture de `spending.json` (candidats gardés dans
+    la vue, le mouvement du store n'est pas remplacé).
 
 - Portfolio (page « Portfolio », `PortfolioView.vue`, onglets Positions et Transactions ; titres dans
   Master data, section « Portfolio », `PortfolioSection.vue` et `SecuritySheet.vue`, avec leurs types, obligatoires,

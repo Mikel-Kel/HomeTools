@@ -59,6 +59,14 @@ import {
    inconnue est ignoré. Une règle peut ne proposer que la
    partie (catégorie et sous-catégorie null).
 
+   Source mobile (capacité mobileExpense,
+   ../Backend/docs/mobile-expense-contract.md, § 7) : mouvement
+   lié à une saisie de l'iPhone, candidat en tête et
+   suggestion principale ; sous-catégorie et commentaire de la
+   saisie, tag 0, allocDate = date du paiement ;
+   mobileExpenseId = identifiant de la saisie (null pour les
+   autres sources).
+
    Un mouvement sans fitid, compte, partie, date ou montant
    rend le fichier invalide.
 ========================= */
@@ -71,7 +79,8 @@ export type SuggestionSource =
   | "learn-party"
   | "learn-text"
   | "party"
-  | "bank";
+  | "bank"
+  | "mobile";
 
 const SUGGESTION_SOURCES: readonly string[] = [
   "rule",
@@ -79,6 +88,7 @@ const SUGGESTION_SOURCES: readonly string[] = [
   "learn-text",
   "party",
   "bank",
+  "mobile",
 ];
 
 export interface AllocationSuggestion {
@@ -98,6 +108,9 @@ export interface AllocationSuggestion {
   /* Historique : confiance (0 à 1) et allocations parmi les 10 dernières. */
   confidence: number | null;
   recent: number | null;
+
+  /* Source mobile : saisie de l'iPhone liée au mouvement. */
+  mobileExpenseId: string | null;
 }
 
 export interface SpendingFile {
@@ -135,6 +148,10 @@ function readSuggestion(
     contradicted: row.contradicted === true,
     confidence: asNullableNumber(row.confidence),
     recent: asNullableNumber(row.recent),
+    mobileExpenseId:
+      source === "mobile"
+        ? asString(row.mobileExpenseId).trim() || null
+        : null,
   };
 }
 

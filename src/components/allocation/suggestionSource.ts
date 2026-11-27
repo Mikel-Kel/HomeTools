@@ -26,6 +26,9 @@ export function sourceLabel(
 
     case "bank":
       return "Bank";
+
+    case "mobile":
+      return "iPhone";
   }
 }
 
@@ -49,6 +52,9 @@ export function sourceTitle(
 
     case "bank":
       return "Party of the bank, no rule nor history";
+
+    case "mobile":
+      return "Entered on the iPhone";
   }
 }
 
