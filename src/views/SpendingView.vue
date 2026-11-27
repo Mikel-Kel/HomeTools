@@ -174,13 +174,44 @@ const showBankText =
   usePersistentRef("spending.showBankText", true);
 
 /*
-  Statut d'allocation : filtre propre à Spending, ajouté aux
-  filtres communs des mouvements.
+  Statut d'allocation et saisie de l'iPhone : filtres propres
+  à Spending, ajoutés aux filtres communs des mouvements.
 */
 const statusFilter =
   ref<Set<AllocationStatus>>(
     new Set()
   );
+
+/*
+  Mouvement lié à une saisie de l'iPhone : candidat mobile
+  dans spending.json (capacité mobileExpense,
+  ../Backend/docs/mobile-expense-contract.md, § 7). Pastille
+  « iPhone » à la place de « none » (un mouvement lié est un
+  draft latent), statut seul dès qu'un draft existe ; filtre
+  « Entry ».
+*/
+const mobileEnabled =
+  hasCapability("mobileExpense");
+
+function isMobileLinked(
+  record: SpendingWithStatus
+): boolean {
+  return (
+    mobileEnabled &&
+    record.suggestions.some(
+      suggestion => suggestion.source === "mobile"
+    )
+  );
+}
+
+const MOBILE_ENTRY = "iphone";
+
+const entryItems = [
+  { id: MOBILE_ENTRY, label: "iPhone" },
+];
+
+const entryFilter =
+  ref<string[]>([]);
 
 const movementFilters =
   useMovementFilters<SpendingWithStatus>({
@@ -196,14 +227,24 @@ const movementFilters =
     extension: {
       matches:
         record =>
-          !statusFilter.value.size ||
-          statusFilter.value.has(
-            record.allocationStatus
+          (
+            !statusFilter.value.size ||
+            statusFilter.value.has(
+              record.allocationStatus
+            )
+          ) &&
+          (
+            !mobileEnabled ||
+            !entryFilter.value.includes(MOBILE_ENTRY) ||
+            isMobileLinked(record)
           ),
 
       reset: () => {
         statusFilter.value =
           new Set();
+
+        entryFilter.value =
+          [];
       },
 
       snapshot: () => ({
@@ -211,6 +252,9 @@ const movementFilters =
           Array.from(
             statusFilter.value
           ),
+
+        entry:
+          entryFilter.value,
       }),
 
       restore: saved => {
@@ -220,6 +264,12 @@ const movementFilters =
               ? saved.status as AllocationStatus[]
               : []
           );
+
+        entryFilter.value =
+          Array.isArray(saved.entry) &&
+          saved.entry.includes(MOBILE_ENTRY)
+            ? [MOBILE_ENTRY]
+            : [];
       },
     },
   });
@@ -901,6 +951,16 @@ onBeforeUnmount(() => {
             :show-all="true"
             :align-with-content="true"
           />
+
+          <ChipSelector
+            v-if="mobileEnabled"
+            v-model="entryFilter"
+            label="Entry"
+            :items="entryItems"
+            :multiple="true"
+            :show-all="true"
+            :align-with-content="true"
+          />
         </template>
       </MovementFilters>
     </div>
@@ -980,6 +1040,16 @@ onBeforeUnmount(() => {
             >
               <template #status>
                 <StatusPill
+                  v-if="isMobileLinked(record) && record.allocationStatus === 'none'"
+                  class="mobile-status"
+                  tone="warning"
+                  title="Entered on the iPhone"
+                >
+                  iPhone
+                </StatusPill>
+
+                <StatusPill
+                  v-else
                   class="allocation-status"
                   :tone="STATUS_TONES[record.allocationStatus]"
                 >
@@ -1190,5 +1260,10 @@ onBeforeUnmount(() => {
 .allocation-status {
   margin: 0 auto;
   text-transform: uppercase;
+}
+
+/* Libellé « iPhone » tel quel, sans majuscules. */
+.mobile-status {
+  margin: 0 auto;
 }
 </style>
