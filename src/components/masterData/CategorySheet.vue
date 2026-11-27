@@ -22,6 +22,12 @@ import type {
 
 import { confirmDialog } from "@/services/dialog/appDialog";
 
+import {
+  toTracking,
+  TRACKING_OPTIONS,
+  type Tracking,
+} from "@/components/masterData/tracking";
+
 import { deviceName } from "@/services/environment/environmentState";
 
 import {
@@ -39,13 +45,20 @@ import {
      events/PWA-CAT_<AAAAMMJJHHMMSS>_C<CategoryID|NEW>.json
        { "eventType": "CATEGORY_SAVED",
          "payload": { "categoryId" | null, "label",
-                      "nature", "displayScope", "source" } }
+                      "nature", "displayScope", "tracked",
+                      "source" } }
      events/PWA-CAT_<AAAAMMJJHHMMSS>_S<SubCategoryID|NEW>.json
        { "eventType": "SUBCATEGORY_SAVED",
          "payload": { "subCategoryId" | null, "categoryId",
                       "label", "status", "source" } }
    puis se ferme une fois la demande traitée (categories.json
    republié).
+
+   tracked toujours envoyé (true à la création par défaut).
+   Catégorie hors suivi : sans budget, ses sous-catégories ne
+   servent qu'aux saisies des cartes hors suivi de l'iPhone.
+   Le Mac refuse de changer tracked d'une catégorie utilisée :
+   refus affiché tel quel.
 ========================= */
 
 const props = defineProps<
@@ -140,6 +153,11 @@ const original = {
       ? props.item.displayScope
       : "P" as CategoryDisplayScope,
 
+  tracked:
+    props.kind === "category" && props.item
+      ? props.item.tracked
+      : true,
+
   status:
     props.kind === "subcategory" && props.item
       ? props.item.status
@@ -155,6 +173,15 @@ const nature =
 const displayScope =
   ref<CategoryDisplayScope>(original.displayScope);
 
+const tracked =
+  ref(original.tracked);
+
+const tracking =
+  computed<Tracking>({
+    get: () => toTracking(tracked.value),
+    set: value => { tracked.value = value === "tracked"; },
+  });
+
 const status =
   ref<SubCategoryStatus>(original.status);
 
@@ -168,6 +195,7 @@ const changed =
     trimmedLabel.value !== original.label ||
     nature.value !== original.nature ||
     displayScope.value !== original.displayScope ||
+    tracked.value !== original.tracked ||
     status.value !== original.status
   );
 
@@ -255,6 +283,7 @@ async function save() {
             label: trimmedLabel.value,
             nature: nature.value,
             displayScope: displayScope.value,
+            tracked: tracked.value,
             source: deviceName(),
           },
         }
@@ -429,6 +458,22 @@ onBeforeUnmount(() => {
           :options="scopeOptions"
         />
       </div>
+
+      <div class="field-row">
+        <h3>Tracking</h3>
+
+        <SegmentedControl
+          v-model="tracking"
+          :options="TRACKING_OPTIONS"
+        />
+      </div>
+
+      <p
+        v-if="!tracked"
+        class="note"
+      >
+        Untracked: no budget, never offered for allocation nor shown in Follow-up; its sub-categories are only for iPhone expenses of untracked cards.
+      </p>
 
       <p
         v-if="

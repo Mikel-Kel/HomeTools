@@ -8,7 +8,10 @@ import TransferTypesSection from "@/components/masterData/TransferTypesSection.v
 import RulesSection from "@/components/masterData/RulesSection.vue";
 
 import type { AllocationRulesData } from "@/contracts/allocationRules";
-import type { Category } from "@/contracts/categories";
+import {
+  trackedCategories,
+  type Category,
+} from "@/contracts/categories";
 import type { PartiesData } from "@/contracts/parties";
 import { ACC_TAG_TYPE, type AllocationTag } from "@/contracts/allocationTags";
 import type { TransferTypesData } from "@/contracts/transferTypes";
@@ -70,6 +73,12 @@ const tags =
   computed(() =>
     props.allocationTags?.map(fromAllocationTag) ?? null
   );
+
+/* Règles d'allocation : jamais de catégorie hors suivi. */
+const ruleCategories =
+  computed(() =>
+    trackedCategories(props.categories)
+  );
 </script>
 
 <template>
@@ -103,7 +112,7 @@ const tags =
     :rules="rules"
     :loading="rulesLoading"
     :parties="parties"
-    :categories="categories"
+    :categories="ruleCategories"
     :allocation-tags="allocationTags"
     :transfer-types="transferTypes"
   >

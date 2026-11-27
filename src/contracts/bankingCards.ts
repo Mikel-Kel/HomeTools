@@ -51,8 +51,13 @@ import {
    retirés qui en ont encore, sous-catégories clôturées
    comprises.
 
+   Contrat 0.10 (§ 3.5) : mobileTracked (absent = true) =
+   false pour une carte d'un compte non suivi dans HomeTools
+   (dépenses hors suivi, jamais liées à un mouvement) ; elle
+   peut n'avoir aucun compte (devise de la carte, sinon CHF).
+
    Saisies par événements PWA-MEX_<AAAAMMJJHHMMSS>_… :
-   - _C<cardId>.json, MOBILE_CARD_SAVED : les cinq champs
+   - _C<cardId>.json, MOBILE_CARD_SAVED : les six champs
      toujours envoyés ;
    - _O<owner>.json, MOBILE_OWNER_SAVED : liste complète des
      sous-catégories du propriétaire, qui remplace l'ancienne.
@@ -96,6 +101,7 @@ export interface BankingCard {
   mobileLabel: string | null;
   mobileOwner: string | null;
   mobileColor: string | null;
+  mobileTracked: boolean;
   movements12m: number;
   lastMovement: string | null;
 }
@@ -125,6 +131,9 @@ export interface BankingCardSave {
 
   /* #RRGGBB ; null : aucune couleur. */
   mobileColor: string | null;
+
+  /* false : carte hors suivi (compte facultatif). */
+  mobileTracked: boolean;
 }
 
 /* Charge utile de MOBILE_OWNER_SAVED (sans source). */
@@ -230,6 +239,7 @@ export function readBankingCards(
           mobileLabel: nullableString(card.mobileLabel),
           mobileOwner: nullableString(card.mobileOwner),
           mobileColor: normalizeColor(card.mobileColor),
+          mobileTracked: card.mobileTracked !== false,
           movements12m: asNumber(usage?.movements12m),
           lastMovement: nullableString(usage?.lastMovement),
         };

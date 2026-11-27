@@ -31,9 +31,11 @@ import { formatDate } from "@/utils/dateFormat";
    d'owners : signalé), et couleur (pastille) ; saisie par
    CardSheet. Le titre du panneau (slot « title ») est
    fourni par la section. Ordre publié par le Mac (dernier
-   mouvement le plus récent d'abord) ; les cartes sans
-   mouvement depuis 12 mois sont repliées sous « Older
-   cards ».
+   mouvement le plus récent d'abord) ; les cartes suivies
+   sans mouvement depuis 12 mois sont repliées sous « Older
+   cards ». Carte hors suivi (mobileTracked false, jamais
+   importée) : toujours affichée, pastille « Untracked »,
+   compte facultatif et devise CHF par défaut sans compte.
 
    « Pending » est déduit des événements qui attendent dans
    events/, quel que soit l'appareil.
@@ -61,12 +63,12 @@ const accountsById =
 
 const recentCards =
   computed(() =>
-    props.data.cards.filter(card => card.movements12m > 0)
+    props.data.cards.filter(card => card.movements12m > 0 || !card.mobileTracked)
   );
 
 const olderCards =
   computed(() =>
-    props.data.cards.filter(card => card.movements12m === 0)
+    props.data.cards.filter(card => card.movements12m === 0 && card.mobileTracked)
   );
 
 const visibleCards =
@@ -104,7 +106,7 @@ function currencyOf(
     : {
         code:
           card.accountId === null
-            ? ""
+            ? card.mobileTracked ? "" : "CHF"
             : accountsById.value.get(card.accountId)?.currency ?? "",
         byDefault: true,
       };
@@ -198,13 +200,22 @@ async function closeSheet() {
           <tr
             v-for="card in visibleCards"
             :key="card.cardId"
-            :class="{ older: card.movements12m === 0 }"
+            :class="{ older: card.movements12m === 0 && card.mobileTracked }"
             @click="editing = card"
           >
             <td class="name">{{ card.holder }}</td>
             <td>{{ card.internalId }}</td>
-            <td :class="{ missing: card.mobileLabel && card.accountId === null }">
-              {{ accountLabel(card) || "None" }}
+            <td :class="{ missing: card.mobileLabel && card.mobileTracked && card.accountId === null }">
+              <span class="label-cell">
+                {{ accountLabel(card) || "None" }}
+
+                <StatusPill
+                  v-if="!card.mobileTracked"
+                  dashed
+                >
+                  Untracked
+                </StatusPill>
+              </span>
             </td>
             <td>
               {{ currencyOf(card).code }}

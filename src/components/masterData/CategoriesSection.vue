@@ -163,6 +163,13 @@ function activeCount(
 
             <span class="item-meta">
               <StatusPill
+                v-if="!category.tracked"
+                dashed
+              >
+                Untracked
+              </StatusPill>
+
+              <StatusPill
                 v-if="category.displayScope === 'X'"
                 dashed
               >

@@ -5,6 +5,7 @@ import {
   CATEGORIES_FILE,
   CATEGORIES_FOLDER,
   readCategories,
+  trackedCategories,
   type Category,
   type SubCategory,
 } from "@/contracts/categories";
@@ -19,6 +20,11 @@ export type {
 
 /* =========================
    State (singleton)
+
+   Catégories suivies seulement : les catégories hors suivi
+   (tracked false) ne sont ni proposées ni affichées par les
+   pages qui lisent ce store (Allocation, Budget, Follow-up,
+   Ledger). Master data lit categories.json complet.
 ========================= */
 
 const categories: Ref<Category[]> = ref([]);
@@ -30,10 +36,12 @@ const categories: Ref<Category[]> = ref([]);
 export function useCategories() {
 
   async function load(): Promise<void> {
-    categories.value = readCategories(
-      await loadJSONFromFolder<unknown>(
-        CATEGORIES_FOLDER,
-        CATEGORIES_FILE
+    categories.value = trackedCategories(
+      readCategories(
+        await loadJSONFromFolder<unknown>(
+          CATEGORIES_FOLDER,
+          CATEGORIES_FILE
+        )
       )
     );
   }
@@ -43,7 +51,7 @@ export function useCategories() {
     change : les autres pages en profitent sans recharger.
   */
   function set(list: Category[]): void {
-    categories.value = list;
+    categories.value = trackedCategories(list);
   }
 
   function getCategory(id: number): Category | undefined {

@@ -205,6 +205,11 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
     par propriétaire ; `MOBILE_OWNER_SAVED` (`PWA-MEX_…_O<owner>.json`) envoie la liste complète, qui remplace
     l'ancienne. Seules les actives s'ajoutent, une clôturée déjà attribuée reste (« Closed ») ; propriétaire retiré :
     « Clear » seulement (liste vide). La case `mobileEntry` des sous-catégories (0.3) est abandonnée.
+  - Hors suivi (contrat 0.10, § 3.5) : `tracked` des catégories (`CATEGORY_SAVED`, contrat des catégories) et
+    `mobileTracked` des cartes, réglés par un choix Tracked / Untracked (`src/components/masterData/tracking.ts`),
+    pastilles « Untracked ». Carte hors suivi : compte facultatif (CHF sans compte ni devise), toujours affichée.
+    Pas d'écran de suivi : le store `useCategories` ne garde que les catégories suivies (Allocation, Budget,
+    Follow-up, Ledger) et les règles reçoivent `trackedCategories` ; Master data lit `categories.json` complet.
   - Liaison (lot M3, contrat 0.6, § 7) : candidat `source: "mobile"` en tête des suggestions de `spending.json`
     (`mobileExpenseId`, pastille « iPhone »). Allocation affiche alors le bandeau `MobileExpenseLink.vue` (détails de
     la saisie lus dans `mobile/mobile.json`, `src/contracts/mobileExpense.ts`) et « Not this expense » :

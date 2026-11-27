@@ -16,7 +16,7 @@ import {
      { "version": 1, "updatedAt": "…",
        "categories": [ { "id": 5, "label": "Assurances",
                          "nature": "E", "displayScope": "P",
-                         "seq": 600,
+                         "tracked": true, "seq": 600,
                          "subcategories": [ { "id": 15,
                                               "label": "Maladie",
                                               "seq": 910,
@@ -24,6 +24,14 @@ import {
 
    Toutes les catégories (même sans sous-catégorie) et toutes
    les sous-catégories (même clôturées).
+
+   tracked (absent = true) : false pour une catégorie hors
+   suivi (dépenses des cartes hors suivi de l'iPhone,
+   ../Backend/docs/mobile-expense-contract.md, § 3.5), sans
+   budget. Ses sous-catégories ne sont proposées qu'aux
+   propriétaires d'iPhone (Master data) : jamais à
+   l'allocation, aux règles, au budget ni au suivi
+   (trackedCategories).
 ========================= */
 
 export const CATEGORIES_FOLDER = "settings";
@@ -57,6 +65,7 @@ export interface Category {
   label: string;
   nature: CategoryNature;
   displayScope: CategoryDisplayScope;
+  tracked: boolean;
   subcategories: SubCategory[];
 }
 
@@ -115,6 +124,7 @@ export function readCategories(
         nature: readNature(category.nature),
         displayScope:
           (category.displayScope === "X" ? "X" : "P") as CategoryDisplayScope,
+        tracked: category.tracked !== false,
 
         subcategories: objects(category.subcategories)
           .map(
@@ -130,4 +140,11 @@ export function readCategories(
       })
     )
     .sort(bySeq);
+}
+
+/* Catégories suivies seulement (hors suivi : tracked false). */
+export function trackedCategories(
+  categories: Category[]
+): Category[] {
+  return categories.filter(category => category.tracked);
 }

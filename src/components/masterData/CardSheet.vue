@@ -7,6 +7,7 @@ import {
 
 import EditSheet from "@/components/masterData/EditSheet.vue";
 import PillButton from "@/components/ui/PillButton.vue";
+import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 
 import { useEventRequest } from "@/composables/useEventRequest";
 
@@ -20,6 +21,12 @@ import {
   type BankingCard,
   type BankingCardSave,
 } from "@/contracts/bankingCards";
+
+import {
+  toTracking,
+  TRACKING_OPTIONS,
+  type Tracking,
+} from "@/components/masterData/tracking";
 
 import { deviceName } from "@/services/environment/environmentState";
 
@@ -48,6 +55,11 @@ import { waitingElsewhereMessage } from "@/services/events/requestMessages";
      tant qu'on ne le change pas (le Mac l'accepte inchangé) ;
      il n'est jamais proposé pour une autre carte.
    - Couleur : #RRGGBB ou « None » (null).
+   - Suivi (contrat 0.10, § 3.5) : « Untracked » pour la carte
+     d'un compte non suivi dans HomeTools ; le compte devient
+     facultatif (devise de la carte, sinon CHF). Le Mac refuse
+     le changement si la carte a des saisies : refus affiché
+     tel quel.
 ========================= */
 
 const props = defineProps<{
@@ -82,6 +94,7 @@ const original = {
   mobileLabel: props.card.mobileLabel ?? "",
   mobileOwner: props.card.mobileOwner,
   mobileColor: props.card.mobileColor,
+  mobileTracked: props.card.mobileTracked,
 };
 
 const accountId =
@@ -98,6 +111,15 @@ const mobileOwner =
 
 const mobileColor =
   ref<string | null>(original.mobileColor);
+
+const mobileTracked =
+  ref(original.mobileTracked);
+
+const tracking =
+  computed<Tracking>({
+    get: () => toTracking(mobileTracked.value),
+    set: value => { mobileTracked.value = value === "tracked"; },
+  });
 
 /* Le sélecteur natif rend des minuscules : rangé en majuscules. */
 function pickColor(
@@ -147,7 +169,8 @@ const changed =
     currency.value !== original.currency ||
     trimmedLabel.value !== original.mobileLabel ||
     mobileOwner.value !== original.mobileOwner ||
-    mobileColor.value !== original.mobileColor
+    mobileColor.value !== original.mobileColor ||
+    mobileTracked.value !== original.mobileTracked
   );
 
 const formError =
@@ -184,8 +207,8 @@ const formError =
         : "Already used by another card without owner.";
     }
 
-    if (accountId.value === null) {
-      return "An iPhone label requires an account.";
+    if (accountId.value === null && mobileTracked.value) {
+      return "An iPhone label requires an account (or an untracked card).";
     }
 
     return "";
@@ -199,6 +222,7 @@ const payload =
     mobileLabel: trimmedLabel.value || null,
     mobileOwner: mobileOwner.value,
     mobileColor: mobileColor.value,
+    mobileTracked: mobileTracked.value,
   }));
 
 const saveRequest =
@@ -284,6 +308,22 @@ const subtitle =
     @save="save"
     @close="emit('close')"
   >
+    <div class="field">
+      <h3>Tracking</h3>
+
+      <SegmentedControl
+        v-model="tracking"
+        :options="TRACKING_OPTIONS"
+      />
+
+      <p
+        v-if="!mobileTracked"
+        class="note"
+      >
+        Account not tracked in HomeTools: expenses are only entered on the iPhone, never linked to a movement; only untracked sub-categories apply.
+      </p>
+    </div>
+
     <label class="field">
       <h3>Account</h3>
 
@@ -312,7 +352,11 @@ const subtitle =
         :disabled="saveRequest.inProgress.value"
       >
         <option :value="null">
-          Account currency{{ selectedAccount ? ` (${selectedAccount.currency})` : "" }}
+          {{
+            selectedAccount
+              ? `Account currency (${selectedAccount.currency})`
+              : mobileTracked ? "Account currency" : "CHF (default)"
+          }}
         </option>
 
         <option
@@ -398,6 +442,13 @@ const subtitle =
 </template>
 
 <style scoped>
+.note {
+  margin: 0;
+
+  color: var(--text-soft);
+  font-size: var(--font-size-sm);
+}
+
 .columns {
   display: grid;
   grid-template-columns: 1fr auto;
