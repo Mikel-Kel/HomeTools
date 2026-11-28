@@ -141,6 +141,9 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   sinon les groupes garderaient leur libellé), filtres `useArchiveFilters` (dates de paiement `useArchivePayDates`),
   classement et suppression `useArchiveClassification` (`PWA-TOC_…`, document mis à jour tout de suite sous son nouveau
   nom), tableau `ArchiveTable.vue`, info-bulle des tags partagée `useTagTooltip` / `TagTooltip.vue`.
+  Sous-dossiers Various / Tourism (`settings/variousFolders.json`, `tourismFolders.json`, lecteur
+  `src/contracts/archiveSubFolders.ts`, tri par `seqNb`) : surveillés par la vue avec `useRemoteJson`, qui met à jour
+  les stores `useVariousFolders` / `useTourismFolders` (fiche de classement comprise) sans recharger l'app.
   - Fiche de classement (`DocumentArchivingSheet.vue`) : suggestions de Description puis d'Additional info
     (`useArchiveSuggestions`, historique déjà chargé par dossier et partie, périodes en jetons relatifs à la date du
     document par `src/services/archive/archiveTemplates.ts`, propres à la PWA, ni stockés ni échangés), pastilles

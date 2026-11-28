@@ -28,6 +28,7 @@ import { useArchiveFilters } from "@/composables/archives/useArchiveFilters";
 import { useArchiveClassification } from "@/composables/archives/useArchiveClassification";
 import { useTagTooltip } from "@/composables/archives/useTagTooltip";
 import { useArchiveSuggestions } from "@/composables/archives/useArchiveSuggestions";
+import { useRemoteJson } from "@/composables/useRemoteJson";
 
 import { formatDate } from "@/utils/dateFormat";
 
@@ -35,6 +36,15 @@ import {
   TO_FILE_FOLDER,
   type ArchiveItem,
 } from "@/contracts/archive";
+
+import {
+  ARCHIVE_SUB_FOLDERS_FOLDER,
+  TOURISM_FOLDERS_FILE,
+  VARIOUS_FOLDERS_FILE,
+  readTourismFolders,
+  readVariousFolders,
+  type SubFolder,
+} from "@/contracts/archiveSubFolders";
 
 import { alertDialog } from "@/services/dialog/appDialog";
 
@@ -54,12 +64,6 @@ interface FolderView {
   label: string;
   order: number;
 }
-
-type SubFolder = {
-  id: number;
-  label: string;
-  seqNb?: number;
-};
 
 /* =========================
    Storage access
@@ -97,6 +101,61 @@ const variousStore =
 
 const tagsStore =
   useDocumentTags();
+
+/*
+  Sous-dossiers Various et Tourism, relus quand le Mac les
+  republie (ordre ou libellé changé dans Master data) ; les
+  stores sont mis à jour pour la fiche de classement.
+*/
+const variousFile =
+  useRemoteJson({
+    folder:
+      ARCHIVE_SUB_FOLDERS_FOLDER,
+
+    file:
+      VARIOUS_FOLDERS_FILE,
+
+    read:
+      readVariousFolders,
+
+    optional:
+      true,
+  });
+
+const tourismFile =
+  useRemoteJson({
+    folder:
+      ARCHIVE_SUB_FOLDERS_FOLDER,
+
+    file:
+      TOURISM_FOLDERS_FILE,
+
+    read:
+      readTourismFolders,
+
+    optional:
+      true,
+  });
+
+watch(
+  () => variousFile.data.value,
+
+  list => {
+    if (list) {
+      variousStore.set(list);
+    }
+  }
+);
+
+watch(
+  () => tourismFile.data.value,
+
+  list => {
+    if (list) {
+      tourismStore.set(list);
+    }
+  }
+);
 
 /* =========================
    State
