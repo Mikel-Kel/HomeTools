@@ -287,9 +287,10 @@ const REA_EVENT_FILE_PATTERN =
   dans events/.
 
   Cet état est relu depuis le stockage : aucun pending
-  n’est conservé sur l’appareil. Le backend retire le
-  fichier de events/ une fois le REA traité ; le pending
-  est alors porté par FollowUpDetails.
+  n’est conservé sur l’appareil. Une fois le REA traité, le
+  mouvement a perdu ses allocations : le backend republie
+  FollowUpDetails sans ses lignes, puis retire le fichier
+  de events/.
 */
 const requestedReallocationIds =
   ref<Set<string>>(
@@ -302,58 +303,6 @@ const requestedReallocationIds =
 */
 const reallocationRequestsInFlight =
   new Set<string>();
-
-/*
-  FITID que le backend exporte comme pending dans
-  FollowUpDetails : le REA est traité, le mouvement attend
-  sa nouvelle allocation et conserve les précédentes.
-*/
-const backendPendingIds =
-  computed<Set<string>>(
-    () => {
-      const ids =
-        new Set<string>();
-
-      for (
-        const item
-        of raw.value?.items ?? []
-      ) {
-        if (item.pending === true) {
-          ids.add(
-            item.allocationId
-          );
-        }
-      }
-
-      return ids;
-    }
-  );
-
-/*
-  État final utilisé dans le template.
-
-  Il combine :
-  - les demandes encore en attente dans events/ ;
-  - les FITID exportés comme pending par le backend.
-*/
-const pendingReallocationIds =
-  computed<Set<string>>(
-    () => {
-      const ids =
-        new Set<string>(
-          backendPendingIds.value
-        );
-
-      for (
-        const id
-        of requestedReallocationIds.value
-      ) {
-        ids.add(id);
-      }
-
-      return ids;
-    }
-  );
 
 /* =========================================================
    ROW ACTIONS
@@ -381,7 +330,7 @@ async function requestReallocation(
   item: FollowUpDetailItem
 ) {
   if (
-    pendingReallocationIds.value.has(
+    requestedReallocationIds.value.has(
       item.allocationId
     ) ||
     reallocationRequestsInFlight.has(
@@ -402,7 +351,7 @@ async function requestReallocation(
   const confirmed =
     await confirmDialog({
       title: "Request allocation change for this transaction?",
-      message: "It goes back to the Spending drafts.",
+      message: "Its allocations are removed from Follow-up and it goes back to Spending as a draft.",
       confirmLabel: "Request",
     });
 
@@ -511,22 +460,20 @@ async function loadRequestedReallocations() {
 
     /*
       Un REA qui quitte events/ a été traité : le backend a
-      publié FollowUpDetails avec le pending avant de le
-      retirer. Si ce pending n’a pas encore été relu,
-      FollowUpDetails est rechargé avant de retirer la
-      demande, pour que le pending ne disparaisse pas entre
-      les deux watchers.
+      déjà republié FollowUpDetails sans les lignes du
+      mouvement. FollowUpDetails est rechargé avant de
+      retirer la demande, pour que la ligne disparaisse
+      d’un coup au lieu de perdre d’abord son « Pending ».
     */
-    const someProcessedRequestUnseen =
+    const someRequestProcessed =
       [
         ...requestedReallocationIds.value,
       ].some(
         id =>
-          !nextIds.has(id) &&
-          !backendPendingIds.value.has(id)
+          !nextIds.has(id)
       );
 
-    if (someProcessedRequestUnseen) {
+    if (someRequestProcessed) {
       await details.reload();
     }
 
@@ -969,7 +916,7 @@ const filteredItems =
       return scopedItems.value
         .filter(
           item =>
-            pendingReallocationIds.value.has(
+            requestedReallocationIds.value.has(
               item.allocationId
             )
         );
@@ -991,7 +938,7 @@ const pendingCount =
       scopedItems.value
         .filter(
           item =>
-            pendingReallocationIds.value.has(
+            requestedReallocationIds.value.has(
               item.allocationId
             )
         )
@@ -1743,12 +1690,12 @@ onBeforeUnmount(
                     item.allocationId,
 
                   pending:
-                    pendingReallocationIds.has(
+                    requestedReallocationIds.has(
                       item.allocationId
                     )
                 }"
                 @click="
-                  !pendingReallocationIds.has(
+                  !requestedReallocationIds.has(
                     item.allocationId
                   ) &&
                   toggleRowAction(
@@ -1764,7 +1711,7 @@ onBeforeUnmount(
                 >
                   <span
                     v-if="
-                      pendingReallocationIds.has(
+                      requestedReallocationIds.has(
                         item.allocationId
                       )
                     "

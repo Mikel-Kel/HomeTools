@@ -110,16 +110,14 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
   n'écrit un statut que pour ces noms ; anciens noms sans préfixe encore reconnus). Écriture par `emitEvent`
   (`src/services/events/eventFiles.ts`), suivi d'une demande par `useEventRequest` (`src/composables/useEventRequest.ts`).
   Sous-dossiers : `control`, `processing`, `processed`, `rejected`, `status`.
-- Demande de ré-allocation : `events/PWA-REA_<AAAAMMJJHHMMSS>_<FITID>.json` (FITID complet dans le nom). Le badge « Pending »
-  de `FollowUpDetails.vue` est déduit du stockage, jamais de l'appareil : REA encore présent à la racine de `events/` (demandé),
-  ou `pending: true` sur la ligne dans `allocations/budget/FollowUpDetails-<année>.json` (traité, en attente de ré-allocation).
-  Le backend publie `FollowUpDetails` avant de retirer le REA de `events/`. Les allocations d'un mouvement en attente sont
-  conservées jusqu'à la release qui les remplace.
-  Draft d'une ré-allocation (`mode: "UPDATE"`) : jamais supprimé automatiquement (gardé vide quand la dernière ligne
-  est retirée) ; seuls la release et « Cancel reallocation » d'`AllocationView.vue` le ferment. L'annulation retire
-  le draft (`discardReallocation` de `useAllocation`) puis émet `REALLOCATION_CANCELLED` (même nom `PWA-REA_…_<FITID>.json`,
-  « Pending » dans le suivi comme une demande) ; le Mac garde les allocations actuelles. Commentaire d'allocation :
-  50 caractères au plus (`COMMENT_MAX_LENGTH`, sinon la release échoue à l'import).
+- Demande de ré-allocation (`REALLOCATION_REQUEST`, depuis `FollowUpDetails.vue`) : `events/PWA-REA_<AAAAMMJJHHMMSS>_<FITID>.json`
+  (FITID complet dans le nom). Le Mac écrit un draft ordinaire (`mode: "INSERT"`, allocations actuelles reprises), puis
+  supprime les allocations du mouvement : il quitte le Follow-up et revient dans Spending à allouer ; release ordinaire.
+  Badge « Pending » déduit du stockage, jamais de l'appareil : REA encore présent à la racine de `events/`. Le Mac
+  republie `FollowUpDetails` (sans les lignes du mouvement) avant de retirer le REA ; la PWA le relit alors pour que la
+  ligne disparaisse d'un coup. Pas d'annulation (`REALLOCATION_CANCELLED` refusé par le Mac) ; un draft vidé est
+  supprimé comme les autres (le mouvement reste à allouer). Commentaire d'allocation : 50 caractères au plus
+  (`COMMENT_MAX_LENGTH`, sinon la release échoue à l'import).
 - `events/control/` : en Object Storage, toute écriture sous `events/`, `allocations/drafts/` ou `allocations/released/` émet
   un événement `STORAGE_PULL_REQUESTED` pour que le Mac rapatrie les fichiers (`src/services/s3/storagePullRequest.ts`).
   Le champ `paths` y est un alias de compatibilité de `downloadPaths`.

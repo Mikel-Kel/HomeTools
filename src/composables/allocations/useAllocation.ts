@@ -131,16 +131,11 @@ export function useAllocation(
   const saveError = ref<string | null>(null);
 
   /*
-    UPDATE : draft créé par une ré-allocation (REALLOCATION_REQUEST),
-    allocations actuelles reprises ; INSERT : mouvement neuf.
+    Mode du draft, repris tel quel du fichier : INSERT (une
+    ré-allocation crée aussi un draft INSERT). Un ancien
+    draft UPDATE se traite comme un draft ordinaire.
   */
   const draftMode = ref<"INSERT" | "UPDATE">("INSERT");
-
-  /* Ré-allocation ouverte : seuls la release et « Cancel reallocation » la ferment. */
-  const isReallocation = computed(() =>
-    draftExists.value &&
-    draftMode.value === "UPDATE"
-  );
 
   /* =========================
      Computed
@@ -255,10 +250,7 @@ export function useAllocation(
 
   /*
     Sauvegarde automatique après chaque changement des
-    allocations. Plus aucune ligne : le draft d'un mouvement
-    neuf est retiré ; celui d'une ré-allocation est gardé
-    vide (sans quoi le mouvement resterait en attente sans
-    draft, ses lignes « pending » dans le suivi).
+    allocations. Plus aucune ligne : le draft est retiré.
   */
   async function persistDraft() {
     if (state.value === "READONLY") return;
@@ -268,10 +260,7 @@ export function useAllocation(
     state.value = "BUSY";
 
     try {
-      if (
-        allocations.value.length ||
-        isReallocation.value
-      ) {
+      if (allocations.value.length) {
         await saveDraftInternal();
       } else {
         await deleteDraftInternal();
@@ -483,48 +472,6 @@ export function useAllocation(
     });
   }
 
-  /*
-    « Cancel reallocation » : le draft d'une ré-allocation est
-    retiré du stockage et le formulaire verrouillé ; le parent
-    émet ensuite REALLOCATION_CANCELLED. Jamais pour un draft
-    INSERT. Rend false si rien n'a été retiré.
-  */
-  async function discardReallocation(): Promise<boolean> {
-    return runExclusive(async () => {
-      if (!isReallocation.value) return false;
-
-      busy.value = true;
-      busyAction.value = "save";
-      state.value = "BUSY";
-
-      try {
-        await deleteDraftInternal();
-
-        editingAllocationId.value = null;
-        allocations.value = [];
-        saveError.value = null;
-        state.value = "READONLY";
-
-        return true;
-
-      } catch (err) {
-        saveError.value =
-          err instanceof Error
-            ? err.message
-            : String(err);
-
-        state.value = "EDITING";
-        recomputeLocalState();
-
-        return false;
-
-      } finally {
-        busy.value = false;
-        busyAction.value = null;
-      }
-    });
-  }
-
   function cancelEdit() {
     editingAllocationId.value = null;
 
@@ -603,7 +550,6 @@ export function useAllocation(
     isBalanced,
 
     hasDraft,
-    isReallocation,
     canRelease,
     saveError,
 
@@ -617,7 +563,6 @@ export function useAllocation(
     editAllocation,
     applySuggestion,
     setParty,
-    discardReallocation,
     cancelEdit,
     removeAllocation
   };

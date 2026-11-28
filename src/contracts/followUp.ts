@@ -1,6 +1,5 @@
 import {
   asArray,
-  asBoolean,
   asNumber,
   asObject,
   asString,
@@ -244,11 +243,11 @@ export function readBudget(
            "partyId": 835, "allocationDate": "2026-01-15",
            "amount": 200, "amountCcy": 0,
            "description": "…", "bankDescription": "…",
-           "currency": "", "tagId": null,
-           "pending": false } ] }
+           "currency": "", "tagId": null } ] }
 
-   pending : mouvement renvoyé en ré-allocation, qui garde
-   ses allocations jusqu’à la release qui les remplace.
+   Un mouvement renvoyé en ré-allocation perd ses
+   allocations : il disparaît de ce fichier et revient dans
+   Spending avec son brouillon.
 ========================= */
 
 export interface FollowUpDetailItem {
@@ -263,7 +262,6 @@ export interface FollowUpDetailItem {
   bankDescription: string;
   partyId: number | null;
   tagId: number | null;
-  pending: boolean;
 }
 
 export interface FollowUpDetailsFile {
@@ -322,9 +320,6 @@ export function readFollowUpDetails(
 
             tagId:
               asNullableNumber(item.tagId),
-
-            pending:
-              asBoolean(item.pending),
           })
         ),
   };
