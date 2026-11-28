@@ -96,7 +96,8 @@
             "localArchive": { "type": "boolean", "default": false },
             "card24": { "type": "boolean", "default": false },
             "wineCellar": { "type": "boolean", "default": false },
-            "mobileExpense": { "type": "boolean", "default": false }
+            "mobileExpense": { "type": "boolean", "default": false },
+            "receiptRead": { "type": "boolean", "default": false }
           }
         },
         "jobs": {

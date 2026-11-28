@@ -1,6 +1,6 @@
 # Contrat multi-environnements HomeTools
 
-**Version : 1.8.2** — 2026-11-28
+**Version : 1.9.0** — 2026-11-28
 **Statut : en vigueur**
 
 Ce document est la référence unique pour tout le refactoring multi-environnements (proxy, scripts AppleScript, PWA/WebApp). En cas de divergence entre le code et ce contrat, c'est le contrat qui fait foi : on corrige le code, ou on fait évoluer le contrat d'abord (voir §0).
@@ -106,6 +106,7 @@ Ce document est la référence unique pour tout le refactoring multi-environneme
 | `card24` | Autorise le job Card24 et les vues de suivi associées. |
 | `wineCellar` | Active la cave à vins : page de la PWA, export `wine/cellar.json` par le housekeeping et événements `WIN` (contrat du backend `docs/wine-cellar-contract.md`). |
 | `mobileExpense` | Active la saisie des dépenses depuis l'iPhone : exports `mobile/mobile.json` et `settings/bankingCards.json`, événements `MEX`, case « Mobile » des sous-catégories et cartes dans Master data (contrat du backend `docs/mobile-expense-contract.md`). |
+| `receiptRead` | Autorise `POST /api/receipt/read` (lecture d'un ticket de caisse par l'API Claude, §5.3), depuis tout appareil de l'environnement. |
 
 ---
 
@@ -160,6 +161,8 @@ Premier appel de la PWA, avant toute autre requête.
   - **Normalisation Unicode** : pour `GET /api/s3/read` et `GET /api/s3/head`, le proxy essaie la clé telle quelle, puis ses formes NFC et NFD. Il répond `404 NOT_FOUND` seulement si aucune n'existe. La clé renvoyée par `head` est celle qu'envoie le client. `write`, `delete` et `list` utilisent la clé exacte, sans essayer d'autre forme.
 - **Local** : `/api/local/read` exige la capacité `localArchive` et reste confiné à `localArchive.root` ; ses clés suivent les mêmes règles que les clés S3 (`400 INVALID_KEY`). `/api/local/open` exige `localArchive` **et** `isServer`.
   - **Fichier non disponible** : un fichier absent de la copie locale, ou présent sans son contenu (dossier synchronisé dont le fichier n'est pas téléchargé sur le serveur), donne `404 NOT_FOUND` à `/api/local/read` et à `/api/local/open`. Le proxy ne déclenche aucun téléchargement.
+- **Ticket de caisse** : `POST /api/receipt/read` exige la capacité `receiptRead`. Corps : l'image brute, `Content-Type: image/jpeg`, 3 Mo au plus (`413 PAYLOAD_TOO_LARGE` au-delà, `415 UNSUPPORTED_MEDIA` pour un autre type). Le proxy la fait lire par l'API Claude et répond `200 { "receipt": { "date", "time", "amount", "currency", "paymentMethod", "cardDigits", "merchant", "merchantBrand" } }` : `date` `AAAA-MM-JJ` ; `time` `HH:MM` (24 h) ; `amount` nombre positif arrondi au centime (total payé) ; `currency` code ISO 4217 ; `paymentMethod` `card`, `cash`, `twint` ou `other` ; `cardDigits` 4 chiffres ; `merchant` et `merchantBrand` texte. Tous les champs sont toujours présents ; un champ illisible ou hors format vaut `null`. Le client fait toujours confirmer le résultat.
+  - Rien n'est conservé : ni l'image ni le résultat, ni sur disque ni dans le journal. La ligne de journal ajoute seulement la durée de l'appel et le nombre de jetons consommés.
 - **Diagnostics et statuts** : servis depuis les emplacements de l'environnement de l'appelant uniquement. Le proxy n'a pas d'endpoint dédié : la PWA les lit dans le magasin `data` (`diagnostics/`, `events/status/`), donc dans les buckets de l'environnement de l'appelant.
 
 ### 5.4 Erreurs
@@ -182,6 +185,12 @@ Format unique :
 | `NOT_FOUND` | 404 | Objet S3, fichier local ou route absents |
 | `MISSING_PARAM` | 400 | Paramètre obligatoire absent ou valeur non reconnue (ex. `store`) |
 | `STORAGE_ERROR` | 500 | Échec S3, disque ou ouverture native |
+| `PAYLOAD_TOO_LARGE` | 413 | Corps trop volumineux |
+| `UNSUPPORTED_MEDIA` | 415 | Type de contenu refusé |
+| `UPSTREAM_ERROR` | 502 | API Claude en erreur, refus ou délai dépassé |
+| `RECEIPT_UNAVAILABLE` | 503 | Lecture des tickets non configurée (clé API absente) |
+
+Un 502 ou un 503 **sans** corps au format du contrat vient de la passerelle (proxy injoignable).
 
 **Compatibilité** : la PWA compare le MAJOR de `contractVersion` (via `/api/whoami`) avec le sien. S'ils diffèrent, elle affiche un écran bloquant explicite et n'effectue aucune autre requête.
 
@@ -206,6 +215,7 @@ Format unique :
 - **Proxy** : fichier de secrets `proxy.env`, hors de tout repo. Les secrets propres à un environnement suivent la forme `NOM__<ENVID_MAJUSCULES>` (ex. `S3_SECRET__FANTOINE`) ; les secrets communs gardent leur nom actuel.
 - **Scripts AppleScript** : Trousseau macOS, service `hometools-<usage>-<envId>` (ex. `hometools-mysql-fantoine`), lu via `security find-generic-password -s <service> -w`. Un identifiant associé au secret (ex. Card24) est porté par l'attribut compte de l'élément.
 - **Accès S3 des scripts** : profil AWS CLI nommé par `s3.awsProfile`, dans `~/.aws/credentials` de l'utilisateur du serveur (hors de tout repo) ; pas de clé S3 dans le Trousseau.
+- **API Claude (proxy)** : `ANTHROPIC_API_KEY` dans `proxy.env`, commune à tous les environnements (un seul compte). Facultative : absente, `POST /api/receipt/read` répond `503 RECEIPT_UNAVAILABLE` et le reste du proxy fonctionne. Elle ne quitte jamais le proxy.
 - Aucun secret dans les logs, les diagnostics, les réponses HTTP ou le stockage navigateur en clair.
 
 ---
@@ -302,3 +312,4 @@ Chaque phase est testée et validée avant d'entamer la suivante.
 | 1.8.0 | 2026-11-25 | §1, §3.2, §3.3 : `owner` facultatif pour chaque appareil de `identities` (propriétaire, identifiant stable) ; §5.2 et §10 : `owner` renvoyé par `/api/whoami` (`null` s'il est absent) et gardé dans le store d'environnement ; schéma et exemples complétés. Évolution MINOR : nouveau champ facultatif, aucun comportement existant ne change |
 | 1.8.1 | 2026-11-27 | §6 : au classement, une copie locale modifiée sur le serveur (taille différente) est envoyée dans le magasin, l'ancienne version dans la corbeille. Publié en PATCH : aucun changement d'interface pour le proxy et la PWA |
 | 1.8.2 | 2026-11-28 | §6 : l'étape de nuit de la copie locale renvoie aussi dans le magasin une copie locale modifiée après le classement (taille différente, plus récente que l'objet), l'ancienne version dans la corbeille. Publié en PATCH : aucun changement d'interface pour le proxy et la PWA |
+| 1.9.0 | 2026-11-28 | §3.4 : capacité `receiptRead`, `false` par défaut ; §5.3 : `POST /api/receipt/read` (ticket de caisse lu par l'API Claude, rien n'est conservé) ; §5.4 : codes `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA`, `UPSTREAM_ERROR`, `RECEIPT_UNAVAILABLE` ; §7 : `ANTHROPIC_API_KEY` facultative ; schéma et exemple complétés. Évolution MINOR : nouvel endpoint, nouvelle capacité à `false` par défaut, nouveaux codes ; aucun comportement existant ne change |

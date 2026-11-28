@@ -16,7 +16,7 @@
               "endpoint": "https://<endpoint Object Storage>", "awsProfile": "<profil AWS CLI>" },
       "events": {},
       "localArchive": { "root": "/Users/Michel/Documents (Home)/10 - Archives" },
-      "capabilities": { "localArchive": true, "card24": true, "wineCellar": true, "mobileExpense": true },
+      "capabilities": { "localArchive": true, "card24": true, "wineCellar": true, "mobileExpense": true, "receiptRead": true },
       "jobs": ["<à compléter après inventaire des jobs Housekeeping>"]
     },
     "fantoine": {
@@ -28,7 +28,7 @@
       "s3": { "dataBucket": "fantoine-prod", "archivesBucket": "fantoine-archives", "prefix": "",
               "endpoint": "https://<endpoint Object Storage>", "awsProfile": "<profil AWS CLI>" },
       "events": {},
-      "capabilities": { "localArchive": false, "card24": false, "wineCellar": false, "mobileExpense": false },
+      "capabilities": { "localArchive": false, "card24": false, "wineCellar": false, "mobileExpense": false, "receiptRead": false },
       "jobs": []
     }
   }
