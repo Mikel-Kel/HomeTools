@@ -134,7 +134,7 @@ const router = createRouter({
       name: "budget",
       component: BudgetView,
       meta: {
-        level: 1,
+        level: 2,
         title: "Budget",
         requiresDrive: true,
       },

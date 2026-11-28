@@ -156,7 +156,7 @@ Ces fichiers sont produits ou consommés par les scripts AppleScript du repo Bac
     `../Backend/docs/archive-qrbill-contract.md`, lecteur `src/contracts/archive.ts`) ; le Mac n'écrit jamais le montant,
     Michel le valide en classant. Alias `IBAN <iban>` des parties créés par le lot 2 du contrat (2026-11-19).
 
-- Budget (`BudgetView.vue`, route `/budget`) : hors de `navigation.ts`, ouverte par l'icône de l'en-tête de Spending et
+- Budget (`BudgetView.vue`, route `/budget`, niveau 2, flèche retour) : hors de `navigation.ts`, ouverte par l'icône de l'en-tête de Spending et
   de Follow-up (rattachée à Follow-up par `related`). Contrat d'échange dans `../Backend/docs/budget-contract.md`
   (section `years` de `budget.json`, événements `PWA-BUD_…`, journal `budgetLog-<année>.json`).
   Saisie en brouillon par année (`src/composables/useBudgetDraft.ts`, localStorage préfixé) : « Save all » envoie un seul
