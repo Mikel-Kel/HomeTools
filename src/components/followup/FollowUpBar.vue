@@ -110,6 +110,17 @@ const label = computed(() => {
 ========================= */
 const MIN_BAR_FOR_LABEL = 6; // % SVG space
 
+/*
+  Barre presque pleine : l'étiquette placée après son
+  extrémité déborderait sur la colonne voisine (YTD) ;
+  elle passe à l'intérieur de la barre.
+*/
+const MAX_BAR_FOR_OUTER_LABEL = 38; // % SVG space (demi-largeur : 50)
+
+const labelInside = computed(() =>
+  barSize.value > MAX_BAR_FOR_OUTER_LABEL
+);
+
 const labelX = computed(() => {
   // barre trop courte → forcer l’autre côté de l’axe
   if (barSize.value < MIN_BAR_FOR_LABEL) {
@@ -131,7 +142,12 @@ const labelTransform = computed(() => {
       : "translate(6px, -50%)";
   }
 
-  return delta.value >= 0
+  const towardEnd =
+    delta.value >= 0
+      ? !labelInside.value
+      : labelInside.value;
+
+  return towardEnd
     ? "translate(6px, -50%)"
     : "translate(calc(-100% - 6px), -50%)";
 });
@@ -187,6 +203,7 @@ const labelTransform = computed(() => {
     <div
       v-if="barSize > 0 && showLabel"
       class="delta-label"
+      :class="{ inside: labelInside }"
       :style="{
         left: labelX + '%',
         transform: labelTransform
@@ -234,5 +251,11 @@ const labelTransform = computed(() => {
 
   /* 🔥 amélioration lisibilité sur barres */
   text-shadow: 0 0 2px rgba(0,0,0,0.15);
+}
+
+/* étiquette posée sur la barre (couleur forte de l'extrémité) */
+.delta-label.inside {
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0,0,0,0.6);
 }
 </style>
